@@ -1,0 +1,35 @@
+{
+  "artist": "Snow Man",
+  "source_url": "https://mentrecording.jp/snowman/news/",
+  "collected_at": "2026-09-12T19:25:23+09:00",
+  "method": "manual",
+  "model": null,
+  "items": [
+    {
+      "published_date": "2026.09.09[Wed]",
+      "title": "6th album『AMENITY』発売記念！“AMENITY” Gallery開催のお知らせ",
+      "url": "https://mentrecording.jp/snowman/news/detail.php?id=1135856"
+    },
+    {
+      "published_date": "2026.09.03[Thu]",
+      "title": "9月10日(木) フジテレビ『STAR』出演決定！",
+      "url": "https://mentrecording.jp/snowman/news/detail.php?id=1135778"
+    },
+    {
+      "published_date": "2026.08.25[Tue]",
+      "title": "6th Album『AMENITY』CD購入者特典解禁！",
+      "url": "https://mentrecording.jp/snowman/news/detail.php?id=1135605"
+    },
+    {
+      "published_date": "2026.08.24[Mon]",
+      "title": "8月31日(月) TBS『CDTVライブ！ライブ！』出演決定！",
+      "url": "https://mentrecording.jp/snowman/news/detail.php?id=1135582"
+    },
+    {
+      "published_date": "2026.08.24[Mon]",
+      "title": "Snow Man 6th Album『AMENITY』Streaming & Download 配信開始！",
+      "url": "https://mentrecording.jp/snowman/news/detail.php?id=1135578"
+    }
+  ],
+  "errors": []
+}

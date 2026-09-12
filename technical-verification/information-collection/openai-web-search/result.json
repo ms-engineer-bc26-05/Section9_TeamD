@@ -1,0 +1,10 @@
+{
+  "artist": "Snow Man",
+  "source_url": "https://mentrecording.jp/snowman/news/",
+  "collected_at": null,
+  "method": "openai-web-search",
+  "model": null,
+  "items": [],
+  "errors": [],
+  "notes": []
+}
