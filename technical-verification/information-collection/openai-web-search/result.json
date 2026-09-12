@@ -1,10 +1,149 @@
 {
   "artist": "Snow Man",
   "source_url": "https://mentrecording.jp/snowman/news/",
-  "collected_at": null,
   "method": "openai-web-search",
-  "model": null,
-  "items": [],
-  "errors": [],
-  "notes": []
+  "attempts": [
+    {
+      "attempt_number": 1,
+      "collected_at": null,
+      "model": "gpt-5-nano",
+      "status": "success",
+      "used_web_search": true,
+      "items_returned": 5,
+      "item_urls_returned": 0,
+      "notes": [
+        "公開日とタイトルはおおむね取得できたが、5件すべてのurlがnullだった。",
+        "端末の実行結果をもとに記録したため、実行時刻は未記録。"
+      ]
+    },
+    {
+      "attempt_number": 2,
+      "collected_at": null,
+      "model": "gpt-5-nano",
+      "status": "error",
+      "error_class": "APITimeoutError",
+      "status_code": null,
+      "code": null,
+      "param": null,
+      "timeout_seconds": 60.0,
+      "max_retries": 0,
+      "notes": [
+        "最新5件の詳細ページ確認、ドメイン限定、参照元URL取得を追加した検証でタイムアウトした。",
+        "端末の実行結果をもとに記録したため、実行時刻は未記録。"
+      ]
+    },
+    {
+      "collected_at": "2026-09-12T13:17:36.717511+00:00",
+      "model": "gpt-5-nano",
+      "status": "success",
+      "requested_items": 1,
+      "timeout_seconds": 60.0,
+      "max_retries": 0,
+      "used_web_search": true,
+      "source_urls": [
+        "https://mentrecording.jp/snowman/news/",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1135856",
+        "https://mentrecording.jp/snowman/",
+        "https://mentrecording.jp/snowman/allsuite/",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1129810",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1130409",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1119354",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1122013",
+        "https://mentrecording.jp/snowman/snowman_1st_popup/news/11/",
+        "https://mentrecording.jp/snowman/snowman_1st_popup/news/1/",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1102103",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1132890"
+      ],
+      "items": [
+        {
+          "published_date": "2026.09.09 [Wed]",
+          "title": "6th album『AMENITY』発売記念！“AMENITY” Gallery開催のお知らせ",
+          "url": "https://mentrecording.jp/snowman/news/detail.php?id=1135856"
+        }
+      ],
+      "errors": [],
+      "notes": [
+        "モデル回答のitemsと、Web検索が参照したsource_urlsは別々に評価する。"
+      ],
+      "attempt_number": 3
+    },
+    {
+      "collected_at": "2026-09-12T13:40:38.030035+00:00",
+      "model": "gpt-5-nano",
+      "status": "success",
+      "requested_items": 5,
+      "timeout_seconds": 120.0,
+      "max_tool_calls": 8,
+      "max_retries": 0,
+      "used_web_search": true,
+      "source_urls": [
+        "https://mentrecording.jp/snowman/news/",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1129810",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1133577",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1102103",
+        "https://mentrecording.jp/snowman/",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1126790",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1077747",
+        "https://mentrecording.jp/snowman/news/?tag=&year=2025",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1128705",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1134572",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1097086",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1133666",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1135856",
+        "https://mentrecording.jp/snowman/discography/",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1134126",
+        "https://mentrecording.jp/snowman/allsuite/",
+        "https://mentrecording.jp/snowman/discography/detail.php?id=1021692",
+        "https://mentrecording.jp/snowman/discography/?c=album",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1130409",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1119354",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1119353",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1098014",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1133170",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1110866",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1127644",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1131119",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1131183",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1130885",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1132987",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1130566",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1131019",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1088184",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1107337",
+        "https://mentrecording.jp/snowman/news/detail.php?id=1102694"
+      ],
+      "items": [
+        {
+          "published_date": "2026.09.09",
+          "title": "6th album『AMENITY』発売記念！“AMENITY” Gallery開催のお知らせ",
+          "url": "https://mentrecording.jp/snowman/news/detail.php?id=1135856"
+        },
+        {
+          "published_date": "2026.07.04",
+          "title": "7月4日(土) 日本テレビ系『THE MUSIC DAY 2026』出演決定！",
+          "url": "https://mentrecording.jp/snowman/news/detail.php?id=1134126"
+        },
+        {
+          "published_date": "2026.07.18",
+          "title": "7月18日(土) TBS『音楽の日2026』出演決定！",
+          "url": "https://mentrecording.jp/snowman/news/detail.php?id=1134572"
+        },
+        {
+          "published_date": null,
+          "title": null,
+          "url": null
+        },
+        {
+          "published_date": null,
+          "title": null,
+          "url": null
+        }
+      ],
+      "errors": [],
+      "notes": [
+        "モデル回答のitemsと、Web検索が参照したsource_urlsは別々に評価する。"
+      ],
+      "attempt_number": 4
+    }
+  ]
 }
