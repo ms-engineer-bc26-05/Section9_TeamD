@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>感情を具体的に入力する画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.box{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.btn{fill:#D98978}.tag{fill:#F2DDD6}</style>
+  <text class="t" x="26" y="50" font-size="21">‹</text>
+  <text class="t" x="195" y="51" text-anchor="middle" font-size="16" font-weight="700">気持ちを整理する</text>
+  <text class="m" x="355" y="51" text-anchor="end" font-size="11">中断</text>
+  <g font-family="sans-serif" font-size="10" fill="#81766F">
+    <circle cx="59" cy="94" r="8" fill="#D98978"/><text x="59" y="120" text-anchor="middle">出来事</text>
+    <line x1="67" y1="94" x2="123" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="131" cy="94" r="8" fill="#D98978"/><text x="131" y="120" text-anchor="middle">感情</text>
+    <line x1="139" y1="94" x2="195" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="203" cy="94" r="8" fill="#E5DED7"/><text x="203" y="120" text-anchor="middle">本音</text>
+    <line x1="211" y1="94" x2="267" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="275" cy="94" r="8" fill="#E5DED7"/><text x="275" y="120" text-anchor="middle">望み</text>
+  </g>
+  <rect class="tag" x="26" y="151" width="82" height="34" rx="17"/>
+  <text class="t" x="67" y="173" text-anchor="middle" font-size="12">寂しい</text>
+  <text class="m" x="124" y="173" font-size="11">選び直す</text>
+  <text class="t" x="26" y="231" font-size="22" font-weight="700">その気持ちについて、</text>
+  <text class="t" x="26" y="261" font-size="22" font-weight="700">もう少し教えてください</text>
+  <text class="m" x="26" y="290" font-size="12">短くても、まとまっていなくても大丈夫です</text>
+  <rect class="box" x="26" y="321" width="338" height="246" rx="18"/>
+  <text class="m" x="44" y="357" font-size="13">例：一緒にいるのに、自分だけが</text>
+  <text class="m" x="44" y="381" font-size="13">置いていかれたように感じました…</text>
+  <text class="m" x="344" y="547" text-anchor="end" font-size="11">0 / 300</text>
+  <rect class="btn" x="26" y="615" width="338" height="58" rx="16"/>
+  <text x="195" y="651" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#FFFFFF" font-weight="700">次へ</text>
+  <text class="m" x="195" y="785" text-anchor="middle" font-size="10">専門窓口・利用上の注意</text>
+</svg>

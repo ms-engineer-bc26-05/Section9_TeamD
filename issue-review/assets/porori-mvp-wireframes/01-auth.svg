@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>登録・ログイン画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.box{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.btn{fill:#D98978}.soft{fill:#F2DDD6}</style>
+  <text class="t" x="195" y="108" text-anchor="middle" font-size="32" font-weight="700">ぽろり。</text>
+  <path d="M151 121 Q195 108 239 121" fill="none" stroke="#D98978" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+  <text class="t" x="195" y="181" text-anchor="middle" font-size="25" font-weight="700">おかえりなさい</text>
+  <text class="m" x="195" y="210" text-anchor="middle" font-size="13">安心して気持ちを整理する場所</text>
+  <text class="t" x="42" y="261" font-size="13">メールアドレス</text>
+  <rect class="box" x="42" y="275" width="306" height="54" rx="12"/>
+  <text class="m" x="58" y="308" font-size="13">example@email.com</text>
+  <text class="t" x="42" y="367" font-size="13">パスワード</text>
+  <rect class="box" x="42" y="381" width="306" height="54" rx="12"/>
+  <text class="m" x="58" y="414" font-size="13">••••••••</text>
+  <rect class="btn" x="42" y="476" width="306" height="58" rx="16"/>
+  <text x="195" y="512" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#FFFFFF" font-weight="700">ログイン</text>
+  <rect class="soft" x="42" y="552" width="306" height="58" rx="16"/>
+  <text class="t" x="195" y="588" text-anchor="middle" font-size="15" font-weight="600">はじめて使う方はこちら</text>
+  <text class="m" x="195" y="655" text-anchor="middle" font-size="12">パスワードを忘れた方</text>
+  <path d="M0 772 C90 730 132 816 223 783 S330 733 390 759 V844 H0Z" fill="#E5E8DA"/>
+</svg>

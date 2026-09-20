@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>出来事の要約を確認・編集する画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.card{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.btn{fill:#D98978}.soft{fill:#F2DDD6}</style>
+  <text class="t" x="26" y="50" font-size="21">‹</text>
+  <text class="t" x="195" y="51" text-anchor="middle" font-size="16" font-weight="700">出来事を確認する</text>
+  <text class="m" x="355" y="51" text-anchor="end" font-size="11">中断</text>
+  <g font-family="sans-serif" font-size="10" fill="#81766F">
+    <circle cx="59" cy="94" r="8" fill="#D98978"/><text x="59" y="120" text-anchor="middle">出来事</text>
+    <line x1="67" y1="94" x2="123" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="131" cy="94" r="8" fill="#E5DED7"/><text x="131" y="120" text-anchor="middle">感情</text>
+    <line x1="139" y1="94" x2="195" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="203" cy="94" r="8" fill="#E5DED7"/><text x="203" y="120" text-anchor="middle">本音</text>
+    <line x1="211" y1="94" x2="267" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="275" cy="94" r="8" fill="#E5DED7"/><text x="275" y="120" text-anchor="middle">望み</text>
+  </g>
+  <text class="t" x="26" y="168" font-size="21" font-weight="700">ここまでの出来事を</text>
+  <text class="t" x="26" y="197" font-size="21" font-weight="700">このように整理しました</text>
+  <text class="m" x="26" y="225" font-size="11">違うところや足りないところは編集できます</text>
+  <rect class="card" x="26" y="255" width="338" height="126" rx="18"/>
+  <rect class="soft" x="26" y="255" width="82" height="126" rx="18"/>
+  <text class="t" x="67" y="309" text-anchor="middle" font-size="12" font-weight="700">何が</text>
+  <text class="t" x="67" y="329" text-anchor="middle" font-size="12" font-weight="700">あったか</text>
+  <text class="t" x="124" y="294" font-size="12">大切な話をしているとき、</text>
+  <text class="t" x="124" y="317" font-size="12">相手がスマホを見ながら</text>
+  <text class="t" x="124" y="340" font-size="12">返事をしていた</text>
+  <text class="m" x="342" y="364" text-anchor="end" font-size="11">編集</text>
+  <rect class="card" x="26" y="397" width="338" height="126" rx="18"/>
+  <rect x="26" y="397" width="82" height="126" rx="18" fill="#E3E7D8"/>
+  <text class="t" x="67" y="451" text-anchor="middle" font-size="12" font-weight="700">何が</text>
+  <text class="t" x="67" y="471" text-anchor="middle" font-size="12" font-weight="700">気になったか</text>
+  <text class="t" x="124" y="443" font-size="12">自分の話を大切に聞いて</text>
+  <text class="t" x="124" y="466" font-size="12">もらえていないように</text>
+  <text class="t" x="124" y="489" font-size="12">感じたこと</text>
+  <text class="m" x="342" y="506" text-anchor="end" font-size="11">編集</text>
+  <rect class="btn" x="26" y="564" width="338" height="58" rx="16"/>
+  <text x="195" y="600" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#FFFFFF" font-weight="700">この内容で次へ</text>
+  <rect x="26" y="638" width="338" height="58" rx="16" fill="#FFFDFC" stroke="#D8D0C8" stroke-width="1.5"/>
+  <text class="t" x="195" y="672" text-anchor="middle" font-size="14" font-weight="600">もう少し整理したい（あと1問）</text>
+  <text class="m" x="195" y="734" text-anchor="middle" font-size="10">最大3問後は、要約を直接編集して次へ進みます</text>
+  <text class="m" x="195" y="793" text-anchor="middle" font-size="10">専門窓口・利用上の注意</text>
+</svg>

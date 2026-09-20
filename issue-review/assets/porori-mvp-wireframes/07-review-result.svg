@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>整理結果の確認・編集画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.card{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.3}.btn{fill:#D98978}.label1{fill:#F2DDD6}.label2{fill:#E3E7D8}</style>
+  <text class="t" x="26" y="50" font-size="21">‹</text>
+  <text class="t" x="195" y="51" text-anchor="middle" font-size="17" font-weight="700">整理結果を確認</text>
+  <text class="m" x="195" y="81" text-anchor="middle" font-size="11">違うところは編集できます</text>
+  <rect class="card" x="24" y="108" width="342" height="99" rx="16"/>
+  <rect class="label1" x="24" y="108" width="70" height="99" rx="16"/>
+  <text class="t" x="59" y="160" text-anchor="middle" font-size="12" font-weight="700">出来事</text>
+  <text class="t" x="109" y="141" font-size="12">話しているとき、相手が</text><text class="t" x="109" y="163" font-size="12">スマホを見ていた</text><text class="m" x="340" y="189" text-anchor="end" font-size="11">編集</text>
+  <rect class="card" x="24" y="220" width="342" height="99" rx="16"/>
+  <rect class="label2" x="24" y="220" width="70" height="99" rx="16"/>
+  <text class="t" x="59" y="272" text-anchor="middle" font-size="12" font-weight="700">感情</text>
+  <text class="t" x="109" y="265" font-size="12">寂しい、大切にされて</text><text class="t" x="109" y="287" font-size="12">いないように感じた</text><text class="m" x="340" y="301" text-anchor="end" font-size="11">編集</text>
+  <rect class="card" x="24" y="332" width="342" height="99" rx="16"/>
+  <rect class="label1" x="24" y="332" width="70" height="99" rx="16"/>
+  <text class="t" x="59" y="384" text-anchor="middle" font-size="12" font-weight="700">本音</text>
+  <text class="t" x="109" y="377" font-size="12">自分との時間を大切に</text><text class="t" x="109" y="399" font-size="12">してほしかった</text><text class="m" x="340" y="413" text-anchor="end" font-size="11">編集</text>
+  <rect class="card" x="24" y="444" width="342" height="99" rx="16"/>
+  <rect class="label2" x="24" y="444" width="70" height="99" rx="16"/>
+  <text class="t" x="59" y="496" text-anchor="middle" font-size="12" font-weight="700">望み</text>
+  <text class="t" x="109" y="489" font-size="12">話すときは少しだけ</text><text class="t" x="109" y="511" font-size="12">こちらを見てほしい</text><text class="m" x="340" y="525" text-anchor="end" font-size="11">編集</text>
+  <rect class="btn" x="24" y="588" width="342" height="58" rx="16"/>
+  <text x="195" y="624" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#FFF" font-weight="700">この内容で合っています</text>
+  <text class="m" x="195" y="684" text-anchor="middle" font-size="11">承認するまで保存されません</text>
+</svg>

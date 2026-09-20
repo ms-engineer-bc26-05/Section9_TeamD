@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>近い感情を選ぶ画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.choice{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.sel{fill:#F2DDD6;stroke:#D98978;stroke-width:2}.btn{fill:#D98978}</style>
+  <text class="t" x="26" y="50" font-size="21">‹</text>
+  <text class="t" x="195" y="51" text-anchor="middle" font-size="16" font-weight="700">気持ちを整理する</text>
+  <text class="m" x="355" y="51" text-anchor="end" font-size="11">中断</text>
+  <g font-family="sans-serif" font-size="10" fill="#81766F">
+    <circle cx="59" cy="94" r="8" fill="#D98978"/><text x="59" y="120" text-anchor="middle">出来事</text>
+    <line x1="67" y1="94" x2="123" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="131" cy="94" r="8" fill="#D98978"/><text x="131" y="120" text-anchor="middle">感情</text>
+    <line x1="139" y1="94" x2="195" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="203" cy="94" r="8" fill="#E5DED7"/><text x="203" y="120" text-anchor="middle">本音</text>
+    <line x1="211" y1="94" x2="267" y2="94" stroke="#D8D0C8" stroke-width="3"/>
+    <circle cx="275" cy="94" r="8" fill="#E5DED7"/><text x="275" y="120" text-anchor="middle">望み</text>
+  </g>
+  <text class="t" x="26" y="168" font-size="22" font-weight="700">そのとき、どんな気持ちに</text>
+  <text class="t" x="26" y="198" font-size="22" font-weight="700">近かったですか？</text>
+  <text class="m" x="26" y="226" font-size="12">いちばん近いものを1つ選んでください</text>
+  <g font-family="sans-serif" font-size="13" fill="#493E38">
+    <rect class="sel" x="26" y="256" width="160" height="62" rx="16"/><circle cx="49" cy="287" r="8" fill="#D98978"/><text x="68" y="292">寂しい</text>
+    <rect class="choice" x="204" y="256" width="160" height="62" rx="16"/><circle cx="227" cy="287" r="8" fill="none" stroke="#B9AFA7"/><text x="246" y="292">悲しい</text>
+    <rect class="choice" x="26" y="332" width="160" height="62" rx="16"/><circle cx="49" cy="363" r="8" fill="none" stroke="#B9AFA7"/><text x="68" y="368">不安</text>
+    <rect class="choice" x="204" y="332" width="160" height="62" rx="16"/><circle cx="227" cy="363" r="8" fill="none" stroke="#B9AFA7"/><text x="246" y="368">怒り・いら立ち</text>
+    <rect class="choice" x="26" y="408" width="160" height="62" rx="16"/><circle cx="49" cy="439" r="8" fill="none" stroke="#B9AFA7"/><text x="68" y="444">モヤモヤ・違和感</text>
+    <rect class="choice" x="204" y="408" width="160" height="62" rx="16"/><circle cx="227" cy="439" r="8" fill="none" stroke="#B9AFA7"/><text x="246" y="444">傷ついた</text>
+    <rect class="choice" x="26" y="484" width="338" height="62" rx="16"/><circle cx="49" cy="515" r="8" fill="none" stroke="#B9AFA7"/><text x="68" y="520">その他・まだよく分からない</text>
+  </g>
+  <text class="m" x="195" y="590" text-anchor="middle" font-size="11">完全に一致しなくても大丈夫です</text>
+  <rect class="btn" x="26" y="634" width="338" height="58" rx="16"/>
+  <text x="195" y="670" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#FFFFFF" font-weight="700">次へ</text>
+  <text class="m" x="195" y="785" text-anchor="middle" font-size="10">専門窓口・利用上の注意</text>
+</svg>
