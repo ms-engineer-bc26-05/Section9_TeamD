@@ -9,6 +9,16 @@ REDIS_PORT = int(os.environ.get("REDIS_PORT", "6380"))
 TEST_LIMIT = 3
 TEST_TTL_SECONDS = 60
 
+# INCRと、初回加算時のみのEXPIREを1つのLuaスクリプトにまとめ、原子的に実行する。
+# こうすることで「加算はされたがEXPIREが設定される前にクラッシュ・切断が起きる」状態を防ぐ。
+INCR_WITH_TTL_SCRIPT = """
+local count = redis.call("INCR", KEYS[1])
+if tonumber(count) == 1 then
+    redis.call("EXPIRE", KEYS[1], ARGV[1])
+end
+return count
+"""
+
 
 def get_client() -> redis.Redis:
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
@@ -18,13 +28,15 @@ def build_key(user_id: str) -> str:
     return f"usage_limit:{user_id}"
 
 
+def atomic_increment(client: redis.Redis, key: str, ttl_seconds: int) -> int:
+    """INCRとEXPIR(初回のみ)を1つのLuaスクリプトで原子的に実行する。"""
+    return client.eval(INCR_WITH_TTL_SCRIPT, 1, key, ttl_seconds)
+
+
 def check_and_increment(client: redis.Redis, user_id: str, limit: int, ttl_seconds: int):
     """回数を1加算し、現在の回数と判定結果を返す。"""
     key = build_key(user_id)
-    count = client.incr(key)
-
-    if count == 1:
-        client.expire(key, ttl_seconds)
+    count = atomic_increment(client, key, ttl_seconds)
 
     if count < limit:
         status = "before_limit"
