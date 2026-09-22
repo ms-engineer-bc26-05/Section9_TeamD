@@ -110,6 +110,24 @@ tests/test_health.py::test_health_returns_fixed_message PASSED
 (今回は全項目成功。もし再現時に失敗した場合はここに貼り付ける)
 ```
 
+### 確認担当による追加検証
+
+- [x] `docker compose up --build` で4サービスすべて起動した(db/redisはhealthy)
+- [x] `http://localhost:3000` でFastAPIからの固定データが表示された
+- [x] `/health/db` がPostgreSQLへの疎通OKを返した
+- [x] `/health/redis` がRedisへの疎通OKを返した
+- [x] `pytest` がパスした(1 passed)
+- [x] `.env` はコミットされていない(`git status`で確認、working tree clean)
+
+実施環境: Windows / Python 3.13.14 / Docker 29.4.3(build 055a478) / Docker Compose v5.1.4
+実施者: みほ
+実施日: 2026-09-22
+
+補足:
+- じまさん(macOS / Python 3.14.6 / Docker Compose v5.1.3)とはOS・Pythonバージョンが異なるが、
+  `asyncpg 0.31.0`指定によりビルドエラーなく再現できた。
+- READMEの手順のみで別メンバー(Windows環境)でも起動・確認できることを確認済み。
+
 ## 注意事項
 
 - 認証・AI連携・決済・暗号化・本番デプロイ・本番用インフラの決定は本検証の範囲外。
