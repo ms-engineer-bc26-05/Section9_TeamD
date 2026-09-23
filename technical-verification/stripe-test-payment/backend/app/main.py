@@ -27,6 +27,9 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 stripe.api_key = STRIPE_SECRET_KEY
 FRONTEND_URL = "http://localhost:3000"
 
+# 検証用のテストユーザー（サーバーを再起動すると元に戻ります）
+test_user = {"plan": "free"}
+
 
 @app.get("/health")
 async def health():
@@ -62,9 +65,15 @@ async def health_redis():
         return {"status": "error", "detail": "redis connection failed"}
 
 
+@app.get("/api/test-user")
+async def get_test_user():
+    """検証用テストユーザーの現在のプラン状態を返す。"""
+    return test_user
+
+
 @app.get("/api/confirm-payment")
 async def confirm_payment(session_id: str):
-    """Checkout Sessionの支払い状況を確認する。"""
+    """Checkout Sessionの支払い状況を確認し、テスト用プラン状態へ反映する。"""
     try:
         session = stripe.checkout.Session.retrieve(session_id)
     except stripe.error.StripeError as e:
@@ -72,9 +81,10 @@ async def confirm_payment(session_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
     if session.payment_status == "paid":
-        return {"status": "paid"}
+        test_user["plan"] = "premium"  # 有料にするのはここだけ
+        return {"status": "paid", "plan": test_user["plan"]}
     else:
-        return {"status": "unpaid"}
+        return {"status": "unpaid", "plan": test_user["plan"]}
 
 @app.post("/api/create-checkout-session")
 async def create_checkout_session():
