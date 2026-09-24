@@ -19,13 +19,19 @@
   <text class="t" x="44" y="185" font-size="13">話しているときに、相手がスマホを</text>
   <text class="t" x="44" y="208" font-size="13">見ていたことが気になったのですね。</text>
   <text class="t" x="44" y="242" font-size="13">この理解で合っていますか？</text>
-  <rect class="user" x="151" y="305" width="213" height="62" rx="18"/>
-  <text class="t" x="171" y="342" font-size="13">はい、合っています。</text>
-  <rect class="bubble" x="26" y="397" width="302" height="143" rx="18"/>
-  <text class="t" x="44" y="429" font-size="13">そのとき、相手に話していたのは</text>
-  <text class="t" x="44" y="452" font-size="13">どのような内容でしたか？</text>
-  <text class="m" x="44" y="493" font-size="11">覚えている範囲で大丈夫です</text>
-  <text class="m" x="44" y="516" font-size="11">質問は最大3問までです</text>
+  <rect class="user" x="26" y="297" width="160" height="52" rx="16"/>
+  <text class="t" x="106" y="329" text-anchor="middle" font-size="12">はい、合っています</text>
+  <rect class="bubble" x="204" y="297" width="160" height="52" rx="16"/>
+  <text class="t" x="284" y="329" text-anchor="middle" font-size="12">少し違います</text>
+  <text class="m" x="26" y="378" font-size="11">訂正後はAIの理解をもう一度確認します</text>
+  <text class="m" x="26" y="399" font-size="11">訂正・再確認は質問とは別に最大2回です</text>
+  <rect class="bubble" x="26" y="421" width="302" height="128" rx="18"/>
+  <text class="t" x="44" y="453" font-size="13">そのとき、相手に話していたのは</text>
+  <text class="t" x="44" y="476" font-size="13">どのような内容でしたか？</text>
+  <text class="m" x="44" y="517" font-size="11">覚えている範囲で大丈夫です</text>
+  <text class="m" x="44" y="538" font-size="11">追加質問は最大3問までです</text>
+  <text class="m" x="26" y="586" font-size="11">2回の訂正後も違う場合は、次の画面で</text>
+  <text class="m" x="26" y="607" font-size="11">要約を直接編集できます</text>
   <rect class="input" x="20" y="690" width="350" height="66" rx="20"/>
   <text class="m" x="40" y="730" font-size="13">ここに入力してください</text>
   <circle cx="337" cy="723" r="20" fill="#D98978"/>
