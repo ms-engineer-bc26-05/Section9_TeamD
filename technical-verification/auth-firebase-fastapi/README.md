@@ -5,7 +5,7 @@
 - Issue #5
 - 主担当：もえ
 - 確認担当：みほ・じま
-- 状態：検証結果の記録済み・提出前の最終確認中
+- 状態：PR #21のレビュー指摘に対応中
 
 ## 目的
 
@@ -271,6 +271,70 @@ Macのふたを開け、Dockerとターミナルを起動したままにする�
 unset FIREBASE_PROJECT_ID VERIFICATION_OWNER_UID FIREBASE_WEB_API_KEY
 ```
 
+### Windows（PowerShell）での読み替え
+
+以下はWindows向けの補足手順です。Windows実機での動作確認は未実施です。
+Docker Desktopを起動し、リポジトリのルートで操作します。
+
+#### 環境変数の入力
+
+macOSの `read -rs` と `export` の代わりに、次を使用します。
+PowerShell 5.1・7系で入力内容を画面に表示しない方法です。
+
+```powershell
+function Read-HiddenValue {
+    param([string]$Prompt)
+
+    $secureValue = Read-Host $Prompt -AsSecureString
+    $pointer = [IntPtr]::Zero
+    try {
+        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+        [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    }
+    finally {
+        if ($pointer -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+        }
+        $secureValue.Dispose()
+    }
+}
+
+$env:FIREBASE_PROJECT_ID = Read-HiddenValue "プロジェクトID"
+$env:VERIFICATION_OWNER_UID = Read-HiddenValue "ユーザーAのUID"
+$env:FIREBASE_WEB_API_KEY = Read-HiddenValue "Web APIキー"
+```
+
+環境変数に渡した値はプロセス内では平文になります。
+値の表示や、画面・ログへの出力は行いません。
+`Read-Host -MaskInput` はPowerShell 7.1以降でのみ使用できます。
+
+#### コマンドの違い
+
+- 行末の `\` はPowerShellでは使用しません。
+  コマンドを1行にまとめるか、バッククォート（`）で改行します。
+  バッククォートの後ろに空白を入れないでください。
+- `curl -i` は `curl.exe -i` に読み替えます。
+- `docker build`・`docker cp`・`docker exec` は、同じ引数を1行にまとめて実行できます。
+- ホスト側の秘密鍵ファイルのパスは、Windowsでの実際の配置先へ読み替えます。
+  コンテナ内の `/run/secrets/firebase-admin.json` は変更しません。
+- macOSの `chmod` は使用せず、Windowsのファイルアクセス権で保護します。
+- `caffeinate -i` は使用できません。
+  期限切れ検証ではその部分を外し、Windowsの電源設定で検証中のスリープを防止します。
+  検証後は電源設定を元に戻してください。
+
+実接続スクリプトは外部通信を伴います。
+現在の累計は9回／上限10回のため、一式の再実行はせず、
+追加検証が必要な場合はチームと上限を確認してください。
+
+#### 終了後の環境変数の削除
+
+```powershell
+Remove-Item Env:FIREBASE_PROJECT_ID -ErrorAction SilentlyContinue
+Remove-Item Env:VERIFICATION_OWNER_UID -ErrorAction SilentlyContinue
+Remove-Item Env:FIREBASE_WEB_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Function:Read-HiddenValue -ErrorAction SilentlyContinue
+```
+
 ## 検証結果
 
 ### ローカル模擬テスト（2026年9月23日）
@@ -383,10 +447,37 @@ docker run --rm --network none porori-auth-spike python -m pytest -q -p no:cache
 - バックエンドは、検証済みトークンのUIDから内部ユーザーを特定する。
 - メールアドレスはユーザーの識別キーとして使用しない。
 - クライアントが送ったUIDやuser_idを、本人確認の根拠にしない。
-- メモの取得・更新・削除では、メモIDと認証済みの内部ユーザーIDを
+- メモの取得・削除では、メモIDと認証済みの内部ユーザーIDを
   条件にして、本人所有のデータだけを対象とする。
 - 初回ログイン時の内部ユーザー作成と退会時の処理は、
   API・DB設計で確定する。
+
+### 本実装で行う認可テスト案（未実施）
+
+以下は後続のAPI・DB実装で行うテスト案であり、
+今回の検証で実施済みの結果とは区別する。
+ユーザーA・Bと、それぞれが所有する架空メモを用意する。
+
+| 対象 | 操作 | 期待する結果 |
+| --- | --- | --- |
+| 取得 | AがBのメモを取得する | 404となり、本文や所有者情報を返さない |
+| 削除 | AがBのメモを削除する | 404となり、Bのメモは削除されない |
+| 削除 | AがAのメモを削除する | 削除でき、以後の取得は404となる |
+| 一覧 | Aがメモ一覧を取得する | Bのメモが含まれず、総件数にも含まれない |
+| 所有者IDの偽装 | Aが保存リクエストにBのuser_idやUIDを指定する | 不正な項目を拒否するか無視し、Bの所有物として保存されない |
+| 所有者の決定 | Aが正規の保存リクエストを送る | 検証済みトークンのUIDから特定した内部ユーザーAが所有者になる |
+| 未認証 | トークンなし・不正・期限切れで一覧・保存・削除を試す | アクセスを拒否し、データを変更しない |
+| 退会中 | deletingのユーザーが保護対象APIへアクセスする | 通常の閲覧・保存・決済操作を拒否する |
+| 退会後 | 退会前に発行されたトークンでアクセスする | データへのアクセスを拒否し、削除済みユーザーを自動再作成しない |
+| 失効・無効化 | 失効済みトークンや無効化済みユーザーでアクセスする | 本実装で定める反映タイミングに従って拒否する |
+
+- 拒否時は、HTTP応答だけでなくDBに意図しない変更がないことも確認する。
+- 所有者の判定には、クライアントが申告したIDではなく、
+  検証済みトークンのUIDに対応する内部ユーザーIDを使用する。
+- 退会後・失効・ユーザー無効化の拒否は、
+  現在のcheck_revoked=Falseだけで保証されるものではない。
+  アプリ内ユーザーの状態確認とFirebase側の確認方針を定めて検証する。
+- 保存済みメモの再編集はMVP対象外のため、更新APIのテストは対象に含めない。
 
 ## 代替案との比較
 
