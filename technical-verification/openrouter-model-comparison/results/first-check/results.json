@@ -7,7 +7,9 @@
     "parsed": {
       "message": "こんにちは",
       "status": "ok"
-    }
+    },
+    "schema_valid": true,
+    "schema_errors": []
   },
   {
     "model": "z-ai/glm-4.7-flash",
@@ -17,7 +19,9 @@
     "parsed": {
       "status": "ok",
       "message": "こんにちは！接続確認、正常に完了しました。"
-    }
+    },
+    "schema_valid": true,
+    "schema_errors": []
   },
   {
     "model": "openai/gpt-5-nano",
@@ -27,7 +31,9 @@
     "parsed": {
       "status": "ok",
       "message": "こんにちは！"
-    }
+    },
+    "schema_valid": true,
+    "schema_errors": []
   },
   {
     "model": "openai/gpt-oss-120b",
@@ -37,7 +43,9 @@
     "parsed": {
       "status": "ok",
       "message": "こんにちは！"
-    }
+    },
+    "schema_valid": true,
+    "schema_errors": []
   },
   {
     "model": "google/gemma-4-26b-a4b-it",
@@ -47,6 +55,8 @@
     "parsed": {
       "status": "ok",
       "message": "こんにちは！"
-    }
+    },
+    "schema_valid": true,
+    "schema_errors": []
   }
 ]
