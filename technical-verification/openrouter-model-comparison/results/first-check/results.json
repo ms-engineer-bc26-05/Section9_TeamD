@@ -1,0 +1,52 @@
+[
+  {
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "success": true,
+    "elapsed_sec": 2.47,
+    "raw_content": "{\"message\": \"こんにちは\", \"status\": \"ok\"}",
+    "parsed": {
+      "message": "こんにちは",
+      "status": "ok"
+    }
+  },
+  {
+    "model": "z-ai/glm-4.7-flash",
+    "success": true,
+    "elapsed_sec": 2.99,
+    "raw_content": "{\"status\":\"ok\",\"message\":\"こんにちは！接続確認、正常に完了しました。\"}",
+    "parsed": {
+      "status": "ok",
+      "message": "こんにちは！接続確認、正常に完了しました。"
+    }
+  },
+  {
+    "model": "openai/gpt-5-nano",
+    "success": true,
+    "elapsed_sec": 4.12,
+    "raw_content": "{\"status\":\"ok\",\"message\":\"こんにちは！\"}",
+    "parsed": {
+      "status": "ok",
+      "message": "こんにちは！"
+    }
+  },
+  {
+    "model": "openai/gpt-oss-120b",
+    "success": true,
+    "elapsed_sec": 1.18,
+    "raw_content": "{\n  \"status\": \"ok\",\n  \"message\": \"こんにちは！\"\n}",
+    "parsed": {
+      "status": "ok",
+      "message": "こんにちは！"
+    }
+  },
+  {
+    "model": "google/gemma-4-26b-a4b-it",
+    "success": true,
+    "elapsed_sec": 1.24,
+    "raw_content": "{\n  \"status\": \"ok\",\n  \"message\": \"こんにちは！\"\n}",
+    "parsed": {
+      "status": "ok",
+      "message": "こんにちは！"
+    }
+  }
+]
