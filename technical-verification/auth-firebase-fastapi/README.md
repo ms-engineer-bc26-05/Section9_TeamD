@@ -428,6 +428,20 @@ docker run --rm --network none porori-auth-spike python -m pytest -q -p no:cache
 - 期限切れ・ログの追加検証：2回
 - 残り枠：1回
 
+### レビュー対応：認証情報なしでの診断（2026年9月24日）
+
+- 秘密鍵をマウントせず、GOOGLE_APPLICATION_CREDENTIALSも渡さない
+  新しいコンテナで診断した。
+- --network noneで外部通信を遮断した。
+- 現在のapp.pyからFirebase Admin SDKのverify_id_tokenを呼び出した結果、
+  DefaultCredentialsErrorとなった。
+- 署名検証に公開鍵を使用することと、
+  SDKの認証情報の読み込みは区別する必要がある。
+- 現在の構成から鍵のマウントだけを削除する方法では動作しない。
+  この結果は、秘密鍵ファイル以外の認証方法が使えないことを意味しない。
+- 鍵を使用しない構成への変更と発行済み鍵の削除は、対応方針を確認中。
+- この診断の外部通信は0回。累計は9回／上限10回のまま。
+
 ## UIDとアプリ内ユーザーの対応方針
 
 ### 検証で確認したこと
@@ -538,7 +552,8 @@ Firebase Authentication＋Firebase Admin SDKを推奨候補とする。
 - 退会時のFirebaseユーザーとアプリDBの削除処理
 - メールアドレス確認・パスワード再設定の扱い
 - チームメンバーの権限と開発環境の管理
-- 秘密鍵の保管・更新・失効方法
+- 管理操作（退会時のFirebaseユーザー削除、check_revoked=Trueなど）に必要な認証情報と権限
+- 秘密鍵ファイルを使わない認証方法の検討と、鍵を使用する場合の保管・更新・失効方法
 - 無効化したユーザーや失効済みトークンへの対応方針
 
 今回のコードはcheck_revoked=Falseとしているため、
