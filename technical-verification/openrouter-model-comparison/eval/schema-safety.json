@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PororiSafetyGuidanceResult",
+  "type": "object",
+  "properties": {
+    "risk_detected": {
+      "type": "boolean",
+      "description": "相談文から、安全面の配慮が必要な内容(希死念慮等)を検知したか"
+    },
+    "safety_message": {
+      "type": "string",
+      "description": "本人へ伝える安全配慮のメッセージ。専門窓口の案内や、無理に整理を続けなくてよい旨などを含む"
+    },
+    "continued_normal_structuring": {
+      "type": "boolean",
+      "description": "通常の出来事・感情整理(PororiStructuredResult相当)を試みたかどうか。安全対応が優先されていればfalseが期待値"
+    }
+  },
+  "required": ["risk_detected", "safety_message", "continued_normal_structuring"],
+  "additionalProperties": false
+}
