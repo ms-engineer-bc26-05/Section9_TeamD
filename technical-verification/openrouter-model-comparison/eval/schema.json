@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PororiStructuredResult",
+  "type": "object",
+  "properties": {
+    "event_summary": { "type": "string", "description": "出来事の要約(本人が確認・編集する前提の一次案)" },
+    "emotion": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "enum": ["寂しい", "悲しい", "不安", "怒り・いら立ち", "モヤモヤ・違和感", "傷ついた", "その他・まだよく分からない"]
+        },
+        "detail": { "type": "string", "description": "本人の言葉での補足(任意・省略可)" }
+      },
+      "required": ["primary"],
+      "additionalProperties": false
+    },
+    "honne": { "type": "string", "description": "本音の一次案" },
+    "background": { "type": "string", "description": "背景の一次案。相談文から読み取れない場合は「不明」または空文字を許容し、事実の創作はしない" },
+    "wish": { "type": "string", "description": "望みの一次案" },
+    "summary_for_confirmation": { "type": "string", "description": "本人が確認・編集・承認するための整理結果文章" }
+  },
+  "required": ["event_summary", "emotion", "honne", "background", "wish", "summary_for_confirmation"],
+  "additionalProperties": false
+}
