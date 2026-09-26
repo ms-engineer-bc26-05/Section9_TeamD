@@ -4,6 +4,7 @@
   <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.card{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.3}.btn{fill:#D98978}.label1{fill:#F2DDD6}.label2{fill:#E3E7D8}</style>
   <text class="t" x="26" y="50" font-size="21">‹</text>
   <text class="t" x="195" y="51" text-anchor="middle" font-size="17" font-weight="700">整理結果を確認</text>
+  <text class="m" x="355" y="51" text-anchor="end" font-size="11">中断</text>
   <text class="m" x="195" y="81" text-anchor="middle" font-size="11">違うところは編集できます</text>
   <rect class="card" x="24" y="102" width="342" height="78" rx="16"/>
   <rect class="label1" x="24" y="102" width="70" height="78" rx="16"/>
@@ -16,11 +17,11 @@
   <rect class="card" x="24" y="278" width="342" height="78" rx="16"/>
   <rect class="label1" x="24" y="278" width="70" height="78" rx="16"/>
   <text class="t" x="59" y="321" text-anchor="middle" font-size="12" font-weight="700">本音</text>
-  <text class="t" x="109" y="306" font-size="12">自分との時間を大切に</text><text class="t" x="109" y="328" font-size="12">してほしかった</text><text class="m" x="340" y="344" text-anchor="end" font-size="11">編集</text>
+  <text class="t" x="109" y="306" font-size="12">自分との時間を大切に</text><text class="t" x="109" y="328" font-size="12">したい</text><text class="m" x="340" y="344" text-anchor="end" font-size="11">編集</text>
   <rect class="card" x="24" y="366" width="342" height="78" rx="16"/>
   <rect class="label2" x="24" y="366" width="70" height="78" rx="16"/>
   <text class="t" x="59" y="409" text-anchor="middle" font-size="12" font-weight="700">背景</text>
-  <text class="t" x="109" y="394" font-size="12">最近、二人で話す時間が</text><text class="t" x="109" y="416" font-size="12">減っていた</text><text class="m" x="340" y="432" text-anchor="end" font-size="11">編集</text>
+  <text class="t" x="109" y="394" font-size="12">会話中はお互いに目を向ける</text><text class="t" x="109" y="416" font-size="12">ことを大切にしている</text><text class="m" x="340" y="432" text-anchor="end" font-size="11">編集</text>
   <rect class="card" x="24" y="454" width="342" height="78" rx="16"/>
   <rect class="label1" x="24" y="454" width="70" height="78" rx="16"/>
   <text class="t" x="59" y="497" text-anchor="middle" font-size="12" font-weight="700">望み</text>

@@ -15,7 +15,7 @@
   <rect class="card" x="28" y="308" width="334" height="156" rx="18"/>
   <text class="t" x="48" y="348" font-size="13">プライバシーについて</text><text class="m" x="336" y="348" text-anchor="end" font-size="16">›</text>
   <line x1="48" y1="373" x2="342" y2="373" stroke="#E5DED7"/>
-  <text class="t" x="48" y="407" font-size="13">利用上の注意・専門窓口</text><text class="m" x="336" y="407" text-anchor="end" font-size="16">›</text>
+  <text class="t" x="48" y="407" font-size="13">利用上の注意・相談窓口</text><text class="m" x="336" y="407" text-anchor="end" font-size="16">›</text>
   <line x1="48" y1="432" x2="342" y2="432" stroke="#E5DED7"/>
   <text class="t" x="48" y="452" font-size="13">プランを確認</text><text class="m" x="336" y="452" text-anchor="end" font-size="16">›</text>
   <text class="m" x="28" y="526" font-size="12">退会</text>

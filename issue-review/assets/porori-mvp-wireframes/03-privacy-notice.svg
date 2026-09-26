@@ -19,7 +19,7 @@
   <line x1="48" y1="396" x2="342" y2="396" stroke="#E5DED7"/>
   <text class="t" x="48" y="437" font-size="13" font-weight="700">このアプリは医療・心理相談の代替ではありません</text>
   <text class="m" x="48" y="469" font-size="12">つらさが強いときの相談窓口を見る ›</text>
-  <text class="m" x="195" y="551" text-anchor="middle" font-size="11">2回目以降も要点・詳しい注意・相談窓口を確認できます</text>
+  <text class="m" x="195" y="551" text-anchor="middle" font-size="11" text-decoration="underline">詳しい注意を見る</text>
   <rect class="btn" x="26" y="570" width="338" height="58" rx="16"/>
   <text x="195" y="606" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#FFFFFF" font-weight="700">確認して進む</text>
   <rect x="26" y="646" width="338" height="58" rx="16" fill="none" stroke="#C9BFB7" stroke-width="1.5"/>
