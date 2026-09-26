@@ -425,6 +425,29 @@ response（200・例：`event_dialogue`状態）
   "correction_limit_reached": false
 }
 ```
+response（200・例：`event_summary_ready`状態。訂正回数・上限フラグは要約確定後も含めて返す）
+```json
+{
+  "consultation_id": "22222222-2222-4222-8222-222222222222",
+  "status": "event_summary_ready",
+  "question_count": 2,
+  "can_ask_more": true,
+  "event_details": {
+    "what_happened": "3日間返信がなかった",
+    "what_bothered_me": "既読なのに反応がないこと"
+  },
+  "correction_count": 1,
+  "correction_limit_reached": false
+}
+```
+response（200・例：`save_confirmation`状態。画面9から画面8へ戻る際に、現在選択中の`handling`を表示するために使う）
+```json
+{
+  "consultation_id": "22222222-2222-4222-8222-222222222222",
+  "status": "save_confirmation",
+  "handling": "hold"
+}
+```
 response（200・例：`guided_dialogue`状態）
 ```json
 {
@@ -493,7 +516,23 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
   "event_details": {
     "what_happened": "3日間返信がなかった",
     "what_bothered_me": "既読なのに反応がないこと"
-  }
+  },
+  "correction_count": 1,
+  "correction_limit_reached": false
+}
+```
+訂正回数が上限に達した場合のresponse例（`action: "correct"`のレスポンスとして、`event_dialogue`から`event_summary_ready`へ直接遷移し、要約と編集可能な状態を返す。ワイヤーフレーム画面6-Aの「少し違います」導線はここで終了し、画面6-Bの「要約を直接編集する」導線へ引き継ぐ）
+```json
+{
+  "status": "event_summary_ready",
+  "question_count": 1,
+  "can_ask_more": true,
+  "event_details": {
+    "what_happened": "5日間返信がなかった",
+    "what_bothered_me": "既読なのに反応がないこと"
+  },
+  "correction_count": 2,
+  "correction_limit_reached": true
 }
 ```
 危機的な内容を検知した場合のresponse例（4.5のSafetyGuidance。検知ロジックの実装方法は**未定**）
@@ -508,9 +547,11 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
 }
 ```
 
-`correction_count`（訂正回数）・`correction_limit_reached`（訂正上限到達）はサーバー側で管理し、クライアントから送られた値は信用しない。mvp-decisions No.2は、訂正入力→AIによる修正後理解の提示→本人の再確認までを1回とする。APIでは、サーバーが回数を確実に確定できるよう、**`action: "correct"`を受け付けた時点で`correction_count`を1増やす**。再確認用のactionは設けず、修正後の理解に対して本人が`answer`で回答を続けた場合（または6.3.2へ進んだ場合）は理解が合っていたものとし、再度`correct`を送った場合は次の1回として数える。これにより、訂正1回の区切りはmvp-decisions No.2と一致する。出来事を整理する工程全体（画面6-A・6-B）で最大2回までとする（上限値は初期値であり見直しの可能性あり）。AIの呼び出しに失敗した場合（502・500）は、`correction_count`を増やさない。フロントエンドは`correction_limit_reached`をもとに訂正ボタンの表示を切り替える。`correction_limit_reached: true`の状態で`action: "correct"`を指定した場合は`409`を返し、画面6-Bへ進んで本人が`event_details`を直接編集するよう促す。
+`correction_count`（訂正回数）・`correction_limit_reached`（訂正上限到達）はサーバー側で管理し、クライアントから送られた値は信用しない。mvp-decisions No.2は、訂正入力→AIによる修正後理解の提示→本人の再確認までを1回とする。APIでは、サーバーが回数を確実に確定できるよう、**`action: "correct"`を受け付けた時点で`correction_count`を1増やす**。再確認用のactionは設けず、修正後の理解に対して本人が`answer`で回答を続けた場合（または6.3.2へ進んだ場合）は理解が合っていたものとし、再度`correct`を送った場合は次の1回として数える。これにより、訂正1回の区切りはmvp-decisions No.2と一致する。出来事を整理する工程全体（画面6-A・6-B）で最大2回までとする（上限値は初期値であり見直しの可能性あり）。AIの呼び出しに失敗した場合（502・500）は、`correction_count`を増やさない。
 
-主なエラー：`401`、`404`（所有者不一致・存在しない・破棄済みセッション）、`409`（`question_count`が3に達している状態で回答を続けようとした場合、`correction_limit_reached`後に`correct`を指定した場合）、`422`（`answer`または`correction_input`が空、両方またはどちらも指定していない等）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
+訂正上限到達後の画面遷移は、フロントエンドが単独で画面6-Bへ切り替えるのではなく、サーバー側の状態遷移に合わせる。`correction_count`が上限（2）に達した`action: "correct"`のレスポンスでは、`correction_limit_reached: true`とあわせて`status`を`event_dialogue`から`event_summary_ready`へ遷移させ、その時点までの`event_details`を返す。フロントエンドはこのレスポンスを受けて、画面6-Aの「少し違います」（訂正）導線を表示せず、画面6-Bの「要約を直接編集する」導線を表示する。上限到達後は`event_dialogue`へ戻る訂正APIを提供しないため、`action: "correct"`をクライアントから送ることは想定しない。
+
+主なエラー：`401`、`404`（所有者不一致・存在しない・破棄済みセッション）、`409`（`question_count`が3に達している状態で回答を続けようとした場合、`status`が既に`event_dialogue`から遷移済みの状態で本APIを呼び出した場合）、`422`（`answer`または`correction_input`が空、両方またはどちらも指定していない等）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
 
 #### 6.3.2 出来事要約の確認・編集（画面6-B）
 
@@ -652,6 +693,8 @@ response（200）
 
 承認時点の整理結果と承認日時（DB設計の`approved_at`）を、サーバー側の一時状態に確定させる。承認後の編集は409で拒否するため（6.4.2）、保存時（6.5.2）に保存対象が承認した内容と同じであることをサーバー側で保証できる（B・C案の場合。A案では署名付き状態トークン等による同一性の確認が別途必要。§2参照）。
 
+承認は不可逆な操作として扱う。`handling_selection`から`result_ready`へ戻すAPIは提供せず、画面8（扱い方選択）から画面7（整理結果の確認・編集・承認）へ戻る導線はUIとして設けない。画面7では、この操作が承認であること、承認後は編集画面（画面7）へ戻れないことを明示する。
+
 主なエラー：`404`、`409`（編集を反映した整理結果が`ApprovableResult`（4.3）の検証を満たさない場合。例：`background`以外の必須項目が空のまま承認しようとした。承認は本文を受け取らず、送信値の誤りではなく相談の状態と操作の矛盾として扱うため422ではなく409とする。承認済みの結果を再承認しようとした場合も409）
 
 ---
@@ -671,6 +714,8 @@ response（200）
 ```json
 { "status": "save_confirmation" }
 ```
+
+本APIは`handling_selection`状態（画面8で初めて選ぶ場合）だけでなく、`save_confirmation`状態（画面9から画面8へ戻り、保存前に選び直す場合）からも呼び出せる。いずれの場合もレスポンスは`{ "status": "save_confirmation" }`であり、画面8へ戻った際は直前に選択した`handling`をGET（6.2.2）で表示する。選び直しは同じ相談の一時状態を更新するだけであり、相談完了・利用回数（`usage_limit`）は保存（6.5.2）時にのみ計上するため、選び直しによる重複計上は発生しない。
 
 主なエラー：`404`、`422`（`handling`が許可値でない）、`409`（整理結果が未承認のまま扱い方を選ぼうとした場合）
 
@@ -1023,7 +1068,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 | 6-C・6-D | 感情の選択・具体化 | `POST /consultations/{id}/emotion` |
 | 6-E | 本音・背景・望みの対話 | `POST /consultations/{id}/guided-dialogue`、復帰時は`GET /consultations/{id}` |
 | 7 | 整理結果の確認・編集・承認 | `GET`/`PATCH /consultations/{id}/result`、`POST /consultations/{id}/result/approve` |
-| 8 | 扱い方選択 | `POST /consultations/{id}/handling` |
+| 8 | 扱い方選択（画面9からの選び直しを含む） | `POST /consultations/{id}/handling`、復帰時は`GET /consultations/{id}` |
 | 9 | 保存確認（理由入力・保存／保存しない） | `POST /consultations/{id}/save`、`DELETE /consultations/{id}` |
 | 10・11 | 保存メモ一覧・詳細 | `GET /memos`、`GET /memos/{id}`、`DELETE /memos/{id}` |
 | 12 | 利用回数・プラン・決済 | `GET /usage`、`GET /plans`、6.8の決済API（要チーム判断） |
@@ -1050,7 +1095,7 @@ stateDiagram-v2
     [*] --> event_dialogue: POST /consultations
     [*] --> safety_guidance: POST /consultations（危機検知）
     event_dialogue --> event_dialogue: event-dialogue（answer継続・correct訂正）
-    event_dialogue --> event_summary_ready: event-dialogue（要約完成）
+    event_dialogue --> event_summary_ready: event-dialogue（要約完成 または correction_limit_reached到達）
     event_dialogue --> safety_guidance: event-dialogue（危機検知）
     event_summary_ready --> event_dialogue: confirm（ask_more）
     event_summary_ready --> emotion_selection: confirm（proceed）
@@ -1062,6 +1107,7 @@ stateDiagram-v2
     result_ready --> result_ready: PATCH result（編集）
     result_ready --> handling_selection: result/approve
     handling_selection --> save_confirmation: handling
+    save_confirmation --> save_confirmation: handling（画面9から画面8へ戻っての選び直し）
     save_confirmation --> [*]: save または DELETE（保存しない）
     safety_guidance --> [*]: DELETE（相談を終了）
     event_dialogue --> [*]: DELETE（途中離脱）
