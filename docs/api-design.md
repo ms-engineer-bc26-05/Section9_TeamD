@@ -45,6 +45,8 @@
 - 認証方式はFirebase Authenticationを検証済み候補とする（Issue #5：IDトークンをFastAPI側で検証し、有効・無効・期限切れ・未指定を判定できることを実接続で確認済み）。正式採用の最終決定・全画面への組み込みは未実施のため、変更の可能性は残る。
 - 認証が必要なAPIには `Authorization: Bearer <token>` ヘッダーを付与する（トークンはFirebase発行のIDトークンを想定）。
 - トークンのリフレッシュ方法・有効期限の運用（フロントエンドでの再取得タイミング等）は**未定**。
+- `check_revoked=True`（トークンの失効・ユーザー削除の確認）は、APIを呼ぶたびにFirebaseへの通信が発生するため、全APIでは使わない。**内部ユーザーを新規作成する唯一の経路である`POST /users/me`（6.1.1）でのみ使用する**。その他のAPIは署名・有効期限のみを検証し、トークンのUIDに対応する内部ユーザーが存在しない場合は、内部ユーザーを作成せず`401`を返す。
+- 退会（6.9）で防ぎたいのは、**同じUID（退会前に発行されたトークン）による内部ユーザーの再作成**であり、同じ人の再登録ではない。Firebaseでは同じメールアドレスで再登録すると別のUIDが発行されるため、再登録は新規ユーザーとして扱う。そのため、`firebase_uid`を残す論理削除は行わず、退会完了時に内部ユーザーを物理削除する。
 
 ### 3.3 日時・ID形式
 
@@ -85,6 +87,7 @@
 | 409 | Conflict | 相談セッションの状態と操作が矛盾する場合（例：承認済みの結果を再承認しようとした等）。状態の矛盾は409、入力値の誤りは422に揃える方針を採用する |
 | 422 | Unprocessable Entity | Pydantic等によるスキーマ検証エラー（型・必須項目・文字数・許容値） |
 | 500 | Internal Server Error | サーバー側の想定外エラー |
+| 502 | Bad Gateway | AIの呼び出しに失敗した場合、またはAIの出力がスキーマ検証（4章）を満たさない場合（エラーコード例：`AI_OUTPUT_INVALID`）。クライアントの入力誤りではないため422は使わない |
 
 #### 401と403の使い分け・所有者確認の方針
 
@@ -99,26 +102,30 @@ AIの応答は、フロントエンドがそのまま保存・信用する対象
 - AIの生出力（自由文章）を直接クライアントに返さず、バックエンドで検証・整形したうえで、下記のような型付きスキーマとしてレスポンスする。
 - ユーザーが編集した内容は、次のリクエストのrequest bodyとしてバックエンドへ送り返し、Pydantic等で型・文字数・許容値を検証する。想定外の項目・値は拒否する（422）。
 - AIの構造化出力を、そのままDB操作・外部API呼び出し・権限判定に使用しない。
+- AIの出力がスキーマ検証を満たさない場合は、クライアントの入力誤り（422）とは区別し、`502`（`AI_OUTPUT_INVALID`）として扱う（3.6参照）。エラー本文・ログにはAIの出力内容を含めない。サーバー側で自動的に再試行するか（回数を含む）は**未定**。
 - 本節のモデルは`model_config = ConfigDict(extra="forbid")`を付与し、想定外の項目を拒否する。必須文字列項目には`min_length=1`を付け、空文字での通過を防ぐ。
+- AI出力スキーマ（`*Draft`）も`extra="forbid"`とする。`extra="ignore"`（余計な項目を無視）にすると、AIの構造化出力の想定外の項目を拒否するというリポジトリ共通ルール（AGENTS.md「プロンプトインジェクション・AI出力の扱い」）と矛盾するためである。AIが古い形や余計な項目で出力して検証に失敗する問題は、次の方法で抑える。
+  - AIへ渡すJSON Schema・プロンプトを、本資料のAI出力スキーマと同じ内容に更新する（後続Issueで対応。§7参照）。JSON Schemaでは`additionalProperties: false`を指定する。
+  - 検証に失敗した場合は502（`AI_OUTPUT_INVALID`）とし、サーバー側での自動再試行の要否を決める（上記）。
 
 ### 4.0 スキーマの3分類（AI出力／ユーザー編集／サーバー状態）
 
 AIの構造化結果・ユーザーの編集入力・サーバーが管理する状態を同じスキーマに混在させない。
 
-- **AI出力スキーマ**：AIが生成する一次案。本人の確認前の内容（`EventSummaryDraft`、`ConsultationResultDraft`、`SafetyGuidanceDraft`）
-- **ユーザー編集リクエスト**：本人が確認・編集して送り返す入力（`EventSummaryInput`、`EmotionInput`、`ConsultationResultInput`、`HandlingChoice`）
+- **AI出力スキーマ**：AIが生成する一次案。本人の確認前の内容（`EventDetailsDraft`、`ConsultationResultDraft`、`SafetyGuidanceDraft`）
+- **ユーザー編集リクエスト**：本人が確認・編集して送り返す入力（`EventDetailsInput`、`EmotionInput`、`ConsultationResultInput`、`HandlingChoice`）
 - **サーバー管理状態**：クライアントからは受け付けず、サーバー側のみで管理する値（`question_count`、`can_ask_more`、`correction_count`、`correction_limit_reached`、`approved`、`status`）。これらはレスポンスにのみ含め、リクエストボディでは受け付けない（`extra="forbid"`により、送られてきた場合は422で拒否する）。
 
 ### 4.1 出来事の要約
 
 ```python
-class EventSummaryDraft(BaseModel):
+class EventDetailsDraft(BaseModel):
     """AIが生成する一次案（本人の確認前）"""
     model_config = ConfigDict(extra="forbid")
     what_happened: str = Field(max_length=500)      # 何があったか
     what_bothered_me: str = Field(max_length=500)   # 何が気になったか
 
-class EventSummaryInput(BaseModel):
+class EventDetailsInput(BaseModel):
     """本人が確認・訂正・編集して送り返す内容（ユーザー編集リクエスト）"""
     model_config = ConfigDict(extra="forbid")
     what_happened: str = Field(min_length=1, max_length=500)
@@ -126,6 +133,15 @@ class EventSummaryInput(BaseModel):
 ```
 
 `question_count`（追加質問回数）・`can_ask_more`（追加質問の余地）・`correction_count`（訂正回数）・`correction_limit_reached`（訂正上限到達）はサーバー管理状態としてレスポンスにのみ含める（6.3.1・6.3.2参照）。
+
+項目名の使い分け：同じ項目名でデータの形が変わらないよう、段階的整理（6.2.2・6.3）と整理結果・メモ（6.4〜6.6）で項目名を分ける。
+
+| 段階 | 出来事 | 感情 |
+| --- | --- | --- |
+| 段階的整理（6.2.2・6.3） | `event_details`（オブジェクト：`what_happened`／`what_bothered_me`） | `emotion_category`（`EmotionCategory`の値。例：`"anxious"`） |
+| 整理結果・メモ（6.4〜6.6） | `event_summary`（文字列） | `emotion`（文字列） |
+
+APIパスの`/event-summary/confirm`と状態名`event_summary_ready`は項目名ではないため変更しない。
 
 ### 4.2 感情の選択・具体化（EmotionInput）
 
@@ -182,12 +198,29 @@ class ConsultationResultInput(BaseModel):
 
 `approved`（本人が承認したか）はサーバー管理状態であり、`ConsultationResultInput`（PATCH）では受け付けず、専用の`/result/approve`（6.4.3）でのみ更新する。
 
+`ConsultationResultDraft`（AI出力）は空文字を許容し、`ConsultationResultInput`（PATCH）は部分更新のため項目の省略を許容する。そのため、どちらも「承認できる内容であること」は保証しない。承認時（6.4.3）には、編集を反映した整理結果を次の`ApprovableResult`で改めて検証し、満たさない場合は承認しない（409）。
+
+```python
+class ApprovableResult(BaseModel):
+    """承認・保存の対象とする整理結果（承認時にサーバー側で検証する）"""
+    model_config = ConfigDict(extra="forbid")
+    event_summary: str = Field(min_length=1, max_length=500)
+    emotion: str = Field(min_length=1, max_length=300)
+    true_feeling: str = Field(min_length=1, max_length=500)
+    background: str = Field(default="", max_length=500)  # 任意（空文字を許容）
+    wish: str = Field(min_length=1, max_length=500)
+```
+
+空白のみの値も空として扱う（検証前に前後の空白を除去する）。
+
 Issue #4の`PororiStructuredResult`をもとに変更した。差分は次の通り。
 
 - `emotion`：Issue #4はobject（`primary`／`detail`）→ 本資料では画面6-C・6-Dで確定する`EmotionInput`の内容を文字列として統合するため`str`に変更
 - `honne`→`true_feeling`に改名
 - `summary_for_confirmation`：画面7の確認表示はフロントエンドで整形するため削除
 - `background`を追加。GET result（6.4.1）・メモ詳細（6.6.2）のレスポンス例にも反映する。画面7（ワイヤーフレーム）に対応する表示欄を設けるかどうかは**未定**
+
+上記の差分により、Issue #4で使用したAI用のJSON Schema（`schema.json`）・プロンプトは本資料のスキーマと一致しなくなる。AI用スキーマ・プロンプトの更新は後続Issueで行う（§7参照）。
 
 採用モデルは`gpt-oss-120b`を暫定候補とし、危機対応部分の追加対策は**未定**。
 
@@ -226,7 +259,7 @@ class SafetyGuidance(BaseModel):
     continued_normal_structuring: bool # 通常の出来事・感情整理を継続したか（安全対応優先時はfalse）
 ```
 
-- Issue #4で使用した`eval/schema-safety.json`は`risk_detected`・`safety_message`・`continued_normal_structuring`の3つを必須項目としているため、`SafetyGuidanceDraft`もこれに合わせて`safety_message`を受け取る（`extra="forbid"`のため、必須項目を欠くとAI出力側の解析が422相当で失敗してしまうことを避ける）。ただし`SafetyGuidanceDraft.safety_message`の値はバックエンドで破棄し、`SafetyGuidance.safety_message`はサーバー側の固定テンプレートへ差し替える。
+- Issue #4で使用した`eval/schema-safety.json`は`risk_detected`・`safety_message`・`continued_normal_structuring`の3つを必須項目としているため、`SafetyGuidanceDraft`もこれに合わせて`safety_message`を受け取る（`extra="forbid"`のため、スキーマと項目がずれていると、正常なAI出力でも検証に失敗してしまうことを避ける）。ただし`SafetyGuidanceDraft.safety_message`の値はバックエンドで破棄し、`SafetyGuidance.safety_message`はサーバー側の固定テンプレートへ差し替える。
 - Issue #4の検証で、`risk_detected: true`かつ`continued_normal_structuring: true`という矛盾した組み合わせが実際に発生した。バックエンドで`risk_detected: true`の場合は`continued_normal_structuring`を強制的に`false`へ正規化する。
 - `safety_message`は電話番号等の詳細情報の誤生成を防ぐため、AIの生成文をそのまま使わず、サーバー側で用意した固定テンプレート（相談窓口の案内文言等）から選択して返す。
 - 危機的な内容は最初の自由記述（画面5）で最も出やすいため、`POST /consultations`（6.2.1）・`event-dialogue`（6.3.1）・`emotion`（6.3.3）・`guided-dialogue`（6.3.4）のいずれのレスポンスでも`safety_guidance`を返せることを候補とする。どのAPIで判定するかは**未定**。
@@ -370,6 +403,7 @@ response（201）
 - `401` 未ログイン
 - `403` 利用回数の上限超過（無料プランの相談回数上限など。具体的な上限値は**未定**。Issue #8の技術検証でRedisのキー`usage_limit:{user_id}`によるカウント・判定方式を確認済み。Redis障害時はフェイルオープン（判定不能時は許可扱い）とする方針も確認済み）
 - `422` `theme`が許可された値でない、`detail`が空・文字数超過
+- `502` AIの呼び出し失敗・AI出力の検証失敗（3.6参照）
 
 ---
 
@@ -396,11 +430,11 @@ response（200・例：`guided_dialogue`状態）
 {
   "consultation_id": "22222222-2222-4222-8222-222222222222",
   "status": "guided_dialogue",
-  "event_summary": {
+  "event_details": {
     "what_happened": "3日間返信がなかった",
     "what_bothered_me": "既読なのに反応がないこと"
   },
-  "emotion": "anxious",
+  "emotion_category": "anxious",
   "ai_question": "その気持ちの背景には、どんな望みがありそうですか？"
 }
 ```
@@ -439,7 +473,7 @@ response（200・回答後、AIの理解と次の質問を提示）
   "correction_limit_reached": false
 }
 ```
-response（200・訂正後、修正した理解を再提示。再確認まで完了して1回とカウントする）
+response（200・訂正後、修正した理解を再提示。`correct`を受け付けた時点で1回とカウントする）
 ```json
 {
   "status": "event_dialogue",
@@ -456,7 +490,7 @@ response（200・訂正後、修正した理解を再提示。再確認まで完
   "status": "event_summary_ready",
   "question_count": 2,
   "can_ask_more": true,
-  "event_summary": {
+  "event_details": {
     "what_happened": "3日間返信がなかった",
     "what_bothered_me": "既読なのに反応がないこと"
   }
@@ -474,21 +508,21 @@ response（200・訂正後、修正した理解を再提示。再確認まで完
 }
 ```
 
-`correction_count`（訂正回数）・`correction_limit_reached`（訂正上限到達）はサーバー側で管理し、クライアントから送られた値は信用しない。mvp-decisions No.2により、訂正入力→AIによる修正後理解の提示→本人の再確認までを1回と数え、出来事を整理する工程全体（画面6-A・6-B）で最大2回までとする（上限値は初期値であり見直しの可能性あり）。`correction_limit_reached: true`の状態で`action: "correct"`を指定した場合は`409`を返し、画面6-Bへ進んで本人が`event_summary`を直接編集するよう促す。
+`correction_count`（訂正回数）・`correction_limit_reached`（訂正上限到達）はサーバー側で管理し、クライアントから送られた値は信用しない。mvp-decisions No.2は、訂正入力→AIによる修正後理解の提示→本人の再確認までを1回とする。APIでは、サーバーが回数を確実に確定できるよう、**`action: "correct"`を受け付けた時点で`correction_count`を1増やす**。再確認用のactionは設けず、修正後の理解に対して本人が`answer`で回答を続けた場合（または6.3.2へ進んだ場合）は理解が合っていたものとし、再度`correct`を送った場合は次の1回として数える。これにより、訂正1回の区切りはmvp-decisions No.2と一致する。出来事を整理する工程全体（画面6-A・6-B）で最大2回までとする（上限値は初期値であり見直しの可能性あり）。AIの呼び出しに失敗した場合（502・500）は、`correction_count`を増やさない。フロントエンドは`correction_limit_reached`をもとに訂正ボタンの表示を切り替える。`correction_limit_reached: true`の状態で`action: "correct"`を指定した場合は`409`を返し、画面6-Bへ進んで本人が`event_details`を直接編集するよう促す。
 
-主なエラー：`401`、`404`（所有者不一致・存在しない・破棄済みセッション）、`409`（`question_count`が3に達している状態で回答を続けようとした場合、`correction_limit_reached`後に`correct`を指定した場合）、`422`（`answer`または`correction_input`が空、両方またはどちらも指定していない等）
+主なエラー：`401`、`404`（所有者不一致・存在しない・破棄済みセッション）、`409`（`question_count`が3に達している状態で回答を続けようとした場合、`correction_limit_reached`後に`correct`を指定した場合）、`422`（`answer`または`correction_input`が空、両方またはどちらも指定していない等）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
 
 #### 6.3.2 出来事要約の確認・編集（画面6-B）
 
 - **POST /api/v1/consultations/{id}/event-summary/confirm**（認証必要）
 
-`action`は`proceed`（次へ進む。本人が直接編集した`event_summary`を含められる）／`ask_more`（追加質問を増やす。`question_count<3`のときのみ）のいずれか。AIの理解の訂正は6.3.1で行うため、このAPIでは扱わない。
+`action`は`proceed`（次へ進む。本人が直接編集した`event_details`を含められる）／`ask_more`（追加質問を増やす。`question_count<3`のときのみ）のいずれか。AIの理解の訂正は6.3.1で行うため、このAPIでは扱わない。
 
 request（次へ進む場合。直接編集を含む）
 ```json
 {
   "action": "proceed",
-  "event_summary": {
+  "event_details": {
     "what_happened": "3日間返信がなかった",
     "what_bothered_me": "既読なのに反応がないこと"
   }
@@ -508,7 +542,7 @@ response（200・ask_moreの場合）
 { "status": "event_dialogue", "ai_question": "他に気になったことはありますか？" }
 ```
 
-主なエラー：`404`（所有者不一致・存在しない）、`409`（`question_count`が3に達している状態で`ask_more`を指定した場合）、`422`（文字数超過・必須項目の欠落等の入力値エラー）
+主なエラー：`404`（所有者不一致・存在しない）、`409`（`question_count`が3に達している状態で`ask_more`を指定した場合）、`422`（文字数超過・必須項目の欠落等の入力値エラー）、`502`（`ask_more`でのAIの呼び出し失敗・AI出力の検証失敗）
 
 #### 6.3.3 感情の選択・具体化（画面6-C・6-D）
 
@@ -528,7 +562,7 @@ response（200）
 { "status": "guided_dialogue", "ai_response": "不安に近いのですね。違っていたら教えてください。" }
 ```
 
-主なエラー：`404`、`422`（`category`が許可された列挙値でない、`detail`文字数超過、`detail`と`cannot_verbalize`のどちらも指定していない・両方指定した場合）
+主なエラー：`404`、`422`（`category`が許可された列挙値でない、`detail`文字数超過、`detail`と`cannot_verbalize`のどちらも指定していない・両方指定した場合）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
 
 #### 6.3.4 本音・背景・望みの対話（画面6-E）
 
@@ -562,7 +596,9 @@ response（200）
 }
 ```
 
-主なエラー：`404`、`422`（回答が空等）
+1回の相談の中でAIを無制限に呼び出せないよう（AIの利用料金の抑制）、`guided-dialogue`の往復回数はサーバー側で数え、上限を設ける（具体値は**未定**。§7参照）。上限に達した場合はエラーにせず、それまでの回答から整理結果を作成して`result_ready`へ進める。なお、6.3.1の追加質問は`question_count`（最大3）、訂正は`correction_count`（最大2）、6.3.2の`ask_more`は`question_count<3`のときのみ受け付けるため、それぞれ上限がある。
+
+主なエラー：`404`、`422`（回答が空等）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
 
 ---
 
@@ -601,7 +637,7 @@ request（編集したい項目のみ送信。`ConsultationResultInput`。方式
 
 response（200）：更新後の`ConsultationResultDraft`相当（`approved`を含む）
 
-主なエラー：`404`、`409`（承認済みの結果を編集しようとした場合）、`422`（`approved`を含む等、想定外の項目・文字数超過）
+主なエラー：`404`、`409`（承認済みの結果を編集しようとした場合）、`422`（`approved`を含む等、想定外の項目・文字数超過、更新する項目を1つも含まない`{}`）
 
 #### 6.4.3 整理結果の承認
 
@@ -616,7 +652,7 @@ response（200）
 
 承認時点の整理結果と承認日時（DB設計の`approved_at`）を、サーバー側の一時状態に確定させる。承認後の編集は409で拒否するため（6.4.2）、保存時（6.5.2）に保存対象が承認した内容と同じであることをサーバー側で保証できる（B・C案の場合。A案では署名付き状態トークン等による同一性の確認が別途必要。§2参照）。
 
-主なエラー：`404`、`409`（未編集で必須項目が空のまま承認しようとした場合）
+主なエラー：`404`、`409`（編集を反映した整理結果が`ApprovableResult`（4.3）の検証を満たさない場合。例：`background`以外の必須項目が空のまま承認しようとした。承認は本文を受け取らず、送信値の誤りではなく相談の状態と操作の矛盾として扱うため422ではなく409とする。承認済みの結果を再承認しようとした場合も409）
 
 ---
 
@@ -753,7 +789,12 @@ response（200）
 }
 ```
 
-上限値・リセット周期の具体値は**未定**。カウントはIssue #8で検証済みのRedisキー`usage_limit:{user_id}`を使い、相談開始時（`POST /consultations`呼び出し時。6.2.1）にインクリメントする想定。リセット方式はTTL方式を第一候補とし（Issue #8参照）、日付キー方式（カレンダー月次でリセットする案）は要件次第の代替候補とする。リセット方式が確定するまで、カレンダー月次を示す`period`のようなフィールドは含めない。Redis障害時はフェイルオープン（判定不能時は許可扱い）とする。相談開始時に加算した後、AI呼び出しの失敗（500）や安全案内での早期終了があった場合に加算を取り消す（デクリメントする）かどうかは**未定**。
+各項目の取得元は次のとおりとする。
+
+- `consultation_count`（相談回数）：期間内に開始した相談の回数。Redisで数える（下記）。
+- `memo_count`（保存件数）：現在保存しているメモの件数。Redisでは数えず、DBの`approved_memos`を本人の`user_id`で数えた件数を返す。期間によるリセットはなく、メモ削除（6.6.3）で減る。保存時の上限判定は、DB設計のとおり保存処理のトランザクション内で件数を確認して行う（6.5.2の403）。
+
+上限値・リセット周期の具体値は**未定**。相談回数のカウントはIssue #8で検証済みのRedisキー`usage_limit:{user_id}`を使い、相談開始時（`POST /consultations`呼び出し時。6.2.1）にインクリメントする想定。リセット方式はTTL方式を第一候補とし（Issue #8参照）、日付キー方式（カレンダー月次でリセットする案）は要件次第の代替候補とする。リセット方式が確定するまで、カレンダー月次を示す`period`のようなフィールドは含めない。Redis障害時はフェイルオープン（判定不能時は許可扱い）とする。相談開始時に加算した後、AI呼び出しの失敗・AI出力の検証失敗（502）やサーバー側の想定外エラー（500）、安全案内での早期終了があった場合に加算を取り消す（デクリメントする）かどうかは**未定**。
 
 主なエラー：`401`
 
@@ -908,22 +949,26 @@ request：なし（確認ダイアログはフロントエンド側で実施）
 
 response（204）：本文なし。次の処理を**同期的に**この順序で行い、完了後に204を返す（DB設計PR #23「退会時の削除手順」に合わせる）。
 
-1. 未完了の決済や継続契約があり退会を開始できない場合は、状態を変更せずに`409`を返す。
-2. `users`の対象行をロックし、`status`を`deleting`へ変更して確定する。以降、保存・決済・利用権限の更新を拒否する（403）。
-3. 保存済みメモ（`approved_memos`）を削除する。個人性の高いメモを、外部サービスの処理より先に削除する。
-4. 未完了の決済や継続契約について、採用する課金方式に従って必要なキャンセル・解約・状態照合を行う。
-5. Redisの利用回数キー（`usage_limit:{user_id}`）を削除する。
-6. Firebase側のユーザーを削除する（Admin SDK）。「すでに存在しない」場合も処理済みとして続行する。
-7. `user_entitlements`・`payments`（削除方針の合意が前提）・`users`を物理削除する。
+1. 1つのDBトランザクション内で、次の順に処理する。
+   1. `users`の対象行をロックする。
+   2. ロック取得後に、未完了の決済や継続契約を確認する。退会を開始できない場合はロールバックし、状態を変更せずに`409`を返す。
+   3. 退会を開始できる場合は、`status`を`deleting`へ変更して確定する。以降、保存・決済・利用権限の更新を拒否する（403）。
+
+   決済作成（6.8）・保存（6.5.2）も同じユーザー行をロックしてから状態を確認するため、確認と`deleting`への変更の間に決済作成が割り込むことはない（ロック取得順序を統一する。DB設計側の手順にも同じ順序の反映を依頼する）。
+2. 保存済みメモ（`approved_memos`）を削除する。個人性の高いメモを、外部サービスの処理より先に削除する。
+3. 未完了の決済や継続契約について、採用する課金方式に従って必要なキャンセル・解約・状態照合を行う。
+4. Redisの利用回数キー（`usage_limit:{user_id}`）を削除する。
+5. Firebase側のユーザーを削除する（Admin SDK）。「すでに存在しない」場合も処理済みとして続行する。
+6. `user_entitlements`・`payments`（削除方針の合意が前提）・`users`を物理削除する。
 
 非同期処理（202・ワーカーによるバックグラウンド実行）も候補だったが、現在の技術構成に非同期ワーカー基盤がないため、同期処理・204を採用する。将来的に処理時間が問題になれば非同期化を再検討する（**未定**）。
 
 途中失敗と再実行：
 
 - 上記はFirebase・内部DB（PostgreSQL）・Redisにまたがるため、単一のトランザクションでは括れない。途中で失敗した場合は`500`を返し、`users.status`は`deleting`のまま残す。
-- 各ステップは、同じ処理を再実行しても安全に続行できるようにする（削除対象がすでに存在しない場合も成功扱い）。そのため、`deleting`状態であれば最初のステップからやり直せばよく、処理段階の記録は持たない案とする。
+- 各ステップは、同じ処理を再実行しても安全に続行できるようにする（削除対象がすでに存在しない場合も成功扱い）。そのため、`deleting`状態であれば最初のステップからやり直せばよく、処理段階の記録は持たない案とする（再実行時はステップ1で`deleting`であることを確認し、決済の確認と409判定は行わずにステップ2へ進む。未完了の決済はステップ3で処理する）。
 - 削除済みのメモは、以降の処理が失敗しても復元・再作成しない。
-- Firebase削除（ステップ6）より前に失敗した場合は、本人が再度`DELETE /users/me`を呼び出せば再開できる（`deleting`状態でも本APIは受け付ける）。
+- Firebase削除（ステップ5）より前に失敗した場合は、本人が再度`DELETE /users/me`を呼び出せば再開できる（`deleting`状態でも本APIは受け付ける）。
 - Firebase削除後に失敗した場合は本人が再ログインできないため、`deleting`のまま一定時間が経過した行を運用スクリプトで検出して再実行する（MVPでは手動実行を想定）。検出のために`users.deletion_requested_at`等の列を追加するかは、DB設計と合わせて確定する（**未定**）。
 
 主なエラー：
@@ -946,6 +991,9 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 - 退会を開始できない決済・契約状態の判定条件（採用する課金方式に従う）、`payments`の退会時の削除可否
 - 退会処理がFirebase削除後に失敗した場合の検出・再実行の担当と、`users.deletion_requested_at`等の追加要否
 - プラン上限値の`null`の意味（無制限／未設定）、`stripe_price_id`の管理場所（DB／サーバー設定）
+- 1回の相談でAIを呼び出せる回数の上限（`guided-dialogue`の最大往復回数など。AIの利用料金の抑制のため）
+- AI用のJSON Schema・プロンプトを本資料のAI出力スキーマ（`EventDetailsDraft`・`ConsultationResultDraft`・`SafetyGuidanceDraft`）に合わせて更新する作業（後続Issueで対応。感情8択への更新を含む）
+- AI出力の検証失敗（502）時に、サーバー側で自動的に再試行するか（回数を含む）
 - トークンのリフレッシュ方法・有効期限の運用（Firebase Authentication採用は検証済み）
 
 ## 8. レビュー・確認の記録
@@ -956,6 +1004,8 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 | 2026-09-25 | AI（Claude Code）によるセルフレビュー（2回目） | 画面番号・退会とupsertの矛盾・決済APIの抴け・SafetyGuidanceDraftの不整合等 | 本資料へ反映済み |
 | （未記入） | （画面設計担当） | （未実施） | - |
 | 2026-09-26 | DB設計担当（PR #23との照合） | 退会時のユーザー状態・削除順序、`has_seen_notice`の保存先、`plan_id`の表現、承認から保存までの一時状態・二重保存防止 | 本資料へ反映済み（`deleting`＋物理削除、`plan_code`、`source_consultation_id`による再実行時の既存結果返却など。チーム・講師確認待ち） |
+| 2026-09-26 | 再レビュー | 利用回数の取得元、退会と決済作成の競合、承認時の必須項目の検証、AI出力不正と422の混同（保存再実行の列・制約の指摘は、DB設計の最新版で定義済みのため対応不要） | 本資料へ反映済み（`memo_count`はDB件数、退会はロック後に決済確認、`ApprovableResult`、502／`AI_OUTPUT_INVALID`）。退会のロック順序はDB設計側へも反映を依頼 |
+| 2026-09-26 | レビュー（2件目） | 同じ項目名でデータの形が異なる問題、訂正回数の数え方、AI用スキーマの更新とAI出力側の`extra`設定、`check_revoked`の適用範囲、1回の相談でのAI呼び出し回数 | 本資料へ反映済み（`event_details`・`emotion_category`へ改名、`correct`受付時に1回、`check_revoked`は`POST /users/me`のみ、`guided-dialogue`の往復上限を§7へ追加）。AI出力側の`extra="ignore"`は、AGENTS.mdのAI出力の扱いと矛盾するため採用せず、`forbid`を維持 |
 | （未記入） | 講師 | （未実施） | - |
 
 講師への確認結果・指摘事項と対応内容は、Issueまたは対応するPull Requestにも記録する。
