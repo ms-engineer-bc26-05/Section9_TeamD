@@ -19,8 +19,9 @@ app = FastAPI(title="porori backend")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_methods=["GET"],
-    allow_headers=["Content-Type"],
+    # API設計書（ドラフト）で使うメソッドとヘッダーだけを許可する
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(health.router)
