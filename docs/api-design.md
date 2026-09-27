@@ -411,7 +411,7 @@ response（201）
 
 - **GET /api/v1/consultations/{id}**（認証必要）
 
-リロード時の復帰や、直前の内容を確認する（画面6-E等）ために、現在の状態に加えて、直前にAPIが返した内容相当（直近の`ai_question`・`ai_understanding`・`event_summary`・`emotion`など、状態に応じて存在するもの）を返す。含めるフィールドの詳細は状態ごとに実装時に確定する（**未定**）。
+リロード時の復帰や、直前の内容を確認する（画面6-E等）ために、現在の状態に加えて、直前にAPIが返した内容相当（直近の`ai_question`・`ai_understanding`・`event_details`・`emotion_category`など、状態に応じて存在するもの）を返す。含めるフィールドの詳細は状態ごとに実装時に確定する（**未定**）。
 
 response（200・例：`event_dialogue`状態）
 ```json
@@ -549,9 +549,9 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
 
 `correction_count`（訂正回数）・`correction_limit_reached`（訂正上限到達）はサーバー側で管理し、クライアントから送られた値は信用しない。mvp-decisions No.2は、訂正入力→AIによる修正後理解の提示→本人の再確認までを1回とする。APIでは、サーバーが回数を確実に確定できるよう、**`action: "correct"`を受け付けた時点で`correction_count`を1増やす**。再確認用のactionは設けず、修正後の理解に対して本人が`answer`で回答を続けた場合（または6.3.2へ進んだ場合）は理解が合っていたものとし、再度`correct`を送った場合は次の1回として数える。これにより、訂正1回の区切りはmvp-decisions No.2と一致する。出来事を整理する工程全体（画面6-A・6-B）で最大2回までとする（上限値は初期値であり見直しの可能性あり）。AIの呼び出しに失敗した場合（502・500）は、`correction_count`を増やさない。
 
-訂正上限到達後の画面遷移は、フロントエンドが単独で画面6-Bへ切り替えるのではなく、サーバー側の状態遷移に合わせる。`correction_count`が上限（2）に達した`action: "correct"`のレスポンスでは、`correction_limit_reached: true`とあわせて`status`を`event_dialogue`から`event_summary_ready`へ遷移させ、その時点までの`event_details`を返す。フロントエンドはこのレスポンスを受けて、画面6-Aの「少し違います」（訂正）導線を表示せず、画面6-Bの「要約を直接編集する」導線を表示する。上限到達後は`event_dialogue`へ戻る訂正APIを提供しないため、`action: "correct"`をクライアントから送ることは想定しない。
+訂正上限到達後の画面遷移は、フロントエンドが単独で画面6-Bへ切り替えるのではなく、サーバー側の状態遷移に合わせる。`correction_count`が上限（2）に達した`action: "correct"`のレスポンスでは、`correction_limit_reached: true`とあわせて`status`を`event_dialogue`から`event_summary_ready`へ遷移させ、その時点までの`event_details`を返す。フロントエンドはこのレスポンスを受けて、画面6-Aの「少し違います」（訂正）導線を表示せず、画面6-Bの「要約を直接編集する」導線を表示する。上限到達後も6.3.2の`ask_more`により`event_dialogue`へ戻る場合があるが、その状態で`action: "correct"`を指定した場合は`409`で拒否する。
 
-主なエラー：`401`、`404`（所有者不一致・存在しない・破棄済みセッション）、`409`（`question_count`が3に達している状態で回答を続けようとした場合、`status`が既に`event_dialogue`から遷移済みの状態で本APIを呼び出した場合）、`422`（`answer`または`correction_input`が空、両方またはどちらも指定していない等）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
+主なエラー：`401`、`404`（所有者不一致・存在しない・破棄済みセッション）、`409`（`question_count`が3に達している状態で回答を続けようとした場合、`correction_count`が上限に達した状態で`correct`を指定した場合、`status`が既に`event_dialogue`から遷移済みの状態で本APIを呼び出した場合）、`422`（`answer`または`correction_input`が空、両方またはどちらも指定していない等）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
 
 #### 6.3.2 出来事要約の確認・編集（画面6-B）
 
