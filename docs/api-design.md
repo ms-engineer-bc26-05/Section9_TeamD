@@ -211,14 +211,14 @@ class ApprovableResult(BaseModel):
     wish: str = Field(min_length=1, max_length=500)
 ```
 
-空白のみの値も空として扱う（検証前に前後の空白を除去する）。
+承認・保存対象では`background`のみ空文字を許容し、それ以外の項目は空文字を許容しない。背景が分からない場合は空文字のままとし、AIが推測して補わない。空白のみの値も空として扱う（検証前に前後の空白を除去する）。
 
 Issue #4の`PororiStructuredResult`をもとに変更した。差分は次の通り。
 
 - `emotion`：Issue #4はobject（`primary`／`detail`）→ 本資料では画面6-C・6-Dで確定する`EmotionInput`の内容を文字列として統合するため`str`に変更
 - `honne`→`true_feeling`に改名
 - `summary_for_confirmation`：画面7の確認表示はフロントエンドで整形するため削除
-- `background`を追加。GET result（6.4.1）・メモ詳細（6.6.2）のレスポンス例にも反映する。画面7（ワイヤーフレーム）に対応する表示欄を設けるかどうかは**未定**
+- `background`を追加。UI-007（整理結果）・UI-011（メモ詳細）に表示する。背景が分からない場合は空文字を許容し、AIが推測して補わない。
 
 上記の差分により、Issue #4で使用したAI用のJSON Schema（`schema.json`）・プロンプトは本資料のスキーマと一致しなくなる。AI用スキーマ・プロンプトの更新は後続Issueで行う（§7参照）。
 
@@ -580,8 +580,15 @@ response（200・proceedの場合）
 ```
 response（200・ask_moreの場合）
 ```json
-{ "status": "event_dialogue", "ai_question": "他に気になったことはありますか？" }
+{
+  "status": "event_dialogue",
+  "ai_question": "他に気になったことはありますか？",
+  "correction_count": 2,
+  "correction_limit_reached": true
+}
 ```
+
+`correction_count`と`correction_limit_reached`はサーバー管理状態として、`ask_more`後のレスポンスにも現在値を含める。フロントエンドはこれらの値を使い、訂正上限到達後にUI-006Aへ戻った場合は「少し違います」を表示せず、要約を直接編集する導線を表示する。
 
 主なエラー：`404`（所有者不一致・存在しない）、`409`（`question_count`が3に達している状態で`ask_more`を指定した場合）、`422`（文字数超過・必須項目の欠落等の入力値エラー）、`502`（`ask_more`でのAIの呼び出し失敗・AI出力の検証失敗）
 
@@ -661,7 +668,7 @@ response（200）
 }
 ```
 
-`background`（背景）はConsultationResultDraft（4.3）に含まれるが、画面7（ワイヤーフレーム）での表示要否は**未定**。
+UI-007では`background`（背景）を他の4項目と分けて表示する。背景が分からない場合は空欄とし、AIが推測して補わない（4.3参照）。
 
 主なエラー：`404`
 
@@ -807,7 +814,7 @@ response（200）
 }
 ```
 
-`background`の表示要否は6.4.1と同様に**未定**。
+UI-011では`background`（背景）を他の4項目と分けて表示する。背景が分からない場合は空欄とし、AIが推測して補わない（4.3参照）。
 
 主なエラー：`401`、`404`（本人以外のメモID・存在しないID。所有者不一致は3.6の方針により404で統一）
 
@@ -1032,7 +1039,6 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 - 各文字数上限・利用回数上限・保存件数上限の具体的な値、利用回数のリセット周期（TTL方式を第一候補とし、日付キー方式を代替候補とする）
 - 危機的な内容を自動検知するロジックの実装方法・どのAPIで安全案内を返すか（`POST /consultations`・`event-dialogue`・`emotion`・`guided-dialogue`を候補として提示）
 - AIモデルの最終選定（`gpt-oss-120b`は暫定候補。危機対応の安全案内の精度向上策は追加検討が必要）
-- `background`（背景）を画面7・メモ詳細画面に表示するかどうか
 - メモ暗号化の正式採用方式・鍵管理（`Fernet`は暫定推奨。鍵の保管・更新・漏えい対応は未確定）
 - fastapi-usersを代替案として採用する場合のメール・パスワード認証APIの仕様、メール重複時の409エラー採用可否
 - 退会を開始できない決済・契約状態の判定条件（採用する課金方式に従う）、`payments`の退会時の削除可否
