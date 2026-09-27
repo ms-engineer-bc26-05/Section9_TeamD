@@ -521,12 +521,12 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
   "correction_limit_reached": false
 }
 ```
-訂正回数が上限に達した場合のresponse例（`action: "correct"`のレスポンスとして、`event_dialogue`から`event_summary_ready`へ直接遷移し、要約と編集可能な状態を返す。ワイヤーフレーム画面6-Aの「少し違います」導線はここで終了し、画面6-Bの「要約を直接編集する」導線へ引き継ぐ）
+訂正回数が上限に達した場合のresponse例（`action: "correct"`のレスポンスとして、`event_dialogue`から`event_summary_ready`へ直接遷移し、要約と編集可能な状態を返す。ワイヤーフレーム画面6-Aの「少し違います」導線はここで終了し、画面6-Bの「要約を直接編集する」導線へ引き継ぐ。訂正上限到達後は追加質問も受け付けないため、`can_ask_more`は`false`を返す）
 ```json
 {
   "status": "event_summary_ready",
   "question_count": 1,
-  "can_ask_more": true,
+  "can_ask_more": false,
   "event_details": {
     "what_happened": "5日間返信がなかった",
     "what_bothered_me": "既読なのに反応がないこと"
@@ -549,7 +549,7 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
 
 `correction_count`（訂正回数）・`correction_limit_reached`（訂正上限到達）はサーバー側で管理し、クライアントから送られた値は信用しない。mvp-decisions No.2は、訂正入力→AIによる修正後理解の提示→本人の再確認までを1回とする。APIでは、サーバーが回数を確実に確定できるよう、**`action: "correct"`を受け付けた時点で`correction_count`を1増やす**。再確認用のactionは設けず、修正後の理解に対して本人が`answer`で回答を続けた場合（または6.3.2へ進んだ場合）は理解が合っていたものとし、再度`correct`を送った場合は次の1回として数える。これにより、訂正1回の区切りはmvp-decisions No.2と一致する。出来事を整理する工程全体（画面6-A・6-B）で最大2回までとする（上限値は初期値であり見直しの可能性あり）。AIの呼び出しに失敗した場合（502・500）は、`correction_count`を増やさない。
 
-訂正上限到達後の画面遷移は、フロントエンドが単独で画面6-Bへ切り替えるのではなく、サーバー側の状態遷移に合わせる。`correction_count`が上限（2）に達した`action: "correct"`のレスポンスでは、`correction_limit_reached: true`とあわせて`status`を`event_dialogue`から`event_summary_ready`へ遷移させ、その時点までの`event_details`を返す。フロントエンドはこのレスポンスを受けて、画面6-Aの「少し違います」（訂正）導線を表示せず、画面6-Bの「要約を直接編集する」導線を表示する。上限到達後も6.3.2の`ask_more`により`event_dialogue`へ戻る場合があるが、その状態で`action: "correct"`を指定した場合は`409`で拒否する。
+訂正上限到達後の画面遷移は、フロントエンドが単独で画面6-Bへ切り替えるのではなく、サーバー側の状態遷移に合わせる。`correction_count`が上限（2）に達した`action: "correct"`のレスポンスでは、`correction_limit_reached: true`とあわせて`status`を`event_dialogue`から`event_summary_ready`へ遷移させ、その時点までの`event_details`を返す。フロントエンドはこのレスポンスを受けて、画面6-Aの「少し違います」（訂正）導線を表示せず、画面6-Bの「要約を直接編集する」導線を表示する。訂正上限到達後は、ワイヤーフレームの「上限に達しても内容が合わない場合はやり取りを増やさず画面6-Bへ進む」に合わせ、6.3.2の`ask_more`を受け付けない（`can_ask_more: false`）。これにより、上限到達後に`event_dialogue`へ戻ることはない。
 
 主なエラー：`401`、`404`（所有者不一致・存在しない・破棄済みセッション）、`409`（`question_count`が3に達している状態で回答を続けようとした場合、`correction_count`が上限に達した状態で`correct`を指定した場合、`status`が既に`event_dialogue`から遷移済みの状態で本APIを呼び出した場合）、`422`（`answer`または`correction_input`が空、両方またはどちらも指定していない等）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
 
@@ -557,7 +557,7 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
 
 - **POST /api/v1/consultations/{id}/event-summary/confirm**（認証必要）
 
-`action`は`proceed`（次へ進む。本人が直接編集した`event_details`を含められる）／`ask_more`（追加質問を増やす。`question_count<3`のときのみ）のいずれか。AIの理解の訂正は6.3.1で行うため、このAPIでは扱わない。
+`action`は`proceed`（次へ進む。本人が直接編集した`event_details`を含められる）／`ask_more`（追加質問を増やす。`question_count<3`かつ訂正上限に達していないとき（`can_ask_more: true`のとき）のみ）のいずれか。AIの理解の訂正は6.3.1で行うため、このAPIでは扱わない。
 
 request（次へ進む場合。直接編集を含む）
 ```json
@@ -569,7 +569,7 @@ request（次へ進む場合。直接編集を含む）
   }
 }
 ```
-request（もう少し整理したい場合、質問3問未満のときのみ）
+request（もう少し整理したい場合、`can_ask_more: true`のときのみ）
 ```json
 { "action": "ask_more" }
 ```
@@ -583,14 +583,14 @@ response（200・ask_moreの場合）
 {
   "status": "event_dialogue",
   "ai_question": "他に気になったことはありますか？",
-  "correction_count": 2,
-  "correction_limit_reached": true
+  "correction_count": 1,
+  "correction_limit_reached": false
 }
 ```
 
-`correction_count`と`correction_limit_reached`はサーバー管理状態として、`ask_more`後のレスポンスにも現在値を含める。フロントエンドはこれらの値を使い、訂正上限到達後にUI-006Aへ戻った場合は「少し違います」を表示せず、要約を直接編集する導線を表示する。
+`can_ask_more`はサーバー管理状態であり、`question_count<3`かつ`correction_limit_reached: false`のときだけ`true`とする。フロントエンドは`can_ask_more`の値だけを見て、画面6-Bの「もう少し整理したい」を表示するかを決める。訂正上限到達後は「もう少し整理したい」を表示せず、本人は要約を直接編集して`proceed`で次へ進む。`correction_count`と`correction_limit_reached`は、`ask_more`後のレスポンスにも現在値を含める。
 
-主なエラー：`404`（所有者不一致・存在しない）、`409`（`question_count`が3に達している状態で`ask_more`を指定した場合）、`422`（文字数超過・必須項目の欠落等の入力値エラー）、`502`（`ask_more`でのAIの呼び出し失敗・AI出力の検証失敗）
+主なエラー：`404`（所有者不一致・存在しない）、`409`（`question_count`が3に達している状態、または`correction_count`が上限に達している状態で`ask_more`を指定した場合）、`422`（文字数超過・必須項目の欠落等の入力値エラー）、`502`（`ask_more`でのAIの呼び出し失敗・AI出力の検証失敗）
 
 #### 6.3.3 感情の選択・具体化（画面6-C・6-D）
 
@@ -644,7 +644,7 @@ response（200）
 }
 ```
 
-1回の相談の中でAIを無制限に呼び出せないよう（AIの利用料金の抑制）、`guided-dialogue`の往復回数はサーバー側で数え、上限を設ける（具体値は**未定**。§7参照）。上限に達した場合はエラーにせず、それまでの回答から整理結果を作成して`result_ready`へ進める。なお、6.3.1の追加質問は`question_count`（最大3）、訂正は`correction_count`（最大2）、6.3.2の`ask_more`は`question_count<3`のときのみ受け付けるため、それぞれ上限がある。
+1回の相談の中でAIを無制限に呼び出せないよう（AIの利用料金の抑制）、`guided-dialogue`の往復回数はサーバー側で数え、上限を設ける（具体値は**未定**。§7参照）。上限に達した場合はエラーにせず、それまでの回答から整理結果を作成して`result_ready`へ進める。なお、6.3.1の追加質問は`question_count`（最大3）、訂正は`correction_count`（最大2）、6.3.2の`ask_more`は`question_count<3`かつ`correction_limit_reached: false`のときのみ受け付けるため、それぞれ上限がある。
 
 主なエラー：`404`、`422`（回答が空等）、`502`（AIの呼び出し失敗・AI出力の検証失敗）
 
@@ -1105,7 +1105,7 @@ stateDiagram-v2
     event_dialogue --> event_dialogue: event-dialogue（answer継続・correct訂正）
     event_dialogue --> event_summary_ready: event-dialogue（要約完成 または correction_limit_reached到達）
     event_dialogue --> safety_guidance: event-dialogue（危機検知）
-    event_summary_ready --> event_dialogue: confirm（ask_more）
+    event_summary_ready --> event_dialogue: confirm（ask_more・訂正上限未到達のときのみ）
     event_summary_ready --> emotion_selection: confirm（proceed）
     emotion_selection --> guided_dialogue: emotion
     emotion_selection --> safety_guidance: emotion（危機検知）
