@@ -99,8 +99,26 @@
 
 ## 4. テスト対象フロー一覧
 
+区分はすべてシナリオテスト。外部サービスは実物（Firebase・Stripeテストモード・OpenRouter）を使い、実施回数と費用の上限は7節に従う。
+
 | ID | シナリオ | 対象画面 | 優先度 |
 | --- | --- | --- | --- |
+| SC-01 | 初回利用：新規登録してホームへ進み、利用前の注意（詳細）を確認して同意する | UI-001〜003 | P0 |
+| SC-02 | 中心フロー（保存あり）：テーマ選択から扱い方の選択まで進め、整理メモを保存して詳細を確認する | UI-003〜009、011 | P0 |
+| SC-03 | 中心フロー（保存なし）：扱い方の選択まで進め、保存せず終了してホームへ戻る。保存しなくても相談が完了する | UI-003〜009、002 | P0 |
+| SC-04 | 相談を途中で中断し、ホームへ戻る。未承認の内容が保存されない | UI-006A〜E、002 | P0 |
+| SC-05 | 保存メモの一覧・詳細を確認し、削除する | UI-010・011 | P0 |
+| SC-06 | ユーザーBでログインし、ユーザーAのメモが一覧・詳細に表示されない | UI-001・010・011 | P0 |
+| SC-07 | 危機的な内容を含む架空文を入力し、通常の整理を止めて安全案内に切り替わる（要確認 Q-09） | UI-005〜006E | P0 |
+| SC-08 | 利用回数の上限に達した後、新しい相談を開始できず、プラン画面への導線が表示される（要確認 Q-03・Q-21） | UI-002・012 | P0 |
+| SC-09 | Stripeテスト決済が成功し、確認後にプランが反映される（要確認 Q-02） | UI-012 | P0 |
+| SC-10 | Stripeテスト決済をキャンセル、またはカード拒否した場合に、プランが変わらない（要確認 Q-02） | UI-012 | P0 |
+| SC-11 | 退会すると保存メモが削除され、同じアカウントで利用できない（要確認 Q-15） | UI-013・001 | P0 |
+| SC-12 | 出来事の訂正を上限まで行い、要約を直接編集して次へ進む | UI-006A・B | P1 |
+| SC-13 | 「もう少し整理したい」を選び、追加質問を最大3問まで行う | UI-006A・B | P1 |
+| SC-14 | 感情を「うまく言葉にできない」で回答して進む | UI-006C・D | P1 |
+| SC-15 | 2回目以降の利用で、利用前の注意が短い表示になる | UI-003 | P1 |
+| SC-16 | ログアウトして、再度ログインする | UI-013・001 | P1 |
 
 ## 5. テスト項目
 
@@ -108,8 +126,17 @@
 
 ### 5.1 正常系（N）
 
+相談フローの状態遷移を中心に書く。3.3の分類ルールに従い、機能カテゴリに当てはまる正常系は各カテゴリに記載する（ログイン・ログアウト・内部ユーザーの作成はAU、メモの保存・一覧・詳細・削除はSV、決済はPY、利用回数の加算・上限判定はRL）。非保存の確認はNPで行うため、ここでは重複して書かない。
+
 | ID | 観点 | 区分 | 優先度 | 前提条件 | 操作 | 期待結果 | 対象API・画面 | 関連Issue |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| N-01 | 利用前の注意への同意を記録できる | 結合 | P1 | ログイン済みのユーザーA。has_seen_notice=false | `has_seen_notice: true` を送信する | 200。レスポンスのhas_seen_noticeがtrue。DB上のユーザーAのhas_seen_noticeがtrueになる | `PATCH /users/me`、UI-003 | #2・#10 |
+| N-02 | 相談テーマ6種類をすべて受け付ける | 単体 | P1 | なし | ThemeCategoryの6値（communication、lifestyle、money、care、future、other）それぞれでリクエストを検証する | 6値すべてが検証を通過する | `POST /consultations` のリクエストモデル | #2・#10 |
+| N-03 | 相談を開始できる | 結合 | P0 | ログイン済みのユーザーA。利用回数は上限未満。AIモックは最初の質問文を返す | テーマ `communication` と、目印入りの架空文を送信する | 201。consultation_id、status=`event_dialogue`、ai_questionを返す | `POST /consultations`、UI-004・005 | #9・#10 |
+| N-04 | 出来事の質問に回答できる | 結合 | P0 | status=`event_dialogue`、question_count=0。AIモックは理解（ai_understanding）と次の質問を返す | action=`answer` で架空の回答を送信する | 200。status=`event_dialogue`、question_count=1、correction_count=0。ai_understandingとai_questionを返す | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
+| N-05 | AIの理解を訂正できる | 結合 | P0 | status=`event_dialogue`、question_count=1、correction_count=0。AIモックは修正後の理解を返す | action=`correct` で架空の訂正内容を送信する | 200。ai_understandingが修正後の内容になり、correction_count=1。question_countは1のまま変わらない | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
+| N-06 | 出来事の要約が完成する | 結合 | P0 | status=`event_dialogue`、question_count=1。AIモックは要約（what_happened、what_bothered_me）を返す | action=`answer` で架空の回答を送信する | 200。status=`event_summary_ready`、event_summaryの2項目、can_ask_more=trueを返す | `POST /consultations/{id}/event-dialogue`、UI-006A→006B | #2・#10 |
+| N-07 | 要約を編集して感情の選択へ進める | 結合 | P0 | status=`event_summary_ready` | action=`proceed` で、what_happenedを編集した要約を送信する | 200。status=`emotion_selection`。次のAI呼び出し時に、AIモックへ編集後の要約が渡される | `POST /consultations/{id}/event-summary/confirm`、UI-006B | #2・#10 |
 
 ### 5.2 入力エラー（V）
 ### 5.3 状態の矛盾（ST）
