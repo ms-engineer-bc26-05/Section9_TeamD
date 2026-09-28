@@ -27,6 +27,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
       REDIS_URL: ${REDIS_URL:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # 自動リロードの有無（縦断確認時は .env で false にする）
+      BACKEND_RELOAD: ${BACKEND_RELOAD:-true}
       # Windowsでもファイルの変更を検知できるよう、定期的に確認する
       WATCHFILES_FORCE_POLLING: "true"
     volumes:
