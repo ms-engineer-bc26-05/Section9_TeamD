@@ -41,21 +41,40 @@ Team Dの最終プロジェクト「ぽろり。」の開発用リポジトリ�
 ## ディレクトリ構成
 
 ```text
-frontend/                Next.jsのアプリ
-  app/                   画面（現在は疎通確認画面のみ）
-backend/                 FastAPIのアプリ
+frontend/                  Next.jsのアプリ
+  app/                     画面（現在は疎通確認画面のみ）
+backend/                   FastAPIのアプリ
   app/
-    main.py              エントリーポイント・CORS設定・共通エラーハンドラの登録
-    run.py               起動処理（自動リロードの切り替え・ワーカー数1）
-    core/config.py       環境変数の読み込み
-    core/errors.py       共通エラーハンドラ（422・400）
-    core/logging.py      ログの設定
-    routers/health.py    ヘルスチェックAPI
-  tests/                 バックエンドのテスト
-compose.yaml             Docker Composeの設定
-.env.example             環境変数の見本（ダミー値）
-technical-verification/  技術検証の成果物（Issue #3〜#8）。実装からは参照しない
+    main.py                エントリーポイント・CORS設定・共通エラーハンドラの登録
+    run.py                 起動処理（自動リロードの切り替え・ワーカー数1）
+    core/                  全機能で使う共通処理
+      config.py            環境変数の読み込み
+      errors.py            共通エラーハンドラ（422・400）
+      logging.py           ログの設定
+    features/              機能ごとのRouter・Schema・Service・Model
+      health/router.py     ヘルスチェックAPI
+    integrations/          外部サービスとの連携（Firebase・OpenRouterなど）
+  tests/                   バックエンドのテスト（app/と同じ構成で配置）
+compose.yaml               Docker Composeの設定
+.env.example               環境変数の見本（ダミー値）
+technical-verification/    技術検証の成果物（Issue #3〜#8）。実装からは参照しない
 ```
+
+バックエンドは機能別の構成です（Issue #33で決定）。後続Issueで、次のフォルダを追加していきます。
+
+| フォルダ | 内容 | 担当Issue |
+| --- | --- | --- |
+| `core/database.py` | DB接続・セッション | I-01 |
+| `features/auth/` | 認証（`get_current_user` など、`dependencies.py`） | I-01 |
+| `features/users/` | 内部ユーザー（`/users/me`） | I-01 |
+| `features/consultations/` | AI相談・一時状態 | I-03 |
+| `features/memos/` | 整理メモの保存・一覧・詳細・削除 | I-05 |
+| `integrations/firebase/` | Firebase Authentication | I-01 |
+| `integrations/openrouter/` | OpenRouter | I-03 |
+
+- 各機能フォルダには、必要に応じて `router.py`・`schemas.py`・`service.py`・`models.py` などを置きます。
+- 各機能のIssueでは、自分の担当フォルダの中だけを変更します。`main.py` への各機能Routerの登録は、後続の結合Issueで行います。
+- ほかの機能の内部状態やModelを直接操作せず、相手のServiceを通して利用します。
 
 ## 必要なもの
 
