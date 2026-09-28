@@ -8,12 +8,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import CORS_ORIGINS
+from app.core.errors import register_exception_handlers
 from app.core.logging import setup_logging
 from app.routers import health
 
 setup_logging()
 
 app = FastAPI(title="porori backend")
+
+# 422などの共通エラーを、送信値を含まない形式で返す
+register_exception_handlers(app)
 
 # フロントエンドのオリジンだけを許可する（無制限にしない）
 app.add_middleware(
