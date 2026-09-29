@@ -224,6 +224,36 @@ N-01をP1とする理由：同意の記録に失敗しても、相談の開始�
 | ST-14 | 削除済みの相談は操作できない | 結合 | P1 | `DELETE /consultations/{id}` で削除済み | 呼び出すAPIごとに送信する（パラメータ化：`GET /consultations/{id}`、`event-dialogue`、`result`のGET、`handling`、`DELETE /consultations/{id}`） | すべて404。存在しない相談IDと同じレスポンスを返す | 相談フローの各API | #10 |
 
 ### 5.4 認証・認可（AU）
+### 5.4 認証・認可（AU）
+
+内部ユーザーの作成・取得、トークンの検証、所有者の確認、退会後のアクセスを扱う。ログイン・ログアウトはバックエンドのAPIがないためSC（SC-01・SC-16）、決済の所有者確認とWebhookの署名検証はPY、退会時のデータ削除はSV、エラーレスポンスへのトークンの混入はNPで扱う。
+
+結合テストでは、Firebaseの `verify_id_token` をモックにし、前提条件に戻り値（uid）または発生させる例外を書く。ユーザーA・Bは架空の検証用ユーザーとする。
+
+| ID | 観点 | 区分 | 優先度 | 前提条件 | 操作 | 期待結果 | 対象API・画面 | 関連Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AU-01 | 初回ログイン時に内部ユーザーが作成される | 結合 | P0 | Firebaseモック：uid=`user-a`を返す。DBにuser-aの内部ユーザーがない | 内部ユーザーの作成・取得を呼び出す | 201。user_idとhas_seen_notice=falseを返す。DBにfirebase_uid=`user-a`の内部ユーザーが1件作成される | `POST /users/me`、UI-001 | #5・#10 |
+| AU-02 | 既存ユーザーは作成されず取得される | 結合 | P0 | Firebaseモック：uid=`user-a`を返す。DBにuser-aの内部ユーザーがある | 内部ユーザーの作成・取得を呼び出す | 200。既存のuser_idを返す。DBの内部ユーザーは1件のまま | `POST /users/me` | #5・#10 |
+| AU-03 | 同じユーザーの作成が重複しない | 結合 | P1 | Firebaseモック：uid=`user-a`を返す。DBにuser-aの内部ユーザーがない | 内部ユーザーの作成・取得を同時に2回呼び出す | 2回とも成功（201または200）し、同じuser_idを返す。DBの内部ユーザーは1件だけ（firebase_uidの一意制約） | `POST /users/me` | #5・#11 |
+| AU-04 | 削除済みユーザーは再作成されない | 結合 | P0 | Firebaseモック：uid=`user-a`を返す。user-aの内部ユーザーは削除済み（deleted） | 内部ユーザーの作成・取得を呼び出す | 403。内部ユーザーは新規作成されず、deletedのまま | `POST /users/me` | #5・#10 |
+| AU-05 | トークンがないと認証が必要なAPIを使えない | 結合 | P0 | ユーザーAのメモ・相談が存在する | Authorizationヘッダーなしで呼び出す（パラメータ化：`POST /users/me`、`POST /consultations`、`GET /consultations/{id}`、`GET /memos`、`GET /memos/{id}`、`DELETE /memos/{id}`、`GET /usage`、`DELETE /users/me`、決済API） | すべて401。WWW-Authenticate: Bearerヘッダーを返す。Firebaseモックは呼び出されない。データは変わらない | 認証が必要な各API | #5・#10 |
+| AU-06 | Bearer以外の形式を拒否する | 単体 | P1 | なし | `Authorization: Basic 架空の値` で呼び出す | 401。Firebaseモックは呼び出されない | 認証が必要な各API | #5 |
+| AU-07 | 不正なトークンを拒否する | 結合 | P0 | Firebaseモック：InvalidIdTokenErrorを発生させる | 架空のトークンで呼び出す | 401。データは変わらない | 認証が必要な各API | #5 |
+| AU-08 | 期限切れのトークンを拒否する | 結合 | P0 | Firebaseモック：ExpiredIdTokenErrorを発生させる | 架空のトークンで呼び出す | 401。データは変わらない | 認証が必要な各API | #5 |
+| AU-09 | uidが不正なトークンを拒否する | 単体 | P1 | Firebaseモック：uidを値ごとに返す（パラメータ化：None、空文字、数値の123） | 架空のトークンで呼び出す | 401 | 認証が必要な各API | #5 |
+| AU-10 | 認証基盤の障害時にアクセスを許可しない | 結合 | P0 | Firebaseモック：想定外の例外を発生させる、またはFirebaseの初期化に失敗させる（パラメータ化） | 架空のトークンで呼び出す | 503（要確認 Q-05）。アクセスを許可せず、データは変わらない。例外の詳細や設定情報をレスポンスに含めない | 認証が必要な各API | #5・#10 |
+| AU-11 | 失効済みのトークンで内部ユーザーを取得できない | 結合 | P1 | Firebaseモック：RevokedIdTokenErrorを発生させる（check_revoked=Trueで呼ばれる） | 内部ユーザーの作成・取得を呼び出す | 401。Firebaseモックがcheck_revoked=Trueで呼ばれている | `POST /users/me` | #5・#10 |
+| AU-12 | 他人の相談を操作できない | 結合 | P0 | ユーザーBの相談（status=`event_dialogue`）が存在する。Firebaseモック：uid=`user-a`を返す | BのconsultationIDを指定して呼び出す（パラメータ化：`GET /consultations/{id}`、`event-dialogue`、`result`のGET、`handling`、`save`、`DELETE /consultations/{id}`） | すべて404。Bの相談の状態は変わらない。AIモックは呼び出されない | 相談フローの各API | #5・#10 |
+| AU-13 | 他人の相談と存在しない相談を区別できない | 結合 | P0 | ユーザーBの相談が存在する。Firebaseモック：uid=`user-a`を返す | Bの相談IDと、存在しない相談IDでそれぞれ取得する | どちらも404で、レスポンスの本文が同じ | `GET /consultations/{id}` | #5・#10 |
+| AU-14 | 他人のメモを閲覧できない | 結合 | P0 | ユーザーBのメモが存在する。Firebaseモック：uid=`user-a`を返す | BのメモIDを指定して取得する | 404。メモの本文・所有者の情報を返さない。存在しないメモIDと同じレスポンス | `GET /memos/{id}`、UI-011 | #5・#10 |
+| AU-15 | 他人のメモを削除できない | 結合 | P0 | ユーザーBのメモが存在する。Firebaseモック：uid=`user-a`を返す | BのメモIDを指定して削除する | 404。DB上のBのメモは削除されない | `DELETE /memos/{id}`、UI-011 | #5・#10 |
+| AU-16 | メモ一覧に他人のメモが含まれない | 結合 | P0 | ユーザーA・Bがそれぞれメモを保存済み。Firebaseモック：uid=`user-a`を返す | メモ一覧を取得する | 200。Aのメモだけを返し、Bのメモは含まれない。件数にもBのメモは含まれない | `GET /memos`、UI-010 | #5・#10 |
+| AU-17 | リクエストで所有者を偽装できない | 結合 | P0 | Firebaseモック：uid=`user-a`を返す | 正しいリクエストに、Bのuser_idまたはfirebase_uidを追加して送信する（パラメータ化：`POST /consultations`、`save`） | 422。相談・メモは作成されず、Bの所有物として保存されない | `POST /consultations`、`POST /consultations/{id}/save` | #5・#10 |
+| AU-18 | 保存したメモの所有者がトークンのユーザーになる | 結合 | P0 | ユーザーAの相談がstatus=`save_confirmation`。Firebaseモック：uid=`user-a`を返す | 整理メモを保存する | 201。DB上のメモの所有者が、user-aに対応する内部ユーザーIDになる | `POST /consultations/{id}/save` | #5・#10 |
+| AU-19 | 退会後のトークンではデータを操作できない | 結合 | P0 | ユーザーAは退会済み（内部ユーザーがdeleted）。Firebaseモック：uid=`user-a`を返す（退会前に発行されたトークンを想定） | 呼び出すAPIごとに送信する（パラメータ化：`POST /consultations`、`GET /memos`、`GET /usage`、決済API） | すべて403。データは返さず、変更もしない | 認証が必要な各API | #5・#10 |
+| AU-20 | プラン一覧は認証なしで取得できる | 結合 | P2 | なし | Authorizationヘッダーなしでプラン一覧を取得する | 200。プラン一覧を返す | `GET /plans`、UI-012 | #10 |
+| AU-21 | 改ざんされた相談の状態を受け付けない | 結合 | P1 | 相談中の一時状態をクライアントが保持する方式（A案）を採用した場合のみ | 状態（question_count、approved等）を書き換えて送信する | 拒否され、書き換えた状態で処理されない（採用可否と拒否時のステータスは要確認 Q-01） | 相談フローの各API | #10 |
+
 ### 5.5 AI異常出力・安全案内（AI）
 ### 5.6 保存・削除・暗号化（SV）
 ### 5.7 非保存・ログ禁止（NP）
