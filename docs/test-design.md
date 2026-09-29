@@ -1,7 +1,7 @@
 # ぽろり。MVPテスト設計書
 
 - 作成日：2026年9月26日
-- 更新日：2026年9月27日
+- 更新日：2026年9月29日
 - ステータス：骨組みレビュー反映済み・5節作成中（確認担当レビュー前）
 - 対応Issue：#16「MVPテスト設計書の初稿を作成する」
 - 主担当：るな
@@ -45,6 +45,7 @@
 - 本人以外のデータ（メモ・相談セッション等）へのアクセスは、403ではなく404を返す。存在しないIDと区別しない（#5で検証済み、API設計で採用）
 - `check_revoked` は `POST /users/me` でのみ使用する（API設計で決定）
 - 開発環境と本番環境のログは、環境変数（`APP_ENV`、`LOG_LEVEL`等）によって出力内容を切り替える。実装・動作確認はSprint3で行う（講師回答済み）
+- 利用回数は相談開始時（`POST /consultations`）に加算する（API設計で統一）。AI処理の失敗時などに加算を取り消すかは未確定（Q-04）
 
 ## 3. テスト区分・優先度・IDの定義
 
@@ -64,7 +65,7 @@
 
 | 優先度 | 基準 |
 | --- | --- |
-| P0 | MVP完成条件とスクールMUST要件に直結する。中心フロー、認証・認可、非保存、暗号化に加え、Stripeテスト決済とRedis利用回数制限の要件を満たすことを示すテスト |
+| P0 | MVP完成条件とスクールMUST要件に直結する。中心フロー、認証・認可、非保存、暗号化、安全案内（危機的な内容の検知時に通常の整理を止めること）に加え、Stripeテスト決済とRedis利用回数制限の要件を満たすことを示すテスト |
 | P1 | 重要だが、P0の完了後でもよい。P0以外の異常系・境界値など |
 | P2 | 余裕があれば実施する |
 
@@ -91,8 +92,9 @@
 
 ### 3.4 表の書き方
 
-- 1行に1ケースを書く
-- 前提条件には、データの状態に加えて、モックが返す値や発生させる例外を書く
+- 1行に1ケースを書く。ただし、同じ検証を複数の値で行う場合は、パラメータ化して1行にまとめてよい（操作欄に対象の値を列挙する）
+- 前提条件には、データの状態に加えて、モックが返す値や発生させる例外を書く。モックの戻り値は、返す項目と架空の値を最小限書く
+- 前提条件の状態（status、question_count等）を作る方法は、相談中の一時状態の保持方式（Q-01）が決まるまで未確定とする
 - 期待結果には、ステータスコード・レスポンス・画面表示を書く。結合・シナリオでは、DB・Redisの状態も書く
 - 未確定の値は「要確認（Q-xx）」と書き、8節の番号と対応させる
 - 文字数や上限値は固定値で書かず、「上限値」「上限＋1」のように書く
@@ -109,7 +111,7 @@
 | SC-04 | 相談を途中で中断し、ホームへ戻る。未承認の内容が保存されない | UI-006A〜E、002 | P0 |
 | SC-05 | 保存メモの一覧・詳細を確認し、削除する | UI-010・011 | P0 |
 | SC-06 | ユーザーBでログインし、ユーザーAのメモが一覧・詳細に表示されない | UI-001・010・011 | P0 |
-| SC-07 | 危機的な内容を含む架空文を入力し、通常の整理を止めて安全案内に切り替わる（要確認 Q-09） | UI-005〜006E | P0 |
+| SC-07 | 危機的な内容を含む架空文を入力し、通常の整理を止めて安全案内に切り替わる。実物のAIでは同じ判定を再現できない可能性があるため、「通常の整理を継続しない」「固定テンプレートを使う」ことは5.5のモックを使った結合テスト（P0）で確認する（要確認 Q-09） | UI-005〜006E | P0 |
 | SC-08 | 利用回数の上限に達した後、新しい相談を開始できず、プラン画面への導線が表示される（要確認 Q-03・Q-21） | UI-002・012 | P0 |
 | SC-09 | Stripeテスト決済が成功し、確認後にプランが反映される（要確認 Q-02） | UI-012 | P0 |
 | SC-10 | Stripeテスト決済をキャンセル、またはカード拒否した場合に、プランが変わらない（要確認 Q-02） | UI-012 | P0 |
@@ -126,17 +128,19 @@
 
 ### 5.1 正常系（N）
 
-相談フローの状態遷移を中心に書く。3.3の分類ルールに従い、機能カテゴリに当てはまる正常系は各カテゴリに記載する（ログイン・ログアウト・内部ユーザーの作成はAU、メモの保存・一覧・詳細・削除はSV、決済はPY、利用回数の加算・上限判定はRL）。非保存の確認はNPで行うため、ここでは重複して書かない。
+相談フローの状態遷移を中心に書く。3.3の分類ルールに従い、機能カテゴリに当てはまる正常系は各カテゴリに記載する（内部ユーザーの作成・取得はAU、メモの保存・一覧・詳細・削除はSV、決済はPY、利用回数の加算・上限判定はRL）。ログイン・ログアウトはフロントエンドのFirebase SDKで行い、バックエンドのAPIがないため、シナリオテスト（SC-01・SC-16）で確認する。非保存の確認はNPで行うため、ここでは重複して書かない。
 
 | ID | 観点 | 区分 | 優先度 | 前提条件 | 操作 | 期待結果 | 対象API・画面 | 関連Issue |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | N-01 | 利用前の注意への同意を記録できる | 結合 | P1 | ログイン済みのユーザーA。has_seen_notice=false | `has_seen_notice: true` を送信する | 200。レスポンスのhas_seen_noticeがtrue。DB上のユーザーAのhas_seen_noticeがtrueになる | `PATCH /users/me`、UI-003 | #2・#10 |
-| N-02 | 相談テーマ6種類をすべて受け付ける | 単体 | P1 | なし | ThemeCategoryの6値（communication、lifestyle、money、care、future、other）それぞれでリクエストを検証する | 6値すべてが検証を通過する | `POST /consultations` のリクエストモデル | #2・#10 |
-| N-03 | 相談を開始できる | 結合 | P0 | ログイン済みのユーザーA。利用回数は上限未満。AIモックは最初の質問文を返す | テーマ `communication` と、目印入りの架空文を送信する | 201。consultation_id、status=`event_dialogue`、ai_questionを返す | `POST /consultations`、UI-004・005 | #9・#10 |
-| N-04 | 出来事の質問に回答できる | 結合 | P0 | status=`event_dialogue`、question_count=0。AIモックは理解（ai_understanding）と次の質問を返す | action=`answer` で架空の回答を送信する | 200。status=`event_dialogue`、question_count=1、correction_count=0。ai_understandingとai_questionを返す | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
-| N-05 | AIの理解を訂正できる | 結合 | P0 | status=`event_dialogue`、question_count=1、correction_count=0。AIモックは修正後の理解を返す | action=`correct` で架空の訂正内容を送信する | 200。ai_understandingが修正後の内容になり、correction_count=1。question_countは1のまま変わらない | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
-| N-06 | 出来事の要約が完成する | 結合 | P0 | status=`event_dialogue`、question_count=1。AIモックは要約（what_happened、what_bothered_me）を返す | action=`answer` で架空の回答を送信する | 200。status=`event_summary_ready`、event_summaryの2項目、can_ask_more=trueを返す | `POST /consultations/{id}/event-dialogue`、UI-006A→006B | #2・#10 |
-| N-07 | 要約を編集して感情の選択へ進める | 結合 | P0 | status=`event_summary_ready` | action=`proceed` で、what_happenedを編集した要約を送信する | 200。status=`emotion_selection`。次のAI呼び出し時に、AIモックへ編集後の要約が渡される | `POST /consultations/{id}/event-summary/confirm`、UI-006B | #2・#10 |
+| N-02 | 相談テーマ6種類をすべて受け付ける | 単体 | P1 | なし | ThemeCategoryの値ごとにリクエストを検証する（パラメータ化：communication、lifestyle、money、care、future、other） | 6値すべてが検証を通過する | `POST /consultations` のリクエストモデル | #2・#10 |
+| N-03 | 相談を開始できる | 結合 | P0 | ログイン済みのユーザーA。利用回数は上限未満。AIモックの戻り値：ai_question=「どんなことがありましたか？」（項目名は仮 Q-22） | テーマ `communication` と、目印入りの架空文を送信する | 201。consultation_id、status=`event_dialogue`、ai_question（モックの値）を返す | `POST /consultations`、UI-004・005 | #9・#10 |
+| N-04 | 出来事の質問に回答できる | 結合 | P0 | status=`event_dialogue`、question_count=0、correction_count=0。AIモックの戻り値：ai_understanding=「連絡の返信が3日なかった」、ai_question=「そのとき何が一番気になりましたか？」（項目名は仮 Q-22） | action=`answer` で架空の回答を送信する | 200。status=`event_dialogue`、question_count=1、correction_count=0。ai_understanding・ai_question（モックの値）を返す | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
+| N-05 | AIの理解を訂正できる | 結合 | P0 | status=`event_dialogue`、question_count=1、correction_count=0。AIモックの戻り値：ai_understanding=「連絡の返信が5日なかった」、ai_question=「そのとき何が一番気になりましたか？」（項目名は仮 Q-22） | action=`correct` で「実際は5日間でした」を送信する | 200。ai_understandingが修正後の内容（モックの値）になる。ai_question（モックの値）を返す。correction_count=1、correction_limit_reached=false。question_countは1のまま変わらない | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
+| N-06 | 出来事の要約が完成する | 結合 | P0 | status=`event_dialogue`、question_count=1。AIモックの戻り値：event_details={what_happened=「連絡の返信が3日なかった」、what_bothered_me=「既読なのに反応がないこと」} | action=`answer` で架空の回答を送信する | 200。status=`event_summary_ready`、question_count=2、event_detailsの2項目（モックの値）、can_ask_more=trueを返す | `POST /consultations/{id}/event-dialogue`、UI-006A→006B | #2・#10 |
+| N-07 | 要約を編集して感情の選択へ進める | 結合 | P0 | status=`event_summary_ready` | action=`proceed` で、what_happenedを編集したevent_detailsを送信する | 200。status=`emotion_selection`。編集後のevent_detailsが次の整理に引き継がれることは、感情入力の行（N-08予定）で確認する | `POST /consultations/{id}/event-summary/confirm`、UI-006B | #2・#10 |
+
+N-01をP1とする理由：同意の記録に失敗しても、相談の開始・完了は妨げられない（2回目以降に短い表示へ切り替わらないだけ）ため。初回利用の流れ全体は、SC-01（P0）で確認する。
 
 ### 5.2 入力エラー（V）
 ### 5.3 状態の矛盾（ST）
@@ -183,7 +187,8 @@
 | Q-18 | 開発環境と本番環境のログの出し分け。講師回答済み：環境変数（`APP_ENV`、`LOG_LEVEL`等）によって出力内容を切り替える。実装・動作確認はSprint3で行う | 企画案 §14 | NP | 解消済み |
 | Q-19 | シナリオテストの実施手段（手動のみか、画面操作の自動化ツールを使うか）、フロントエンドのテストツール。3.1のテスト区分に影響する | 技術選定 | SC | 未解決 |
 | Q-20 | 結合テストで外部サービス（AI・Stripe・Firebase）をモックにし、実物との接続はシナリオテストで確認する方針。レビューで合意済み（3.1・7節に反映）。Firebase Emulatorの採用は必要になった時点で再検討する | #16・技術選定 | AU、AI、PY、SC | 解消済み |
-| Q-21 | 利用回数を加算するタイミング。API設計内で記載が食い違っている（6.7では相談開始時、6.5.1では保存時） | #8・#10 | RL、SV、N | 未解決 |
+| Q-21 | 利用回数を加算するタイミング。最新のAPI設計で、相談開始時（`POST /consultations`）に統一された。失敗時の取り消しはQ-04で扱う | #8・#10 | RL、SV、N | 解消済み |
+| Q-22 | AI出力のスキーマ（相談開始時の「最初の質問」、出来事の対話での「理解＋次の質問」）がAPI設計で未定義。5.1のモックの戻り値の項目名は仮とする | #4・#10 | N、AI | 未解決 |
 
 ## 9. 完了条件チェック
 
@@ -201,3 +206,4 @@
 | --- | --- | --- | --- |
 | 2026-09-27 | めぐ | 中心フローと保存の関係、P0の範囲、テストIDの用途、Q-18の講師回答、#8の参照先 | 1節・2節・3.2・3.3・8節に反映 |
 | 2026-09-27 | じま | Q-20の合意と条件、3.4の書き方、分類ルール、Q-01・Q-07・Q-08・Q-16の更新、利用回数のタイミング（Q-21）、404方針 | 2節・3.1・3.3・3.4・7節・8節に反映 |
+| 2026-09-29 | じま | 4節・5.1の粒度確認。event_detailsへの項目名修正、N-05〜N-07の期待結果、パラメータ化、モックの書き方、AI出力スキーマ（Q-22）、P0への安全案内の追加、ログイン・ログアウトの扱い、N-01の優先度 | 2節・3.2・3.4・4節・5.1・8節に反映 |
