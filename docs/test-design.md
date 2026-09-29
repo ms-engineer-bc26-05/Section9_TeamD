@@ -196,6 +196,33 @@ N-01をP1とする理由：同意の記録に失敗しても、相談の開始�
 | V-27 | パスの相談IDが不正な形式 | 単体 | P1 | なし | UUID形式でない文字列をconsultation_idにして取得する | 422または404（要確認 Q-24） | `GET /consultations/{id}` | #10 |
 
 ### 5.3 状態の矛盾（ST）
+### 5.3 状態の矛盾（ST）
+
+相談の状態と操作が矛盾する場合を扱う。3.3の分類ルールに従い、保存時の状態の矛盾はSV、決済時はPY、退会時はAU・SVで扱う。
+
+各行の期待結果には、次の共通の期待結果を含む（期待結果が200の行を除く）。
+
+- エラーレスポンスは共通のエラー形式で返る（要確認 Q-07）
+- AIモックが呼び出されない
+- 相談の状態（status、question_count、correction_count、整理結果、approved）が変わらない
+
+| ID | 観点 | 区分 | 優先度 | 前提条件 | 操作 | 期待結果 | 対象API・画面 | 関連Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ST-01 | 追加質問が上限に達すると要約へ進む | 結合 | P0 | status=`event_dialogue`、question_count=2。AIモックの戻り値：event_details={what_happened=「連絡の返信が3日なかった」、what_bothered_me=「既読なのに反応がないこと」} | action=`answer` で架空の回答を送信する | 200。status=`event_summary_ready`、question_count=3、can_ask_more=false | `POST /consultations/{id}/event-dialogue`、UI-006A→006B | #2・#10 |
+| ST-02 | 追加質問が上限に達した後は回答を続けられない | 結合 | P0 | status=`event_summary_ready`、question_count=3 | action=`answer` で架空の回答を送信する | 409。question_countは3のまま | `POST /consultations/{id}/event-dialogue` | #2・#10 |
+| ST-03 | 追加質問が上限に達した後は「もう少し整理したい」を選べない | 結合 | P0 | status=`event_summary_ready`、question_count=3、can_ask_more=false | action=`ask_more` を送信する | 409。statusは`event_summary_ready`のまま | `POST /consultations/{id}/event-summary/confirm`、UI-006B | #2・#10 |
+| ST-04 | 訂正が上限に達する | 結合 | P0 | status=`event_dialogue`、correction_count=1。AIモックの戻り値：ai_understanding=「連絡の返信が5日なかった」、ai_question=「そのとき何が一番気になりましたか？」（項目名は仮 Q-22） | action=`correct` で架空の訂正内容を送信する | 200。correction_count=2、correction_limit_reached=true | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
+| ST-05 | 訂正が上限に達した後は訂正できない | 結合 | P0 | status=`event_dialogue`、correction_count=2、correction_limit_reached=true | action=`correct` で架空の訂正内容を送信する | 409。correction_countは2のまま。要約の直接編集（UI-006B）へ進むよう案内できるエラーを返す | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
+| ST-06 | 訂正が上限に達した後の要約確認への進み方 | 結合 | P1 | status=`event_dialogue`、correction_limit_reached=true | UI-006Bへ進む操作を行う | 要約の直接編集ができる状態（`event_summary_ready`）になる（進み方は要確認 Q-25） | `POST /consultations/{id}/event-dialogue`、UI-006A→006B | #2・#9・#10 |
+| ST-07 | 承認済みの整理結果は編集できない | 結合 | P0 | status=`handling_selection`、approved=true | wishを架空の文に変更して送信する | 409。整理結果は変わらない | `PATCH /consultations/{id}/result`、UI-007 | #10 |
+| ST-08 | 承認済みの整理結果を再承認できない | 結合 | P0 | status=`handling_selection`、approved=true | 承認する（ボディなし） | 409。statusは`handling_selection`のまま | `POST /consultations/{id}/result/approve` | #10 |
+| ST-09 | 必須項目が空のまま承認できない | 結合 | P0 | status=`result_ready`、approved=false。AIモックが返した整理結果のtrue_feelingが空文字 | 編集せずに承認する | 409。approved=falseのまま。空の項目を編集してから承認できる | `POST /consultations/{id}/result/approve`、UI-007 | #10 |
+| ST-10 | 未承認のまま扱い方を選べない | 結合 | P0 | status=`result_ready`、approved=false | handling=`hold` を送信する | 409。statusは`result_ready`のまま | `POST /consultations/{id}/handling`、UI-008 | #2・#10 |
+| ST-11 | 手順を飛ばしてAPIを呼べない | 結合 | P1 | 状態と呼び出すAPIの組み合わせを用意する | 組み合わせごとに呼び出す（パラメータ化：`event_dialogue`で`emotion`、`emotion_selection`で`guided-dialogue`、`guided_dialogue`で`result/approve`、`event_summary_ready`で`handling`） | 409。statusは変わらない | 相談フローの各API | #10 |
+| ST-12 | 前の段階のAPIを呼べない | 結合 | P1 | 状態と呼び出すAPIの組み合わせを用意する | 組み合わせごとに呼び出す（パラメータ化：`guided_dialogue`で`event-dialogue`、`handling_selection`で`emotion`、`save_confirmation`で`handling`） | 409。statusは変わらない（画面の「戻る」操作との関係は要確認 Q-26） | 相談フローの各API | #9・#10 |
+| ST-13 | 安全案内の状態では通常の整理を続けられない | 結合 | P0 | status=`safety_guidance` | 呼び出すAPIごとに送信する（パラメータ化：`event-dialogue`、`event-summary/confirm`、`emotion`、`guided-dialogue`、`result`のPATCH、`result/approve`、`handling`） | すべて409。statusは`safety_guidance`のまま。`DELETE /consultations/{id}` だけが204で成功する | 相談フローの各API | #4・#9・#10 |
+| ST-14 | 削除済みの相談は操作できない | 結合 | P1 | `DELETE /consultations/{id}` で削除済み | 呼び出すAPIごとに送信する（パラメータ化：`GET /consultations/{id}`、`event-dialogue`、`result`のGET、`handling`、`DELETE /consultations/{id}`） | すべて404。存在しない相談IDと同じレスポンスを返す | 相談フローの各API | #10 |
+
 ### 5.4 認証・認可（AU）
 ### 5.5 AI異常出力・安全案内（AI）
 ### 5.6 保存・削除・暗号化（SV）
@@ -243,6 +270,8 @@ N-01をP1とする理由：同意の記録に失敗しても、相談の開始�
 | Q-22 | AI出力のスキーマが、API設計で未定義。対象は、相談開始時の「最初の質問」、出来事の対話での「理解＋次の質問」、本音・背景・望みの対話での「次の質問」と「整理完了の判定」。5.1のモックの戻り値の項目名は仮とする | #4・#10 | N、AI | 未解決 |
 | Q-23 | 空白・改行のみの入力を「空」として扱うか（API設計では、感情の具体化だけ空白を取り除いて判定している） | #9・#10 | V | 未解決 |
 | Q-24 | JSONの形式不正（API設計では400だが、FastAPIの既定では422）と、パスのIDが不正な形式の場合のステータスコード（422か404か。404の場合、存在しないIDと区別しない方針との整合） | #10 | V、AU | 未解決 |
+| Q-25 | 訂正が上限に達した後、要約確認（`event_summary_ready`）へどう進むか。サーバーが自動で要約を作るのか、クライアントが要約確認を要求するのか。上限到達後に`answer`は受け付けるか | #9・#10 | ST | 未解決 |
+| Q-26 | 画面設計にある「戻る」操作（UI-006C→006B、UI-008→007、UI-009→008など）が、API設計の状態遷移にない。戻れるようにするか、戻る操作をなくすか | #9・#10 | ST、N、SC | 未解決 |
 
 ## 9. 完了条件チェック
 
