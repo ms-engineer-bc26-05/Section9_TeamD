@@ -138,7 +138,20 @@
 | N-04 | 出来事の質問に回答できる | 結合 | P0 | status=`event_dialogue`、question_count=0、correction_count=0。AIモックの戻り値：ai_understanding=「連絡の返信が3日なかった」、ai_question=「そのとき何が一番気になりましたか？」（項目名は仮 Q-22） | action=`answer` で架空の回答を送信する | 200。status=`event_dialogue`、question_count=1、correction_count=0。ai_understanding・ai_question（モックの値）を返す | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
 | N-05 | AIの理解を訂正できる | 結合 | P0 | status=`event_dialogue`、question_count=1、correction_count=0。AIモックの戻り値：ai_understanding=「連絡の返信が5日なかった」、ai_question=「そのとき何が一番気になりましたか？」（項目名は仮 Q-22） | action=`correct` で「実際は5日間でした」を送信する | 200。ai_understandingが修正後の内容（モックの値）になる。ai_question（モックの値）を返す。correction_count=1、correction_limit_reached=false。question_countは1のまま変わらない | `POST /consultations/{id}/event-dialogue`、UI-006A | #2・#10 |
 | N-06 | 出来事の要約が完成する | 結合 | P0 | status=`event_dialogue`、question_count=1。AIモックの戻り値：event_details={what_happened=「連絡の返信が3日なかった」、what_bothered_me=「既読なのに反応がないこと」} | action=`answer` で架空の回答を送信する | 200。status=`event_summary_ready`、question_count=2、event_detailsの2項目（モックの値）、can_ask_more=trueを返す | `POST /consultations/{id}/event-dialogue`、UI-006A→006B | #2・#10 |
-| N-07 | 要約を編集して感情の選択へ進める | 結合 | P0 | status=`event_summary_ready` | action=`proceed` で、what_happenedを編集したevent_detailsを送信する | 200。status=`emotion_selection`。編集後のevent_detailsが次の整理に引き継がれることは、感情入力の行（N-08予定）で確認する | `POST /consultations/{id}/event-summary/confirm`、UI-006B | #2・#10 |
+| N-07 | 要約を編集して感情の選択へ進める | 結合 | P0 | status=`event_summary_ready` | action=`proceed` で、what_happenedを編集したevent_detailsを送信する | 200。status=`emotion_selection`。編集後のevent_detailsが次の整理に引き継がれることは、感情入力の行（N-09）で確認する | `POST /consultations/{id}/event-summary/confirm`、UI-006B | #2・#10 |
+| N-08 | 追加の質問を選んで出来事の対話に戻れる | 結合 | P1 | status=`event_summary_ready`、question_count=2、can_ask_more=true。AIモックの戻り値：ai_question=「ほかに気になったことはありますか？」（項目名は仮 Q-22） | action=`ask_more` を送信する | 200。status=`event_dialogue`、ai_question（モックの値）を返す | `POST /consultations/{id}/event-summary/confirm`、UI-006B→006A | #2・#10 |
+| N-09 | 感情を自分の言葉で入力でき、編集後の要約が引き継がれる | 結合 | P0 | status=`emotion_selection`。N-07でwhat_happenedを編集済み。AIモックの戻り値：ai_response=「不安に近いのですね。違っていたら教えてください。」 | category=`anxious`、detail=架空の文を送信する | 200。status=`guided_dialogue`、ai_response（モックの値）を返す。AIモックへ渡された入力に、編集後のevent_details、category、detailが含まれる | `POST /consultations/{id}/emotion`、UI-006C・D | #2・#10 |
+| N-10 | 「うまく言葉にできない」で感情の整理へ進める | 結合 | P1 | status=`emotion_selection`。AIモックの戻り値：ai_response=「不安に近いのですね。違っていたら教えてください。」 | category=`anxious`、cannot_verbalize=trueを送信する（detailは送らない） | 200。status=`guided_dialogue`、ai_response（モックの値）を返す。AIモックへ渡された入力にdetailが含まれない | `POST /consultations/{id}/emotion`、UI-006D | #2・#9・#10 |
+| N-11 | 感情の選択肢8種類をすべて受け付ける | 単体 | P1 | なし | EmotionCategoryの値ごとにリクエストを検証する（パラメータ化：lonely、sad、anxious、angry、confused、hurt、self_blame、other） | 8値すべてが検証を通過する | `POST /consultations/{id}/emotion` のリクエストモデル | #2・#10 |
+| N-12 | 本音・背景・望みの質問に回答できる | 結合 | P0 | status=`guided_dialogue`。AIモックの戻り値：ai_question=「その気持ちの背景には、どんな望みがありそうですか？」（項目名は仮 Q-22） | answer=架空の回答を送信する | 200。status=`guided_dialogue`、ai_question（モックの値）を返す | `POST /consultations/{id}/guided-dialogue`、UI-006E | #2・#10 |
+| N-13 | 本音・背景・望みの整理が完了する | 結合 | P0 | status=`guided_dialogue`。AIモックは整理完了と、整理結果（event_summary、emotion、true_feeling、background、wish の架空の値）を返す（完了の判定方法は要確認 Q-13・Q-22） | answer=架空の回答を送信する | 200。status=`result_ready` | `POST /consultations/{id}/guided-dialogue`、UI-006E→007 | #2・#10 |
+| N-14 | 整理結果を取得できる | 結合 | P0 | status=`result_ready`。N-13の整理結果が作成済み。backgroundは空文字 | 整理結果を取得する | 200。event_summary、emotion、true_feeling、background、wish（N-13の値）と、approved=falseを返す。backgroundは空文字のまま返る | `GET /consultations/{id}/result`、UI-007 | #9・#10 |
+| N-15 | 整理結果の一部を編集できる | 結合 | P0 | status=`result_ready`、approved=false | wishだけを架空の文に変更して送信する | 200。wishが変更後の値になり、ほかの項目は変わらない。approved=falseのまま | `PATCH /consultations/{id}/result`、UI-007 | #2・#10 |
+| N-16 | 整理結果を承認できる | 結合 | P0 | status=`result_ready`、approved=false、必須項目が入力済み | 承認する（ボディなし） | 200。status=`handling_selection`、approved=true | `POST /consultations/{id}/result/approve`、UI-007 | #2・#10 |
+| N-17 | 扱い方を選択でき、相談が完了する | 結合 | P0 | status=`handling_selection`、approved=true | handlingの値ごとに送信する（パラメータ化：tell、hold、not_tell） | 3値とも200。status=`save_confirmation`。この時点で相談完了とする（保存は任意） | `POST /consultations/{id}/handling`、UI-008 | #2・#10 |
+| N-18 | 保存せずに終了できる | 結合 | P0 | status=`save_confirmation` | 相談を削除する | 204。以後、同じconsultation_idの取得は404になる。DB・Redis・ログに内容が残らないことはNPで確認する | `DELETE /consultations/{id}`、UI-009→002 | #2・#10 |
+| N-19 | 相談を途中で中断できる | 結合 | P0 | statusを状態ごとに用意する（パラメータ化：event_dialogue、event_summary_ready、emotion_selection、guided_dialogue、result_ready、handling_selection） | 相談を削除する | どの状態でも204。以後、同じconsultation_idの取得は404になる。未承認の内容が残らないことはNPで確認する | `DELETE /consultations/{id}`、UI-006A〜008→002 | #9・#10 |
+| N-20 | 相談の途中状態を取得できる（再読み込み時の復帰） | 結合 | P1 | status=`event_dialogue`、question_count=1、correction_count=0 | 相談状態を取得する | 200。status、question_count、correction_count、直近のai_understanding・ai_questionを返す（A案〔クライアント保持〕を採用した場合、このAPIは成り立たないため要確認 Q-01） | `GET /consultations/{id}` | #9・#10 |
 
 N-01をP1とする理由：同意の記録に失敗しても、相談の開始・完了は妨げられない（2回目以降に短い表示へ切り替わらないだけ）ため。初回利用の流れ全体は、SC-01（P0）で確認する。
 
@@ -188,7 +201,7 @@ N-01をP1とする理由：同意の記録に失敗しても、相談の開始�
 | Q-19 | シナリオテストの実施手段（手動のみか、画面操作の自動化ツールを使うか）、フロントエンドのテストツール。3.1のテスト区分に影響する | 技術選定 | SC | 未解決 |
 | Q-20 | 結合テストで外部サービス（AI・Stripe・Firebase）をモックにし、実物との接続はシナリオテストで確認する方針。レビューで合意済み（3.1・7節に反映）。Firebase Emulatorの採用は必要になった時点で再検討する | #16・技術選定 | AU、AI、PY、SC | 解消済み |
 | Q-21 | 利用回数を加算するタイミング。最新のAPI設計で、相談開始時（`POST /consultations`）に統一された。失敗時の取り消しはQ-04で扱う | #8・#10 | RL、SV、N | 解消済み |
-| Q-22 | AI出力のスキーマ（相談開始時の「最初の質問」、出来事の対話での「理解＋次の質問」）がAPI設計で未定義。5.1のモックの戻り値の項目名は仮とする | #4・#10 | N、AI | 未解決 |
+| Q-22 | AI出力のスキーマが、API設計で未定義。対象は、相談開始時の「最初の質問」、出来事の対話での「理解＋次の質問」、本音・背景・望みの対話での「次の質問」と「整理完了の判定」。5.1のモックの戻り値の項目名は仮とする | #4・#10 | N、AI | 未解決 |
 
 ## 9. 完了条件チェック
 
