@@ -337,6 +337,32 @@ AI呼び出しの失敗・不正な出力（AI-01〜AI-06）の期待結果に�
 | NP-20 | ブラウザに本文が残らない | シナリオ | P1 | テスト専用の環境。目印入りの架空文を用意する | SC-02を実施し、途中と終了後に、ブラウザの開発者ツールでコンソールとストレージ（localStorage、sessionStorage）を確認する | コンソール・ストレージに目印文字列が残らない（一時状態をクライアントで保持するA案を採用した場合の扱いは要確認 Q-01） | UI-005〜011 | #9・#10 |
 
 ### 5.8 決済（PY）
+
+プラン一覧、Checkout Sessionの作成、決済結果の確認と反映を扱う。決済方式（Q-02）が未確定のため、#6で検証済みの買い切り型を中心に書き、サブスク型を採用した場合の項目（PY-15〜PY-18）は分けて記載する。
+
+結合テストでは、Stripe APIをモックにし、前提条件に戻り値（payment_status、client_reference_id等）または発生させる例外を書く。Stripeのテストカードを使った成功・キャンセル・カード拒否は、シナリオテスト（SC-09・SC-10）で確認する。価格・相談回数・保存件数は、設定値から読み込む前提とする（要確認 Q-03）。
+
+| ID | 観点 | 区分 | 優先度 | 前提条件 | 操作 | 期待結果 | 対象API・画面 | 関連Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PY-01 | プランの価格・上限値が設定値から読み込まれる | 結合 | P1 | 設定値に架空の価格・相談回数・保存件数を設定する | プラン一覧を取得する | 200。各プランの価格・上限値が設定値と一致する。設定値を変えると、再起動後の取得結果も変わる | `GET /plans`、UI-012 | #6・#10 |
+| PY-02 | Checkout Sessionを作成できる | 結合 | P0 | ユーザーAは無料プラン。Stripeモックの戻り値：url=架空のURL、id=`cs_test_dummy` | plan_id=`premium` で作成する | 200。checkout_urlとsession_idを返す。Stripeモックが、mode=`payment`、client_reference_id=ユーザーAの内部ユーザーID、`{CHECKOUT_SESSION_ID}`を含むsuccess_urlで呼ばれている | `POST /payments/checkout-session`、UI-012 | #6・#10 |
+| PY-03 | 不正なプランIDではSessionを作成できない | 単体 | P1 | なし | plan_idを値ごとに送信する（パラメータ化：未定義の文字列、`free`、空文字、null） | 422。Stripeモックは呼び出されない | `POST /payments/checkout-session` | #10 |
+| PY-04 | 有料プランのユーザーは再決済できない | 結合 | P0 | ユーザーAは有料プラン | plan_id=`premium` で作成する | 409。Stripeモックは呼び出されず、新しいSessionは作成されない | `POST /payments/checkout-session`、UI-012 | #6・#10 |
+| PY-05 | Session作成時のStripeの例外 | 結合 | P0 | ユーザーAは無料プラン。Stripeモック：StripeErrorを発生させる | plan_id=`premium` で作成する | エラーレスポンスを返す（ステータスは要確認 Q-08）。例外の中身を返さない。プランは無料のまま | `POST /payments/checkout-session`、UI-012 | #6・#10 |
+| PY-06 | 決済が完了していればプランに反映される | 結合 | P0 | ユーザーAは無料プラン。Stripeモックの戻り値：payment_status=`paid`、client_reference_id=ユーザーAの内部ユーザーID | session_id=`cs_test_dummy` で決済を確認する | 200。status=`paid`。DB上のユーザーAが有料プランになる。以後、利用状況の取得で有料プランの上限値を返す | `POST /payments/confirm`、`GET /usage`、UI-012 | #6・#10 |
+| PY-07 | 決済が完了していなければプランに反映されない | 結合 | P0 | ユーザーAは無料プラン。Stripeモックの戻り値：payment_status=`unpaid`、client_reference_id=ユーザーAの内部ユーザーID | session_id=`cs_test_dummy` で決済を確認する | 200。status=`unpaid`。ユーザーAは無料プランのまま | `POST /payments/confirm`、UI-012 | #6・#10 |
+| PY-08 | 他人のSessionで決済を確認できない | 結合 | P0 | ユーザーAは無料プラン。Stripeモックの戻り値：payment_status=`paid`、client_reference_id=ユーザーBの内部ユーザーID | ユーザーAのトークンで、session_id=`cs_test_dummy` の決済を確認する | 404。ユーザーA・Bともプランは変わらない | `POST /payments/confirm` | #6・#10 |
+| PY-09 | 存在しないSessionで決済を確認できない | 結合 | P1 | Stripeモック：Sessionが見つからない例外（InvalidRequestError）を発生させる | 存在しないsession_idで決済を確認する | 404。プランは変わらない。例外の中身を返さない | `POST /payments/confirm` | #6・#10 |
+| PY-10 | 同じSessionで何度確認しても結果が変わらない | 結合 | P0 | PY-06と同じ | 同じsession_idで決済の確認を2回呼び出す | 2回とも200で、status=`paid`。プランの反映は1回だけ行われ、利用状況に二重の影響がない | `POST /payments/confirm` | #6・#10 |
+| PY-11 | 決済確認時のStripeの例外 | 結合 | P0 | ユーザーAは無料プラン。Stripeモック：StripeErrorを発生させる | session_id=`cs_test_dummy` で決済を確認する | エラーレスポンスを返す（ステータスは要確認 Q-08）。成功・失敗を推測せず、プランは無料のまま。例外の中身を返さない | `POST /payments/confirm`、UI-012 | #6・#9・#10 |
+| PY-12 | 現在のプランを取得できる | 結合 | P1 | ユーザーAは有料プラン | 現在のプランを取得する | 200。plan=`premium` | `GET /payments/me`、UI-012 | #10 |
+| PY-13 | 有料契約中の退会 | 結合 | P1 | ユーザーAは有料プラン | 退会する | 解約とデータ削除の順序に従う（409を返すかを含め、要確認 Q-02・Q-15） | `DELETE /users/me`、UI-013 | #6・#10 |
+| PY-14 | 決済後に成功ページへ戻らなかった場合 | シナリオ | P2 | Stripeテストモード。テストカード `4242 4242 4242 4242` | 決済の完了後、成功ページへ戻る前にブラウザを閉じる | プランに反映されない（Webhookを使わない方式の既知の制約。#6に記載）。挙動を記録する | UI-012 | #6 |
+| PY-15 | （サブスク型のみ）Webhookの署名が不正なイベントを拒否する | 結合 | P1 | サブスク型を採用した場合のみ（Q-02） | 署名が不正、または署名ヘッダーのないイベントを送信する | 400。プランは変わらない | `POST /webhooks/stripe` | #6・#10 |
+| PY-16 | （サブスク型のみ）同じイベントを二重に処理しない | 結合 | P1 | サブスク型を採用した場合のみ（Q-02）。正しい署名の決済完了イベント | 同じイベントIDのイベントを2回送信する | 2回とも200。プランの反映は1回だけ行われる | `POST /webhooks/stripe` | #6・#10 |
+| PY-17 | （サブスク型のみ）解約できる | 結合 | P1 | サブスク型を採用した場合のみ（Q-02）。ユーザーAは有料プラン。Stripeモック：解約が成功する | 解約する | 200。解約の状態と期間の終了日を返す（即時解約か期間終了時の解約かは要確認 Q-02） | `POST /subscriptions/cancel`、UI-012 | #6・#10 |
+| PY-18 | （サブスク型のみ）契約がない状態では解約できない | 結合 | P1 | サブスク型を採用した場合のみ（Q-02）。ユーザーAは無料プラン | 解約する | 404。Stripeモックは呼び出されない | `POST /subscriptions/cancel` | #10 |
+
 ### 5.9 利用回数制限（RL）
 
 ## 6. 非保存確認の共通手順
