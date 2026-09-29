@@ -255,6 +255,28 @@ N-01をP1とする理由：同意の記録に失敗しても、相談の開始�
 | AU-21 | 改ざんされた相談の状態を受け付けない | 結合 | P1 | 相談中の一時状態をクライアントが保持する方式（A案）を採用した場合のみ | 状態（question_count、approved等）を書き換えて送信する | 拒否され、書き換えた状態で処理されない（採用可否と拒否時のステータスは要確認 Q-01） | 相談フローの各API | #10 |
 
 ### 5.5 AI異常出力・安全案内（AI）
+
+AI呼び出しの失敗、不正な出力、安全案内を扱う。AIの異常出力は実物では狙って発生させられないため、すべてAIモックを使った結合テストで確認する（3.1）。AI失敗時の利用回数の扱いはRL（Q-04）、エラーレスポンス・ログへのAIの入出力の混入はNP、画面での入力内容の保持はSCで扱う。
+
+AI呼び出しの失敗・不正な出力（AI-01〜AI-06）の期待結果には、次の共通の期待結果を含む。
+
+- エラーレスポンスを返す（ステータスコード・エラーコードは要確認 Q-27）
+- 相談の状態（status、question_count、correction_count、整理結果）が変わらない
+- AIの出力（生の文字列）をそのままクライアントへ返さない
+
+| ID | 観点 | 区分 | 優先度 | 前提条件 | 操作 | 期待結果 | 対象API・画面 | 関連Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AI-01 | AI呼び出しがタイムアウトする | 結合 | P0 | status=`event_dialogue`、question_count=1。AIモック：タイムアウト例外を発生させる | action=`answer` で架空の回答を送信する | 共通の期待結果のとおり。question_countは1のまま（タイムアウト値は要確認 Q-10） | `POST /consultations/{id}/event-dialogue`、UI-006A | #4・#10 |
+| AI-02 | AIの外部APIがエラーを返す | 結合 | P0 | status=`event_dialogue`、question_count=1。AIモック：エラーを返す（パラメータ化：HTTP 500、503、429、接続エラー） | action=`answer` で架空の回答を送信する | 共通の期待結果のとおり。question_countは1のまま | `POST /consultations/{id}/event-dialogue`、UI-006A | #4・#10 |
+| AI-03 | AIの出力がJSONとして解析できない | 結合 | P0 | status=`guided_dialogue`。AIモックの戻り値：JSONでない文字列（例：「以下が回答です。」） | answer=架空の回答を送信する | 共通の期待結果のとおり | `POST /consultations/{id}/guided-dialogue`、UI-006E | #4・#10 |
+| AI-04 | AIの出力がSchemaに違反する | 結合 | P0 | status=`guided_dialogue`。AIモックの戻り値：Schema違反のJSON（パラメータ化：必須項目の欠落、型の違い、定義外の項目、文字数の上限超過、必須の文字列が空） | answer=架空の回答を送信する | 共通の期待結果のとおり | `POST /consultations/{id}/guided-dialogue`、UI-006E | #4・#10 |
+| AI-05 | AIの出力でサーバーの状態が変わらない | 結合 | P0 | status=`guided_dialogue`、approved=false。AIモックの戻り値：正しい出力に、status=`save_confirmation`・approved=trueを追加したJSON | answer=架空の回答を送信する | 共通の期待結果のとおり。statusとapprovedは、AIの出力に含まれた値で書き換わらない | `POST /consultations/{id}/guided-dialogue` | #10 |
+| AI-06 | 再試行しても回数が二重に数えられない | 結合 | P1 | status=`event_dialogue`、question_count=1。AIモック：1回目はタイムアウト例外、2回目は正しい出力（ai_understanding、ai_question）を返す | action=`answer` で同じ回答を2回送信する | 1回目は共通の期待結果のとおり。2回目は200で、question_count=2（1回分だけ加算される。再試行時の数え方は要確認 Q-10） | `POST /consultations/{id}/event-dialogue`、UI-006A | #4・#10 |
+| AI-07 | Schemaに合格しているが内容が破綻した出力 | 結合 | P1 | status=`guided_dialogue`。AIモックの戻り値：Schemaに合格するが、値が英語のメタ発言（例：「I don't need to output JSON」）の整理結果（#4でDeepSeekに実際に発生） | answer=架空の回答を送信する | 検出して不正な出力として扱うか、そのまま本人の確認・編集（UI-007）に委ねるか（要確認 Q-27） | `POST /consultations/{id}/guided-dialogue`、UI-006E・007 | #4・#10 |
+| AI-08 | 安全案内に切り替わり、固定の文言を返す | 結合 | P0 | 相談の状態を、判定を行うAPIごとに用意する（パラメータ化：`POST /consultations`、`event-dialogue`、`emotion`、`guided-dialogue`。判定を行うAPIは要確認 Q-09）。AIモックの戻り値：risk_detected=true、continued_normal_structuring=false、safety_message=架空の電話番号を含む文 | 危機的な内容を含む架空文を送信する | 200。status=`safety_guidance`。safety_messageはサーバーの固定テンプレートの文言で、AIモックが返した文（架空の電話番号を含む）はレスポンスに含まれない | 相談フローの各API、UI-005〜006E | #4・#9・#10 |
+| AI-09 | 安全案内の矛盾した出力を正規化する | 結合 | P0 | status=`guided_dialogue`。AIモックの戻り値：risk_detected=true、continued_normal_structuring=true（#4でgpt-oss-120bに実際に発生） | 危機的な内容を含む架空文を送信する | 200。status=`safety_guidance`。continued_normal_structuring=falseに正規化して返す。通常の整理の質問を返さない | `POST /consultations/{id}/guided-dialogue` | #4・#10 |
+| AI-10 | 安全案内の出力自体が不正な場合 | 結合 | P0 | status=`guided_dialogue`。AIモックの戻り値：安全案内のSchemaに違反するJSON（safety_messageの欠落など） | 危機的な内容を含む架空文を送信する | 通常の整理に戻すか、安全側に倒して固定の安全案内を返すか（要確認 Q-28） | `POST /consultations/{id}/guided-dialogue` | #4・#10 |
+
 ### 5.6 保存・削除・暗号化（SV）
 ### 5.7 非保存・ログ禁止（NP）
 ### 5.8 決済（PY）
@@ -302,6 +324,8 @@ N-01をP1とする理由：同意の記録に失敗しても、相談の開始�
 | Q-24 | JSONの形式不正（API設計では400だが、FastAPIの既定では422）と、パスのIDが不正な形式の場合のステータスコード（422か404か。404の場合、存在しないIDと区別しない方針との整合） | #10 | V、AU | 未解決 |
 | Q-25 | 訂正が上限に達した後、要約確認（`event_summary_ready`）へどう進むか。サーバーが自動で要約を作るのか、クライアントが要約確認を要求するのか。上限到達後に`answer`は受け付けるか | #9・#10 | ST | 未解決 |
 | Q-26 | 画面設計にある「戻る」操作（UI-006C→006B、UI-008→007、UI-009→008など）が、API設計の状態遷移にない。戻れるようにするか、戻る操作をなくすか | #9・#10 | ST、N、SC | 未解決 |
+| Q-27 | AI処理の失敗（タイムアウト・外部APIのエラー・不正な出力）時のステータスコードとエラーコード（API設計では500の記載のみ）。Schemaに合格しても内容が破綻している出力（日本語でない、メタ発言など）を検出するか | #4・#10 | AI、NP | 未解決 |
+| Q-28 | 安全案内の出力自体が不正（Schema違反など）な場合に、通常の整理へ戻すか、安全側に倒して固定の安全案内を返すか | #4・#10 | AI | 未解決 |
 
 ## 9. 完了条件チェック
 
