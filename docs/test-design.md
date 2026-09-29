@@ -156,6 +156,45 @@
 N-01をP1とする理由：同意の記録に失敗しても、相談の開始・完了は妨げられない（2回目以降に短い表示へ切り替わらないだけ）ため。初回利用の流れ全体は、SC-01（P0）で確認する。
 
 ### 5.2 入力エラー（V）
+
+相談フローと利用前の注意の入力エラーを扱う。3.3の分類ルールに従い、所有者の偽装はAU、保存時の入力エラーはSV、エラーレスポンスへの送信値の混入はNPで扱う。
+
+各行の期待結果には、次の共通の期待結果を含む。
+
+- エラーレスポンスは共通のエラー形式で返る（要確認 Q-07）
+- AIモックが呼び出されない
+- 結合テストでは、相談の状態（status、question_count、correction_count、整理結果）が変わらない
+
+| ID | 観点 | 区分 | 優先度 | 前提条件 | 操作 | 期待結果 | 対象API・画面 | 関連Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| V-01 | テーマが許容値の外 | 単体 | P1 | なし | themeを値ごとに送信する（パラメータ化：未定義の文字列、日本語の表示名、空文字、null、数値） | 422。detailsのfieldがtheme | `POST /consultations` | #2・#10 |
+| V-02 | テーマが未指定 | 単体 | P1 | なし | themeを含めずに送信する | 422。detailsのfieldがtheme | `POST /consultations` | #10 |
+| V-03 | 具体的な内容が空 | 単体 | P0 | なし | detailを値ごとに送信する（パラメータ化：空文字、空白のみ、改行のみ） | 422。detailsのfieldがdetail（空白・改行のみの扱いは要確認 Q-23） | `POST /consultations`、UI-005 | #9・#10 |
+| V-04 | 具体的な内容が文字数の上限を超える | 単体 | P0 | なし | detailを上限＋1文字で送信する | 422。detailsのfieldがdetail（上限値は要確認 Q-14） | `POST /consultations`、UI-005 | #9・#10 |
+| V-05 | 具体的な内容が文字数の上限ちょうど | 単体 | P1 | AIモックの戻り値：ai_question=「どんなことがありましたか？」 | detailを上限値ちょうどの文字数で送信する | 201。相談が開始される（上限値は要確認 Q-14） | `POST /consultations` | #9・#10 |
+| V-06 | サーバー管理の項目を送信する | 単体 | P0 | なし | 正しいリクエストに項目を追加して送信する（パラメータ化：status、question_count、correction_count、approved） | 422。追加した項目は受け付けない | `POST /consultations`、`event-dialogue`、`result`（PATCH） | #10 |
+| V-07 | 出来事の対話のactionが許容値の外 | 単体 | P1 | なし | actionを値ごとに送信する（パラメータ化：未定義の文字列、空文字、null） | 422。detailsのfieldがaction | `POST /consultations/{id}/event-dialogue` | #10 |
+| V-08 | 回答が空 | 結合 | P0 | status=`event_dialogue`、question_count=1 | action=`answer` で、answerを値ごとに送信する（パラメータ化：空文字、空白のみ） | 422。question_countは1のまま（空白のみの扱いは要確認 Q-23） | `POST /consultations/{id}/event-dialogue`、UI-006A | #10 |
+| V-09 | 訂正内容が空 | 結合 | P0 | status=`event_dialogue`、correction_count=0 | action=`correct` で、correction_inputを値ごとに送信する（パラメータ化：空文字、空白のみ） | 422。correction_countは0のまま | `POST /consultations/{id}/event-dialogue`、UI-006A | #10 |
+| V-10 | actionと入力項目の組み合わせが不正 | 単体 | P1 | なし | 組み合わせごとに送信する（パラメータ化：answerなのにcorrection_inputだけ、correctなのにanswerだけ、両方を指定、どちらも未指定） | 422 | `POST /consultations/{id}/event-dialogue` | #10 |
+| V-11 | 出来事の要約の必須項目が空 | 結合 | P0 | status=`event_summary_ready` | action=`proceed` で、項目ごとに空文字にして送信する（パラメータ化：what_happened、what_bothered_me） | 422。statusは`event_summary_ready`のまま | `POST /consultations/{id}/event-summary/confirm`、UI-006B | #10 |
+| V-12 | 出来事の要約が文字数の上限を超える | 単体 | P1 | なし | 項目ごとに上限＋1文字で送信する（パラメータ化：what_happened、what_bothered_me） | 422（上限値はAPI設計の初稿値。最終値は要確認 Q-14） | `POST /consultations/{id}/event-summary/confirm` | #10 |
+| V-13 | 要約確認のactionが許容値の外 | 単体 | P1 | なし | actionを未定義の文字列で送信する | 422。detailsのfieldがaction | `POST /consultations/{id}/event-summary/confirm` | #10 |
+| V-14 | 感情が許容値の外 | 単体 | P1 | なし | categoryを値ごとに送信する（パラメータ化：未定義の文字列、日本語の表示名、空文字、null） | 422。detailsのfieldがcategory | `POST /consultations/{id}/emotion`、UI-006C | #2・#10 |
+| V-15 | 感情の具体化が未回答 | 単体 | P0 | なし | detailを送らず、cannot_verbalize=falseで送信する | 422 | `POST /consultations/{id}/emotion`、UI-006D | #2・#10 |
+| V-16 | 感情の具体化で両方を指定 | 単体 | P0 | なし | detail=架空の文、cannot_verbalize=trueで送信する | 422 | `POST /consultations/{id}/emotion`、UI-006D | #2・#10 |
+| V-17 | 感情の具体化が空白のみ | 単体 | P1 | なし | detail=空白のみ、cannot_verbalize=falseで送信する | 422 | `POST /consultations/{id}/emotion`、UI-006D | #10 |
+| V-18 | 感情の具体化が文字数の上限を超える | 単体 | P1 | なし | detailを上限＋1文字で送信する | 422（上限値はAPI設計の初稿値） | `POST /consultations/{id}/emotion`、UI-006D | #9・#10 |
+| V-19 | 本音・背景・望みの回答が空 | 結合 | P0 | status=`guided_dialogue` | answerを値ごとに送信する（パラメータ化：空文字、空白のみ） | 422。statusは`guided_dialogue`のまま（空白のみの扱いは要確認 Q-23） | `POST /consultations/{id}/guided-dialogue`、UI-006E | #10 |
+| V-20 | 整理結果の編集でapprovedを送信する | 結合 | P0 | status=`result_ready`、approved=false | wishの編集に、approved=trueを加えて送信する | 422。approved=falseのまま、wishも変わらない | `PATCH /consultations/{id}/result`、UI-007 | #10 |
+| V-21 | 整理結果の必須項目を空にする | 結合 | P0 | status=`result_ready` | 項目ごとに空文字にして送信する（パラメータ化：event_summary、emotion、true_feeling、wish） | 422。整理結果は変わらない | `PATCH /consultations/{id}/result`、UI-007 | #10 |
+| V-22 | 整理結果の背景は空でも受け付ける | 結合 | P1 | status=`result_ready`、backgroundに架空の値が入っている | background=空文字で送信する | 200。backgroundが空文字になる | `PATCH /consultations/{id}/result`、UI-007 | #9・#10 |
+| V-23 | 整理結果が文字数の上限を超える | 単体 | P1 | なし | 項目ごとに上限＋1文字で送信する（パラメータ化：event_summary、emotion、true_feeling、background、wish） | 422（上限値はAPI設計の初稿値） | `PATCH /consultations/{id}/result` | #10 |
+| V-24 | 扱い方が許容値の外 | 単体 | P1 | なし | handlingを値ごとに送信する（パラメータ化：未定義の文字列、日本語の表示名、空文字、null） | 422。detailsのfieldがhandling | `POST /consultations/{id}/handling`、UI-008 | #2・#10 |
+| V-25 | 同意の値が真偽値でない | 単体 | P1 | なし | has_seen_noticeを値ごとに送信する（パラメータ化：文字列の"true"、数値の1、null） | 422（文字列や数値を真偽値に変換せず拒否する。StrictBoolを使う想定） | `PATCH /users/me`、UI-003 | #10 |
+| V-26 | JSONの形式が不正 | 単体 | P1 | なし | 閉じ括弧のないJSONを送信する | 400（FastAPIの既定では422になるため、要確認 Q-24） | `POST /consultations` | #10 |
+| V-27 | パスの相談IDが不正な形式 | 単体 | P1 | なし | UUID形式でない文字列をconsultation_idにして取得する | 422または404（要確認 Q-24） | `GET /consultations/{id}` | #10 |
+
 ### 5.3 状態の矛盾（ST）
 ### 5.4 認証・認可（AU）
 ### 5.5 AI異常出力・安全案内（AI）
@@ -202,6 +241,8 @@ N-01をP1とする理由：同意の記録に失敗しても、相談の開始�
 | Q-20 | 結合テストで外部サービス（AI・Stripe・Firebase）をモックにし、実物との接続はシナリオテストで確認する方針。レビューで合意済み（3.1・7節に反映）。Firebase Emulatorの採用は必要になった時点で再検討する | #16・技術選定 | AU、AI、PY、SC | 解消済み |
 | Q-21 | 利用回数を加算するタイミング。最新のAPI設計で、相談開始時（`POST /consultations`）に統一された。失敗時の取り消しはQ-04で扱う | #8・#10 | RL、SV、N | 解消済み |
 | Q-22 | AI出力のスキーマが、API設計で未定義。対象は、相談開始時の「最初の質問」、出来事の対話での「理解＋次の質問」、本音・背景・望みの対話での「次の質問」と「整理完了の判定」。5.1のモックの戻り値の項目名は仮とする | #4・#10 | N、AI | 未解決 |
+| Q-23 | 空白・改行のみの入力を「空」として扱うか（API設計では、感情の具体化だけ空白を取り除いて判定している） | #9・#10 | V | 未解決 |
+| Q-24 | JSONの形式不正（API設計では400だが、FastAPIの既定では422）と、パスのIDが不正な形式の場合のステータスコード（422か404か。404の場合、存在しないIDと区別しない方針との整合） | #10 | V、AU | 未解決 |
 
 ## 9. 完了条件チェック
 
