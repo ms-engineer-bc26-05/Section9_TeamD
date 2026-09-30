@@ -60,20 +60,23 @@ compose.yaml               Docker Composeの設定
 technical-verification/    技術検証の成果物（Issue #3〜#8）。実装からは参照しない
 ```
 
-バックエンドは機能別の構成です（Issue #33で決定）。後続Issueで、次のフォルダを追加していきます。
+バックエンドは機能別の構成です（Issue #33で決定）。後続Issueで、次のフォルダ・ファイルを追加していきます。
 
-| フォルダ | 内容 | 担当Issue |
+| フォルダ・ファイル | 内容 | 担当Issue |
 | --- | --- | --- |
 | `core/database.py` | DB接続・セッション | I-01 |
+| ORM・マイグレーションの共通基盤 | ORMの共通設定、マイグレーションの設定、ユーザー用の初期マイグレーション（配置はI-01で決定） | I-01 |
 | `features/auth/` | 認証（`get_current_user` など、`dependencies.py`） | I-01 |
 | `features/users/` | 内部ユーザー（`/users/me`） | I-01 |
 | `features/consultations/` | AI相談・一時状態 | I-03 |
-| `features/memos/` | 整理メモの保存・一覧・詳細・削除 | I-05 |
+| `features/memos/` | 整理メモの保存・一覧・詳細・削除、メモ用のModel・追加マイグレーション | I-05 |
 | `integrations/firebase/` | Firebase Authentication | I-01 |
 | `integrations/openrouter/` | OpenRouter | I-03 |
 
 - 各機能フォルダには、必要に応じて `router.py`・`schemas.py`・`service.py`・`models.py` などを置きます。
-- 各機能のIssueでは、自分の担当フォルダの中だけを変更します。`main.py` への各機能Routerの登録は、後続の結合Issueで行います。
+- 各機能のIssueでは、原則として自分の担当フォルダの中だけを変更します。上の表で担当Issueが決まっている共通部分（`core/database.py`・ORM・マイグレーションの共通基盤など）は、そのIssueで作成します。
+- `requirements.txt`・`compose.yaml`・`.env.example` などの共通設定ファイルを変更する場合は、関係するIssueの担当者と確認してから進めます。
+- `main.py` への各機能Routerの登録は、後続の結合Issueで行います。
 - ほかの機能の内部状態やModelを直接操作せず、相手のServiceを通して利用します。
 
 ## 必要なもの
