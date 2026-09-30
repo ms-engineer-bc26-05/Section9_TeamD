@@ -70,13 +70,26 @@ async def test_too_long_input_returns_422_without_input(caplog):
 
 
 async def test_missing_and_extra_fields_return_422():
-    response = await _post(json={"theme": "other", "unexpected": MARKER})
+    response = await _post(json={"theme": "other", "unexpected": "x"})
 
     assert response.status_code == 422
     fields = {d["field"]: d["reason"] for d in response.json()["error"]["details"]}
     assert fields["detail"] == "必須項目です。"
-    assert fields["unexpected"] == "想定外の項目です。"
+    assert fields["(unknown)"] == "想定外の項目です。"
+    # 想定外の項目のキー名は返さない
+    assert "unexpected" not in response.text
+
+
+async def test_unknown_key_name_is_not_returned(caplog):
+    # キー名そのものに目印を入れても、レスポンス・ログに含まれないこと
+    response = await _post(json={"theme": "other", "detail": "ok", MARKER: "x"})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [
+        {"field": "(unknown)", "reason": "想定外の項目です。"}
+    ]
     assert MARKER not in response.text
+    assert MARKER not in caplog.text
 
 
 async def test_invalid_json_returns_400_without_input(caplog):

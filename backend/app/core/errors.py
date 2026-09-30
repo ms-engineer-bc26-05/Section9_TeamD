@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 # locの先頭に入る「どこから来た値か」を表す要素。項目名には含めない
 _LOCATION_PREFIXES = {"body", "query", "path", "header", "cookie"}
 
+# 想定外の項目の名前を置き換える固定の表記。
+# 想定外の項目はキー名そのものを送信者が自由に決められるため、キー名を返さない
+_UNKNOWN_FIELD = "(unknown)"
+
 # Pydanticのエラー種別ごとの固定文言。Pydanticのメッセージ（msg）は使わない
 _REASONS = {
     "missing": "必須項目です。",
@@ -33,10 +37,13 @@ _REASONS = {
 _DEFAULT_REASON = "入力値が正しくありません。"
 
 
-def _field_name(loc: tuple) -> str:
-    parts = [str(part) for part in loc]
+def _field_name(error: dict) -> str:
+    parts = [str(part) for part in error.get("loc", ())]
     if parts and parts[0] in _LOCATION_PREFIXES:
         parts = parts[1:]
+    # 想定外の項目は、キー名に送信内容が含まれうるため固定の表記に置き換える
+    if error.get("type") == "extra_forbidden" and parts:
+        parts[-1] = _UNKNOWN_FIELD
     return ".".join(parts) if parts else "body"
 
 
@@ -60,7 +67,7 @@ async def validation_exception_handler(
 
     details = [
         {
-            "field": _field_name(error.get("loc", ())),
+            "field": _field_name(error),
             "reason": _REASONS.get(error.get("type", ""), _DEFAULT_REASON),
         }
         for error in errors
