@@ -7,21 +7,21 @@
   <text class="m" x="28" y="96" font-size="12">新しい順</text>
   <rect class="card" x="28" y="118" width="334" height="124" rx="18"/>
   <rect class="sand" x="46" y="139" width="78" height="25" rx="12"/>
-  <text class="t" x="85" y="156" text-anchor="middle" font-size="10">今は保留</text>
+  <text class="t" x="85" y="156" text-anchor="middle" font-size="10">今は保留する</text>
   <text class="m" x="340" y="156" text-anchor="end" font-size="10">2026.09.19</text>
-  <text class="t" x="46" y="192" font-size="14" font-weight="700">会話・連絡について</text>
+  <text class="t" x="46" y="192" font-size="14" font-weight="700">話を聞いてもらえないと感じたこと</text>
   <text class="m" x="46" y="218" font-size="11">話を聞いてもらえていないと感じた…</text>
   <rect class="card" x="28" y="258" width="334" height="124" rx="18"/>
   <rect class="pink" x="46" y="279" width="58" height="25" rx="12"/>
   <text class="t" x="75" y="296" text-anchor="middle" font-size="10">伝える</text>
   <text class="m" x="340" y="296" text-anchor="end" font-size="10">2026.09.12</text>
-  <text class="t" x="46" y="332" font-size="14" font-weight="700">家事・生活習慣について</text>
+  <text class="t" x="46" y="332" font-size="14" font-weight="700">家事の負担が偏っていると感じたこと</text>
   <text class="m" x="46" y="358" font-size="11">自分だけが気づいて動いているようで…</text>
   <rect class="card" x="28" y="398" width="334" height="124" rx="18"/>
   <rect class="green" x="46" y="419" width="64" height="25" rx="12"/>
   <text class="t" x="78" y="436" text-anchor="middle" font-size="10">伝えない</text>
   <text class="m" x="340" y="436" text-anchor="end" font-size="10">2026.09.04</text>
-  <text class="t" x="46" y="472" font-size="14" font-weight="700">お金・負担について</text>
+  <text class="t" x="46" y="472" font-size="14" font-weight="700">今回は自分の中で整理したいこと</text>
   <text class="m" x="46" y="498" font-size="11">今回は自分の中で区切りをつけたい…</text>
   <text class="m" x="195" y="581" text-anchor="middle" font-size="11">会話全文ではなく、承認したメモだけを表示します</text>
   <line x1="0" y1="768" x2="390" y2="768" stroke="#D8D0C8"/>
