@@ -23,7 +23,7 @@
 - 状態：Draft PRで最終調整中
 - 対応Issue：[Issue #36](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/36)
 - 基準ブランチ：`develop`
-- Issue番号：`#35`・`#36`以外は仮ID
+- Issue番号：親Issue `#39`〜`#43`、子Issue `#44`〜`#71`を10月1日に登録済み。計画IDと実Issue番号の対応は6・7章に記載する
 - 担当：確認済みの担当と、回答期限付きの暫定担当を併記する
 - 設計PRがOpenの箇所：関連PRの確定後にIssue詳細を更新する
 
@@ -201,50 +201,50 @@ APIのパス・リクエスト・レスポンス、DBのテーブル・カラム
 
 ## 6. 親Issue案
 
-| 仮ID | タイトル | 管理担当 |
+| 計画ID・実Issue | タイトル | 管理担当 |
 | --- | --- | --- |
-| E-01 | `[EPIC][Sprint3-6][MVP] 「ぽろり。」のMVPを完成させる` | めぐ |
-| E-02 | `[EPIC][Sprint3-5][CORE] 中心相談フローを実装・結合する` | めぐ |
-| E-03 | `[EPIC][Sprint5][FEATURE] メモ管理・利用回数・決済・退会を実装する` | めぐ |
-| E-04 | `[EPIC][Sprint6][QUALITY] MVPの結合・品質確認を完了する` | めぐ |
-| E-05 | `[EPIC][Sprint6-8][STAGE] 発表・デモ・質疑応答の準備を完成させる` | めぐ |
+| E-01 / [#39](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/39) | `[EPIC][Sprint3-6][MVP] 「ぽろり。」のMVPを完成させる` | めぐ |
+| E-02 / [#40](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/40) | `[EPIC][Sprint3-5][CORE] 中心相談フローを実装・結合する` | めぐ |
+| E-03 / [#41](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/41) | `[EPIC][Sprint5][FEATURE] メモ管理・利用回数・決済・退会を実装する` | めぐ |
+| E-04 / [#42](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/42) | `[EPIC][Sprint6][QUALITY] MVPの結合・品質確認を完了する` | めぐ |
+| E-05 / [#43](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/43) | `[EPIC][Sprint6-8][STAGE] 発表・デモ・質疑応答の準備を完成させる` | めぐ |
 
 親Issueではブランチ・実装・PRを作成しません。
 
 ## 7. 子Issue一覧
 
-| 仮ID | Sprint | 概要 | 主担当候補 | 確認担当 | 相談先 |
+| 計画ID・実Issue | Sprint | 概要 | 主担当候補 | 確認担当 | 相談先 |
 | --- | --- | --- | --- | --- | --- |
-| #36 | Sprint3 | Issue計画を作成・確認する | めぐ | チームメンバー4名 | ― |
-| #35 | Sprint3 | 共通基盤の追加対応 | みほ | もえ | るな・じま |
-| D-01 | Sprint3 | GitHub運用ルール更新 | めぐ | るな | ― |
-| D-02 | Sprint5 | フロント・バックのコーディング規約完成 | るな | じま | みほ・Q-01担当者 |
-| Q-01 | Sprint4 | Formatter・Lint選定・共通設定・テスト・ビルドCI | じま | みほ | るな |
-| I-01 | Sprint4 | 認証バックエンド | もえ | じま | みほ |
-| I-02 | Sprint4 | 認証フロントエンド | るな | もえ | ― |
-| I-03A | Sprint4 | AI相談の正常系・一時状態の基本構造 | みほ | もえ | じま・めぐ |
-| I-03B | Sprint4-5 | 安全案内・回数上限・中断・一時状態破棄 | みほ | もえ | じま・めぐ |
-| I-04 | Sprint4 | 相談フロントエンド | めぐ | るな | みほ |
-| I-05 | Sprint4 | 暗号化メモ保存 | じま | みほ | もえ |
-| I-06 | Sprint5 | 中心フロー結合 | めぐ | るな | もえ・I-01〜I-05担当者 |
-| I-07 | Sprint5 | AIモデル最終確認・例外系・品質改善 | みほ | じま | めぐ |
-| F-01 | Sprint5 | 保存メモCRUD API | もえ | じま | ― |
-| F-02 | Sprint5 | 保存メモ画面 | めぐ | るな | もえ |
-| F-03 | Sprint5 | Redis利用回数・プラン判定 | みほ | もえ | じま・るな |
-| F-04 | Sprint5 | 利用回数・プラン・決済画面 | るな | めぐ | みほ・じま |
-| F-05 | Sprint5 | Stripe一回払い・権限反映 | じま | もえ | みほ・るな |
-| F-06 | Sprint5 | 退会API・無効ユーザー制御 | もえ | じま | みほ・るな |
-| F-07 | Sprint5 | 設定・ログアウト・退会画面 | るな | めぐ | もえ |
-| Q-02 | Sprint6 | MVP縦断・異常系テスト | るな | めぐ | 各機能担当者 |
-| Q-03 | Sprint6 | セキュリティ・非保存確認 | じま | もえ | みほ |
-| Q-04 | Sprint6 | README・デモ手順完成 | めぐ | るな | 各機能担当者 |
-| S-01 | Sprint6-7 | Canvaスライドのベース作成 | めぐ | るな | ― |
-| S-02 | Sprint7 | AI・共通基盤の発表素材 | みほ | めぐ | ― |
-| S-03 | Sprint7 | 認証・メモ・DBの発表素材 | もえ | めぐ | ― |
-| S-04 | Sprint7 | 暗号化・決済・安全性の発表素材 | じま | めぐ | ― |
-| S-05 | Sprint7 | フロント・テストの発表素材 | るな | めぐ | ― |
-| S-06 | Sprint7-8 | Canva反映・発表原稿統合 | めぐ | るな | 各素材担当者 |
-| S-07 | Sprint8 | リハーサルと改善記録 | じま（進行・記録） | めぐ | 全員（参加） |
+| [#36](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/36) | Sprint3 | Issue計画を作成・確認する | めぐ | チームメンバー4名 | ― |
+| [#35](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/35) | Sprint3 | 共通基盤の追加対応 | みほ | もえ | るな・じま |
+| D-01 / [#44](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/44) | Sprint3 | GitHub運用ルール更新 | めぐ | るな | ― |
+| D-02 / [#45](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/45) | Sprint5 | フロント・バックのコーディング規約完成 | るな | じま | みほ・Q-01担当者 |
+| Q-01 / [#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46) | Sprint4 | Formatter・Lint選定・共通設定・テスト・ビルドCI | じま | みほ | るな |
+| I-01 / [#47](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/47) | Sprint4 | 認証バックエンド | もえ | じま | みほ |
+| I-02 / [#48](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/48) | Sprint4 | 認証フロントエンド | るな | もえ | ― |
+| I-03A / [#49](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/49) | Sprint4 | AI相談の正常系・一時状態の基本構造 | みほ | もえ | じま・めぐ |
+| I-03B / [#50](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/50) | Sprint4-5 | 安全案内・回数上限・中断・一時状態破棄 | みほ | もえ | じま・めぐ |
+| I-04 / [#51](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/51) | Sprint4 | 相談フロントエンド | めぐ | るな | みほ |
+| I-05 / [#52](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/52) | Sprint4 | 暗号化メモ保存 | じま | みほ | もえ |
+| I-06 / [#53](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/53) | Sprint5 | 中心フロー結合 | めぐ | るな | もえ・I-01〜I-05担当者 |
+| I-07 / [#54](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/54) | Sprint5 | AIモデル最終確認・例外系・品質改善 | みほ | じま | めぐ |
+| F-01 / [#55](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/55) | Sprint5 | 保存メモCRUD API | もえ | じま | ― |
+| F-02 / [#56](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/56) | Sprint5 | 保存メモ画面 | めぐ | るな | もえ |
+| F-03 / [#57](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/57) | Sprint5 | Redis利用回数・プラン判定 | みほ | もえ | じま・るな |
+| F-04 / [#58](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/58) | Sprint5 | 利用回数・プラン・決済画面 | るな | めぐ | みほ・じま |
+| F-05 / [#59](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/59) | Sprint5 | Stripe一回払い・権限反映 | じま | もえ | みほ・るな |
+| F-06 / [#60](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/60) | Sprint5 | 退会API・無効ユーザー制御 | もえ | じま | みほ・るな |
+| F-07 / [#61](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/61) | Sprint5 | 設定・ログアウト・退会画面 | るな | めぐ | もえ |
+| Q-02 / [#62](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/62) | Sprint6 | MVP縦断・異常系テスト | るな | めぐ | 各機能担当者 |
+| Q-03 / [#63](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/63) | Sprint6 | セキュリティ・非保存確認 | じま | もえ | みほ |
+| Q-04 / [#64](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/64) | Sprint6 | README・デモ手順完成 | めぐ | るな | 各機能担当者 |
+| S-01 / [#65](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/65) | Sprint6-7 | Canvaスライドのベース作成 | めぐ | るな | ― |
+| S-02 / [#66](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/66) | Sprint7 | AI・共通基盤の発表素材 | みほ | めぐ | ― |
+| S-03 / [#67](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/67) | Sprint7 | 認証・メモ・DBの発表素材 | もえ | めぐ | ― |
+| S-04 / [#68](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/68) | Sprint7 | 暗号化・決済・安全性の発表素材 | じま | めぐ | ― |
+| S-05 / [#69](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/69) | Sprint7 | フロント・テストの発表素材 | るな | めぐ | ― |
+| S-06 / [#70](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/70) | Sprint7-8 | Canva反映・発表原稿統合 | めぐ | るな | 各素材担当者 |
+| S-07 / [#71](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/71) | Sprint8 | リハーサルと改善記録 | じま（進行・記録） | めぐ | 全員（参加） |
 
 ## 8. 依存関係
 
@@ -486,7 +486,7 @@ Issue #33では各コメントへ個別回答を追加せず、本書とDraft PR
 </details>
 
 <details>
-<summary><strong>D-01：[Sprint3][DOCS] 親子Issueと担当・更新ルールをGitHub運用ルールへ追加する</strong></summary>
+<summary><strong>D-01 / #44：[Sprint3][DOCS] 親子Issueと担当・更新ルールをGitHub運用ルールへ追加する</strong></summary>
 
 ### 担当
 
@@ -528,7 +528,7 @@ Issue #33では各コメントへ個別回答を追加せず、本書とDraft PR
 </details>
 
 <details>
-<summary><strong>D-02：[Sprint5][DOCS] フロントエンド・バックエンドのコーディング規約を完成させる</strong></summary>
+<summary><strong>D-02 / #45：[Sprint5][DOCS] フロントエンド・バックエンドのコーディング規約を完成させる</strong></summary>
 
 ### 担当
 
@@ -581,7 +581,7 @@ Formatter・Lintツールの選定、依存パッケージ・設定ファイル�
 </details>
 
 <details>
-<summary><strong>Q-01：[Sprint4][CI] Formatter・Lintを選定し、共通設定と自動チェックを導入する</strong></summary>
+<summary><strong>Q-01 / #46：[Sprint4][CI] Formatter・Lintを選定し、共通設定と自動チェックを導入する</strong></summary>
 
 ### 担当
 
@@ -654,7 +654,7 @@ Q-01完了前は、次を暫定ルールとします。
 </details>
 
 <details>
-<summary><strong>I-01：[Sprint4][BACKEND][AUTH] Firebase認証と内部ユーザー基盤を実装する</strong></summary>
+<summary><strong>I-01 / #47：[Sprint4][BACKEND][AUTH] Firebase認証と内部ユーザー基盤を実装する</strong></summary>
 
 ### 担当
 
@@ -724,7 +724,7 @@ I-01実装完了までは、I-03A・I-05のテストで`dependency_overrides`と
 </details>
 
 <details>
-<summary><strong>I-02：[Sprint4][FRONTEND][AUTH] ログイン・ホーム・利用前注意を実装する</strong></summary>
+<summary><strong>I-02 / #48：[Sprint4][FRONTEND][AUTH] ログイン・ホーム・利用前注意を実装する</strong></summary>
 
 ### 担当
 
@@ -774,7 +774,7 @@ I-01実装完了までは、I-03A・I-05のテストで`dependency_overrides`と
 </details>
 
 <details>
-<summary><strong>I-03A：[Sprint4][BACKEND][AI] 一時状態管理とAI相談の正常系APIを実装する</strong></summary>
+<summary><strong>I-03A / #49：[Sprint4][BACKEND][AI] 一時状態管理とAI相談の正常系APIを実装する</strong></summary>
 
 ### 担当
 
@@ -853,7 +853,7 @@ Q-22・Q-13は、みほさんが案を取りまとめ、I-04で利用する契�
 </details>
 
 <details>
-<summary><strong>I-03B：[Sprint4-5][BACKEND][AI] AI相談の安全案内・回数上限・中断・一時状態破棄を実装する</strong></summary>
+<summary><strong>I-03B / #50：[Sprint4-5][BACKEND][AI] AI相談の安全案内・回数上限・中断・一時状態破棄を実装する</strong></summary>
 
 ### 担当
 
@@ -922,7 +922,7 @@ Q-09・Q-28・Q-33は、みほさんが着手時に案を取りまとめます�
 </details>
 
 <details>
-<summary><strong>I-04：[Sprint4][FRONTEND][CONSULTATION] 相談開始から扱い方・保存選択までを実装する</strong></summary>
+<summary><strong>I-04 / #51：[Sprint4][FRONTEND][CONSULTATION] 相談開始から扱い方・保存選択までを実装する</strong></summary>
 
 ### 担当
 
@@ -983,7 +983,7 @@ UI-006CからUI-006Bへの戻る操作は、I-04の他の作業を止めず、�
 </details>
 
 <details>
-<summary><strong>I-05：[Sprint4][BACKEND][MEMO] 承認済み整理メモを暗号化して保存する</strong></summary>
+<summary><strong>I-05 / #52：[Sprint4][BACKEND][MEMO] 承認済み整理メモを暗号化して保存する</strong></summary>
 
 ### 担当
 
@@ -1041,7 +1041,7 @@ UI-006CからUI-006Bへの戻る操作は、I-04の他の作業を止めず、�
 </details>
 
 <details>
-<summary><strong>I-06：[Sprint5][INTEGRATION] ログインから整理メモ保存までの中心フローを結合する</strong></summary>
+<summary><strong>I-06 / #53：[Sprint5][INTEGRATION] ログインから整理メモ保存までの中心フローを結合する</strong></summary>
 
 ### 担当
 
@@ -1089,7 +1089,7 @@ I-03A完了後に正常系の接続確認を開始できます。中心フロー
 </details>
 
 <details>
-<summary><strong>I-07：[Sprint5][BACKEND][AI] AIモデルを最終確認し、相談APIの例外系と品質を改善する</strong></summary>
+<summary><strong>I-07 / #54：[Sprint5][BACKEND][AI] AIモデルを最終確認し、相談APIの例外系と品質を改善する</strong></summary>
 
 ### 担当
 
@@ -1129,7 +1129,7 @@ I-03A完了後に正常系の接続確認を開始できます。中心フロー
 </details>
 
 <details>
-<summary><strong>F-01：[Sprint5][BACKEND][MEMO] 保存メモ一覧・詳細・削除APIを実装する</strong></summary>
+<summary><strong>F-01 / #55：[Sprint5][BACKEND][MEMO] 保存メモ一覧・詳細・削除APIを実装する</strong></summary>
 
 ### 担当
 
@@ -1176,7 +1176,7 @@ I-03A完了後に正常系の接続確認を開始できます。中心フロー
 </details>
 
 <details>
-<summary><strong>F-02：[Sprint5][FRONTEND][MEMO] 保存メモ一覧・詳細・削除画面を実装する</strong></summary>
+<summary><strong>F-02 / #56：[Sprint5][FRONTEND][MEMO] 保存メモ一覧・詳細・削除画面を実装する</strong></summary>
 
 ### 担当
 
@@ -1223,7 +1223,7 @@ I-03A完了後に正常系の接続確認を開始できます。中心フロー
 </details>
 
 <details>
-<summary><strong>F-03：[Sprint5][BACKEND][USAGE] Redis利用回数制限とプラン判定を実装する</strong></summary>
+<summary><strong>F-03 / #57：[Sprint5][BACKEND][USAGE] Redis利用回数制限とプラン判定を実装する</strong></summary>
 
 ### 担当
 
@@ -1284,7 +1284,7 @@ I-03Aで作成した相談開始APIへ組み込むため、I-03Aと同じファ�
 </details>
 
 <details>
-<summary><strong>F-04：[Sprint5][FRONTEND][PLAN] 利用回数・プラン・一回払い画面を実装する</strong></summary>
+<summary><strong>F-04 / #58：[Sprint5][FRONTEND][PLAN] 利用回数・プラン・一回払い画面を実装する</strong></summary>
 
 ### 担当
 
@@ -1333,7 +1333,7 @@ I-03Aで作成した相談開始APIへ組み込むため、I-03Aと同じファ�
 </details>
 
 <details>
-<summary><strong>F-05：[Sprint5][BACKEND][PAYMENT] Stripe一回払いと利用権限反映を実装する</strong></summary>
+<summary><strong>F-05 / #59：[Sprint5][BACKEND][PAYMENT] Stripe一回払いと利用権限反映を実装する</strong></summary>
 
 ### 担当
 
@@ -1405,7 +1405,7 @@ I-03Aで作成した相談開始APIへ組み込むため、I-03Aと同じファ�
 </details>
 
 <details>
-<summary><strong>F-06：[Sprint5][BACKEND][ACCOUNT] 退会APIと無効ユーザー制御を実装する</strong></summary>
+<summary><strong>F-06 / #60：[Sprint5][BACKEND][ACCOUNT] 退会APIと無効ユーザー制御を実装する</strong></summary>
 
 ### 担当
 
@@ -1461,7 +1461,7 @@ I-03Aで作成した相談開始APIへ組み込むため、I-03Aと同じファ�
 </details>
 
 <details>
-<summary><strong>F-07：[Sprint5][FRONTEND][ACCOUNT] 設定・ログアウト・退会画面を実装する</strong></summary>
+<summary><strong>F-07 / #61：[Sprint5][FRONTEND][ACCOUNT] 設定・ログアウト・退会画面を実装する</strong></summary>
 
 ### 担当
 
@@ -1508,7 +1508,7 @@ I-03Aで作成した相談開始APIへ組み込むため、I-03Aと同じファ�
 </details>
 
 <details>
-<summary><strong>Q-02：[Sprint6][TEST] MVP縦断・異常系シナリオを確認する</strong></summary>
+<summary><strong>Q-02 / #62：[Sprint6][TEST] MVP縦断・異常系シナリオを確認する</strong></summary>
 
 ### 担当
 
@@ -1556,7 +1556,7 @@ I-03Aで作成した相談開始APIへ組み込むため、I-03Aと同じファ�
 </details>
 
 <details>
-<summary><strong>Q-03：[Sprint6][SECURITY] 認証認可・暗号化・非保存・ログを確認する</strong></summary>
+<summary><strong>Q-03 / #63：[Sprint6][SECURITY] 認証認可・暗号化・非保存・ログを確認する</strong></summary>
 
 ### 担当
 
@@ -1600,7 +1600,7 @@ I-03Aで作成した相談開始APIへ組み込むため、I-03Aと同じファ�
 </details>
 
 <details>
-<summary><strong>Q-04：[Sprint6][DOCS][REVIEW] READMEとアプリレビュー用デモ手順を完成させる</strong></summary>
+<summary><strong>Q-04 / #64：[Sprint6][DOCS][REVIEW] READMEとアプリレビュー用デモ手順を完成させる</strong></summary>
 
 ### 担当
 
@@ -1647,7 +1647,7 @@ I-03Aで作成した相談開始APIへ組み込むため、I-03Aと同じファ�
 ## 12. STAGE準備Issue詳細
 
 <details>
-<summary><strong>S-01：[Sprint6-7][STAGE] Canvaスライドの構成とデザインベースを作成する</strong></summary>
+<summary><strong>S-01 / #65：[Sprint6-7][STAGE] Canvaスライドの構成とデザインベースを作成する</strong></summary>
 
 ### 担当
 
@@ -1677,7 +1677,7 @@ Canva本体の初期編集は主担当が行います。各機能担当者は、
 </details>
 
 <details>
-<summary><strong>S-02：[Sprint7][STAGE] 共通基盤・AI相談の説明・質疑応答素材を作成する</strong></summary>
+<summary><strong>S-02 / #66：[Sprint7][STAGE] 共通基盤・AI相談の説明・質疑応答素材を作成する</strong></summary>
 
 ### 担当
 
@@ -1699,7 +1699,7 @@ Canva本体の初期編集は主担当が行います。各機能担当者は、
 </details>
 
 <details>
-<summary><strong>S-03：[Sprint7][STAGE] 認証・メモ・DBの説明・質疑応答素材を作成する</strong></summary>
+<summary><strong>S-03 / #67：[Sprint7][STAGE] 認証・メモ・DBの説明・質疑応答素材を作成する</strong></summary>
 
 ### 担当
 
@@ -1722,7 +1722,7 @@ Canva本体の初期編集は主担当が行います。各機能担当者は、
 </details>
 
 <details>
-<summary><strong>S-04：[Sprint7][STAGE] 暗号化・決済・セキュリティの説明・質疑応答素材を作成する</strong></summary>
+<summary><strong>S-04 / #68：[Sprint7][STAGE] 暗号化・決済・セキュリティの説明・質疑応答素材を作成する</strong></summary>
 
 ### 担当
 
@@ -1744,7 +1744,7 @@ Canva本体の初期編集は主担当が行います。各機能担当者は、
 </details>
 
 <details>
-<summary><strong>S-05：[Sprint7][STAGE] フロントエンド・画面設計・テストの説明素材を作成する</strong></summary>
+<summary><strong>S-05 / #69：[Sprint7][STAGE] フロントエンド・画面設計・テストの説明素材を作成する</strong></summary>
 
 ### 担当
 
@@ -1766,7 +1766,7 @@ Canva本体の初期編集は主担当が行います。各機能担当者は、
 </details>
 
 <details>
-<summary><strong>S-06：[Sprint7-8][STAGE] 担当者の素材をCanvaと発表原稿へ統合する</strong></summary>
+<summary><strong>S-06 / #70：[Sprint7-8][STAGE] 担当者の素材をCanvaと発表原稿へ統合する</strong></summary>
 
 ### 担当
 
@@ -1793,7 +1793,7 @@ Canva本体の初期編集は主担当が行います。各機能担当者は、
 </details>
 
 <details>
-<summary><strong>S-07：[Sprint8][STAGE] リハーサルを実施し改善点を記録する</strong></summary>
+<summary><strong>S-07 / #71：[Sprint8][STAGE] リハーサルを実施し改善点を記録する</strong></summary>
 
 ### 担当
 
@@ -1838,7 +1838,7 @@ Canva本体の初期編集は主担当が行います。各機能担当者は、
 11. Issue #15／PR #29のマイルストーンを更新する
 12. Issue依存関係図・進行図を作成する
 
-今回は、10月2日からの着手を止めないため、PR #37のマージ前でも、確認済みの合意とるなさんの10月3日夜の事後確認条件を反映した本文からIssue登録へ進めます。Issue登録後に修正が必要になった場合は、変更理由と影響先をIssueコメントへ残し、本文を更新します。
+10月2日からの着手を止めないため、確認済みの合意とるなさんの10月3日夜の事後確認条件を反映した本文から、10月1日に親Issue #39〜#43・子Issue #44〜#71を登録しました。登録後に修正が必要になった場合は、変更理由と影響先をIssueコメントへ残し、本文を更新します。
 
 ## 14. Draft PRで確認すること
 
