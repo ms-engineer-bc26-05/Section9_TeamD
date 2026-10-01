@@ -9,6 +9,5 @@ COPY . .
 
 EXPOSE 8000
 
-# 開発用：コードの変更を自動で反映する（--reload）
-# アクセスログにURL等が残らないよう --no-access-log を付ける
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--no-access-log"]
+# 起動の設定（自動リロード・ワーカー数・アクセスログ）は app/run.py にまとめている
+CMD ["python", "-m", "app.run"]

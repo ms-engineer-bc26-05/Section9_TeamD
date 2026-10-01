@@ -8,7 +8,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
-from app.routers import health
+from app.features.health import router as health
 
 # 失敗時のレスポンス・ログに含まれてはいけない文字列（架空の値）
 FAKE_SECRET = "postgresql://user:fake-secret-password@internal-host:5432/db"

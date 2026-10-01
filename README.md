@@ -41,19 +41,43 @@ Team Dの最終プロジェクト「ぽろり。」の開発用リポジトリ�
 ## ディレクトリ構成
 
 ```text
-frontend/                Next.jsのアプリ
-  app/                   画面（現在は疎通確認画面のみ）
-backend/                 FastAPIのアプリ
+frontend/                  Next.jsのアプリ
+  app/                     画面（現在は疎通確認画面のみ）
+backend/                   FastAPIのアプリ
   app/
-    main.py              エントリーポイント・CORS設定
-    core/config.py       環境変数の読み込み
-    core/logging.py      ログの設定
-    routers/health.py    ヘルスチェックAPI
-  tests/                 バックエンドのテスト
-compose.yaml             Docker Composeの設定
-.env.example             環境変数の見本（ダミー値）
-technical-verification/  技術検証の成果物（Issue #3〜#8）。実装からは参照しない
+    main.py                エントリーポイント・CORS設定・共通エラーハンドラの登録
+    run.py                 起動処理（自動リロードの切り替え・ワーカー数1）
+    core/                  全機能で使う共通処理
+      config.py            環境変数の読み込み
+      errors.py            共通エラーハンドラ（422・400）
+      logging.py           ログの設定
+    features/              機能ごとのRouter・Schema・Service・Model
+      health/router.py     ヘルスチェックAPI
+    integrations/          外部サービスとの連携（Firebase・OpenRouterなど）
+  tests/                   バックエンドのテスト（app/と同じ構成で配置）
+compose.yaml               Docker Composeの設定
+.env.example               環境変数の見本（ダミー値）
+technical-verification/    技術検証の成果物（Issue #3〜#8）。実装からは参照しない
 ```
+
+バックエンドは機能別の構成です（Issue #33で決定）。後続Issueで、次のフォルダ・ファイルを追加していきます。
+
+| フォルダ・ファイル | 内容 | 担当Issue |
+| --- | --- | --- |
+| `core/database.py` | DB接続・セッション | I-01 |
+| ORM・マイグレーションの共通基盤 | ORMの共通設定、マイグレーションの設定、ユーザー用の初期マイグレーション（配置はI-01で決定） | I-01 |
+| `features/auth/` | 認証（`get_current_user` など、`dependencies.py`） | I-01 |
+| `features/users/` | 内部ユーザー（`/users/me`） | I-01 |
+| `features/consultations/` | AI相談・一時状態 | I-03 |
+| `features/memos/` | 整理メモの保存・一覧・詳細・削除、メモ用のModel・追加マイグレーション | I-05 |
+| `integrations/firebase/` | Firebase Authentication | I-01 |
+| `integrations/openrouter/` | OpenRouter | I-03 |
+
+- 各機能フォルダには、必要に応じて `router.py`・`schemas.py`・`service.py`・`models.py` などを置きます。
+- 各機能のIssueでは、原則として自分の担当フォルダの中だけを変更します。上の表で担当Issueが決まっている共通部分（`core/database.py`・ORM・マイグレーションの共通基盤など）は、そのIssueで作成します。
+- `requirements.txt`・`compose.yaml`・`.env.example` などの共通設定ファイルを変更する場合は、関係するIssueの担当者と確認してから進めます。
+- `main.py` への各機能Routerの登録は、後続の結合Issueで行います。
+- ほかの機能の内部状態やModelを直接操作せず、相手のServiceを通して利用します。
 
 ## 必要なもの
 
@@ -113,6 +137,26 @@ docker compose down
 
 DBのデータ（Dockerのボリューム）も消して初期状態に戻したい場合は、`docker compose down -v` を使います。
 
+**自動リロードなしで起動する（縦断確認・デモ用）**
+
+自動リロードがオンのままだと、ファイルを保存したときにバックエンドが再起動し、相談の一時状態が消えます。縦断シナリオの確認やデモでは、自動リロードをオフにして起動します。
+
+1. `.env` の末尾に次の1行を追加します（すでにある場合は値を `false` にします）。
+
+```
+BACKEND_RELOAD=false
+```
+
+2. 起動中の場合は `Ctrl + C` で止め、もう一度起動します。
+
+```bash
+docker compose up
+```
+
+3. `backend-1` のログに `Started reloader process` が出ていなければ、自動リロードはオフです。
+
+確認が終わったら、`.env` の `BACKEND_RELOAD` を `true` に戻すか行を削除し、もう一度起動し直します。
+
 ## 疎通確認
 
 起動したら、ブラウザで次を開きます。
@@ -166,7 +210,8 @@ exit                                # コンテナから出る
 
 ## 開発時の注意
 
-- **保存すると自動で反映されます。** `frontend/` と `backend/` のソースコードはコンテナにつながっているため、ファイルを保存すると開発サーバーが再読み込みします。
+- **保存すると自動で反映されます。** `frontend/` と `backend/` のソースコードはコンテナにつながっているため、ファイルを保存すると開発サーバーが再読み込みします。バックエンドの自動リロードは、`.env` の `BACKEND_RELOAD`（`true` / `false`）で切り替えられます（「自動リロードなしで起動する」を参照）。
+- **相談中の一時状態は、バックエンドのメモリだけに保持します**（Issue #33で決定）。会話全文・入力原文・未承認の内容はDB・Redis・ログへ保存しません。そのため、バックエンドの再起動・自動リロード・一定時間の経過で一時状態は消え、ブラウザを再読み込みしても相談は復帰しません。APIはワーカー1つで起動しています（`backend/app/run.py`）。相談の途中で急に404になった場合は、バックエンドが再読み込みされた可能性があります。
 - **Windowsでも反映されるように、ファイルの変更を定期的に確認する設定（ポーリング）を入れています。** Next.js 16の標準（Turbopack）ではこの設定が効かないため、開発サーバーは `next dev --webpack` で起動しています。本番用のビルド（`npm run build`）は標準のままです。
 - **パッケージを追加・変更したときは、イメージを作り直します。** `package.json`・`package-lock.json`・`requirements.txt` を変えたときは、次を実行してください。`-V` は、古い `node_modules` を使い回さないための指定です。
 
@@ -176,6 +221,7 @@ exit                                # コンテナから出る
 
 - **パッケージの追加・更新は、事前にチームへ相談します**（`AGENTS.md` のルール）。
 - **ログ・エラーに、相談内容・入力内容・トークン・接続文字列を出さないでください。** ログのレベルは `.env` の `LOG_LEVEL`、開発用・本番用の出し方は `APP_ENV` で切り替えます。
+- **入力の検証エラーは、共通のエラーハンドラ（`backend/app/core/errors.py`）で返します。** FastAPI標準の422は送信された値をそのまま含むため、送信値を含まない `{"error": {"code": "VALIDATION_ERROR", ...}}` の形式に置き換えています（API設計 §3.5）。JSONの形式そのものが壊れている場合は400（`INVALID_REQUEST`）を返します。各APIで独自の422レスポンスを作らず、このハンドラに任せてください。
 - **CORS**は `.env` の `CORS_ORIGINS` に書いたURLだけを許可しています。無制限（`*`）にはしないでください。
 - PostgreSQL・Redisのポートは、PC側には公開していません（コンテナ間の通信だけで使います）。
 

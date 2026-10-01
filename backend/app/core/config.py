@@ -26,3 +26,7 @@ CORS_ORIGINS = _split_csv(os.environ.get("CORS_ORIGINS", "http://localhost:3000"
 
 # PostgreSQL・Redisへの接続タイムアウト（秒）
 CONNECT_TIMEOUT_SECONDS = 3
+
+# 開発サーバーの自動リロード（true / false）。
+# 縦断確認などで相談の一時状態を保ちたいときは false にする
+BACKEND_RELOAD = os.environ.get("BACKEND_RELOAD", "true").strip().lower() != "false"
