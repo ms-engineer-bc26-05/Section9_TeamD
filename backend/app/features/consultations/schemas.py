@@ -137,6 +137,16 @@ class ConsultationResultInput(BaseModel):
     background: str | None = Field(default=None, max_length=500)
     wish: str | None = Field(default=None, min_length=1, max_length=500)
 
+    @model_validator(mode="after")
+    def check_fields(self) -> "ConsultationResultInput":
+        # 更新する項目を1つも含まない {} は拒否する（6.4.2）
+        if not self.model_fields_set:
+            raise ValueError("更新する項目がありません")
+        # 送られた項目に null は認めない（空文字にできるのは background のみ）
+        if any(getattr(self, name) is None for name in self.model_fields_set):
+            raise ValueError("nullは指定できません")
+        return self
+
 
 class ApprovableResult(BaseModel):
     """承認・保存の対象とする整理結果（承認時にサーバー側で検証する）"""

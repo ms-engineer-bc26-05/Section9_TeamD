@@ -17,6 +17,7 @@ from app.features.consultations.schemas import (
     EmotionInput,
     EventDetailsDraft,
     HandlingType,
+    SafetyGuidance,
     ThemeCategory,
 )
 
@@ -63,12 +64,25 @@ class ConsultationState:
     approved_at: datetime | None = None  # 値があれば承認済み
     handling: HandlingType | None = None
 
+    # 安全案内（サーバー側の固定文言で正規化した値。AIの生成文は入れない）
+    safety_guidance: SafetyGuidance | None = None
+
     # 相談IDごとのロック（グローバルロックは使わない）
     lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
     @property
     def approved(self) -> bool:
         return self.approved_at is not None
+
+    def clear_content(self) -> None:
+        """安全案内へ切り替えるときなどに、相談内容を保持しないよう消去する"""
+        self.messages.clear()
+        self.ai_understanding = None
+        self.ai_question = None
+        self.event_details = None
+        self.emotion = None
+        self.result = None
+        self.approved_result = None
 
     def touch(self) -> None:
         """更新に成功したときに最終操作時刻を更新する（GETでは呼ばない）"""

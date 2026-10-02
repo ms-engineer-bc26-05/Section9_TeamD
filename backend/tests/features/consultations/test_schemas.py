@@ -66,3 +66,13 @@ def test_approvable_result_allows_empty_background_only():
             background="",
             wish="架空の望み",
         )
+
+
+@pytest.mark.parametrize("payload", [{}, {"wish": None}, {"background": None}])
+def test_result_input_rejects_empty_and_null(payload):
+    with pytest.raises(ValidationError):
+        ConsultationResultInput(**payload)
+
+
+def test_result_input_allows_empty_background():
+    assert ConsultationResultInput(background="").background == ""
