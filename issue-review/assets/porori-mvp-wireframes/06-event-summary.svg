@@ -37,6 +37,7 @@
   <text x="195" y="600" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#FFFFFF" font-weight="700">この内容で次へ</text>
   <rect x="26" y="638" width="338" height="58" rx="16" fill="#FFFDFC" stroke="#D8D0C8" stroke-width="1.5"/>
   <text class="t" x="195" y="672" text-anchor="middle" font-size="14" font-weight="600">もう少し整理したい（あと1問）</text>
-  <text class="m" x="195" y="734" text-anchor="middle" font-size="10">最大3問後は、要約を直接編集して次へ進みます</text>
-  <text class="m" x="195" y="793" text-anchor="middle" font-size="10">専門窓口・利用上の注意</text>
+  <text class="m" x="195" y="724" text-anchor="middle" font-size="10">※設計メモ：このボタンは質問3問未満かつ</text>
+  <text class="m" x="195" y="741" text-anchor="middle" font-size="10">訂正上限未到達時のみ表示。上限後は要約を直接編集</text>
+  <text class="m" x="195" y="793" text-anchor="middle" font-size="10">相談窓口・利用上の注意</text>
 </svg>

@@ -5,3 +5,13 @@
 .venv/
 __pycache__/
 *.py[cod]
+
+# Python（テスト）
+.pytest_cache/
+
+# Node.js / Next.js
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+npm-debug.log*

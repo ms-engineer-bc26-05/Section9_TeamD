@@ -17,5 +17,6 @@
   <rect class="soft" x="42" y="552" width="306" height="58" rx="16"/>
   <text class="t" x="195" y="588" text-anchor="middle" font-size="15" font-weight="600">はじめて使う方はこちら</text>
   <text class="m" x="195" y="655" text-anchor="middle" font-size="12">パスワードを忘れた方</text>
+  <text class="t" x="195" y="705" text-anchor="middle" font-size="12" text-decoration="underline">つらさが強いときの相談窓口</text>
   <path d="M0 772 C90 730 132 816 223 783 S330 733 390 759 V844 H0Z" fill="#E5E8DA"/>
 </svg>

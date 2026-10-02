@@ -1,0 +1,67 @@
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # ブラウザから直接FastAPIを呼ぶため、PC側のURL（localhost）を指定する
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # Windowsでもファイルの変更を検知できるよう、定期的に確認する
+      WATCHPACK_POLLING: "true"
+    volumes:
+      # ソースコードをコンテナにつなぎ、保存するだけで反映されるようにする
+      - ./frontend:/app
+      # node_modules と .next はコンテナ内のものを使う（PC側で上書きしない）
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
+      REDIS_URL: ${REDIS_URL:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # 自動リロードの有無（縦断確認時は .env で false にする）
+      BACKEND_RELOAD: ${BACKEND_RELOAD:-true}
+      # Windowsでもファイルの変更を検知できるよう、定期的に確認する
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
+      POSTGRES_DB: ${POSTGRES_DB:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
+    # コンテナ間の通信だけで使うため、PC側にポートを公開しない
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    # コンテナ間の通信だけで使うため、PC側にポートを公開しない
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db_data:

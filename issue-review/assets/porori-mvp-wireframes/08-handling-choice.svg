@@ -2,8 +2,7 @@
   <title>扱い方の選択画面のワイヤーフレーム</title>
   <rect width="390" height="844" fill="#F7F3EE"/>
   <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.card{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.btn{fill:#D98978}.soft1{fill:#F2DDD6}.soft2{fill:#E3E7D8}</style>
-  <text class="t" x="26" y="50" font-size="21">‹</text>
-  <text class="m" x="344" y="50" text-anchor="end" font-size="12">選択</text>
+  <text class="m" x="355" y="50" text-anchor="end" font-size="11">中断</text>
   <text class="t" x="195" y="126" text-anchor="middle" font-size="23" font-weight="700">この気持ちを、</text>
   <text class="t" x="195" y="158" text-anchor="middle" font-size="23" font-weight="700">今どう扱いたいですか？</text>
   <text class="m" x="195" y="192" text-anchor="middle" font-size="12">今の時点での気持ちで大丈夫です</text>
