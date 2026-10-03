@@ -56,7 +56,8 @@ class ConsultationState:
 
     # 感情・本音・背景・望み（画面6-C〜6-E）
     emotion: EmotionInput | None = field(default=None, repr=False)
-    guided_turn_count: int = 0
+    guided_turn_count: int = 0  # 本音・背景・望みの回答回数（question_countとは別に数える）
+    background_skipped: bool = False  # 背景の質問に「まだ分からない」と答えたか
 
     # 整理結果・承認・扱い方（画面7〜9）
     result: ConsultationResultDraft | None = field(default=None, repr=False)

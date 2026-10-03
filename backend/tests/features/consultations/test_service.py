@@ -11,6 +11,7 @@ from app.features.consultations.schemas import (
     ConsultationStatus,
     EmotionInput,
     EventDetailsInput,
+    GuidedTopic,
     HandlingType,
     ThemeCategory,
 )
@@ -18,6 +19,8 @@ from app.features.consultations.service import (
     SAFETY_MESSAGE_PLACEHOLDER,
     ConsultationService,
     ConsultationStateConflict,
+    GuidedSkipNotAllowed,
+    current_guided_topic,
     discard_consultation,
     get_approved_result,
 )
@@ -61,9 +64,17 @@ async def advance_to_result_ready(service, ai):
     await service.confirm_event_summary(USER, cid, "proceed")
     ai.push(fakes.emotion_output())
     await service.submit_emotion(USER, cid, EmotionInput(category="anxious", detail="架空の具体化"))
-    ai.push(fakes.guided_complete())
-    await service.guided_dialogue(USER, cid, "架空の本音", skipped=False)
+    await answer_guided(service, ai, cid)
     return cid
+
+
+async def answer_guided(service, ai, cid, complete=None):
+    """本音 → 背景（まだ分からない）→ 望み の3問に答えて整理結果まで進める"""
+    ai.push(fakes.guided_ask(), fakes.guided_ask(question="架空の望みの質問"))
+    await service.guided_dialogue(USER, cid, "架空の本音", skipped=False)
+    await service.guided_dialogue(USER, cid, None, skipped=True)
+    ai.push(complete or fakes.guided_complete())
+    return await service.guided_dialogue(USER, cid, "架空の望み", skipped=False)
 
 
 # --- 正常系の一連の流れ -----------------------------------------------------------
@@ -248,8 +259,7 @@ async def test_approve_rejects_blank_required_field(service, ai):
     await service.confirm_event_summary(USER, cid, "proceed")
     ai.push(fakes.emotion_output())
     await service.submit_emotion(USER, cid, EmotionInput(category="anxious", cannot_verbalize=True))
-    ai.push(fakes.guided_complete(wish=""))
-    await service.guided_dialogue(USER, cid, "架空の本音", skipped=False)
+    await answer_guided(service, ai, cid, complete=fakes.guided_complete(wish=""))
 
     with pytest.raises(ConsultationStateConflict):
         await service.approve_result(USER, cid)
@@ -326,3 +336,87 @@ async def test_other_consultation_is_not_blocked_while_ai_is_waiting(store):
 
     slow_ai.wait_event.set()
     await waiting
+
+
+# --- 本音・背景・望みの進め方（サーバー管理） -------------------------------------
+
+
+async def advance_to_guided(service, ai):
+    state = await start(service, ai)
+    cid = state.consultation_id
+    ai.push(fakes.event_summarize())
+    await service.event_dialogue(USER, cid, "answer", "架空の回答")
+    await service.confirm_event_summary(USER, cid, "proceed")
+    ai.push(fakes.emotion_output())
+    state, _ = await service.submit_emotion(
+        USER, cid, EmotionInput(category="anxious", detail="架空の具体化")
+    )
+    return state
+
+
+@pytest.mark.asyncio
+async def test_guided_topics_follow_server_order(service, ai):
+    state = await advance_to_guided(service, ai)
+    cid = state.consultation_id
+    assert current_guided_topic(state) is GuidedTopic.TRUE_FEELING
+
+    ai.push(fakes.guided_ask())
+    state = await service.guided_dialogue(USER, cid, "架空の本音", skipped=False)
+    assert current_guided_topic(state) is GuidedTopic.BACKGROUND
+    # AIへは「次に聞く項目」をsystemで指定する
+    assert "次に聞く項目（指定）：背景" in ai.calls[-1]["messages"][0]["content"]
+
+    ai.push(fakes.guided_ask())
+    state = await service.guided_dialogue(USER, cid, None, skipped=True)
+    assert current_guided_topic(state) is GuidedTopic.WISH
+
+    ai.push(fakes.guided_complete(background="架空のAIが補った背景"))
+    state = await service.guided_dialogue(USER, cid, "架空の望み", skipped=False)
+    assert state.status is ConsultationStatus.RESULT_READY
+    assert current_guided_topic(state) is None
+    assert "整理を完了する" in ai.calls[-1]["messages"][0]["content"]
+    # 背景が「まだ分からない」の場合は空文字にする
+    assert state.result.background == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("answers", [0, 2])
+async def test_skip_is_allowed_only_for_background(service, ai, answers):
+    state = await advance_to_guided(service, ai)
+    cid = state.consultation_id
+    for _ in range(answers):
+        ai.push(fakes.guided_ask())
+        await service.guided_dialogue(USER, cid, "架空の回答", skipped=False)
+    calls = len(ai.calls)
+
+    with pytest.raises(GuidedSkipNotAllowed):
+        await service.guided_dialogue(USER, cid, None, skipped=True)
+    assert len(ai.calls) == calls  # AIを呼ばない
+    assert state.guided_turn_count == answers
+
+
+@pytest.mark.asyncio
+async def test_ai_completing_too_early_is_invalid(service, ai):
+    state = await advance_to_guided(service, ai)
+    ai.push(fakes.guided_complete())
+
+    with pytest.raises(AIOutputInvalid):
+        await service.guided_dialogue(USER, state.consultation_id, "架空の本音", skipped=False)
+    assert state.status is ConsultationStatus.GUIDED_DIALOGUE
+    assert state.guided_turn_count == 0
+    assert state.result is None
+
+
+@pytest.mark.asyncio
+async def test_ai_asking_after_last_topic_is_invalid(service, ai):
+    state = await advance_to_guided(service, ai)
+    cid = state.consultation_id
+    ai.push(fakes.guided_ask(), fakes.guided_ask())
+    await service.guided_dialogue(USER, cid, "架空の本音", skipped=False)
+    await service.guided_dialogue(USER, cid, "架空の背景", skipped=False)
+
+    ai.push(fakes.guided_ask())
+    with pytest.raises(AIOutputInvalid):
+        await service.guided_dialogue(USER, cid, "架空の望み", skipped=False)
+    assert state.guided_turn_count == 2
+    assert current_guided_topic(state) is GuidedTopic.WISH

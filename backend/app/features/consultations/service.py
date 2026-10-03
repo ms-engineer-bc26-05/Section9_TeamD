@@ -28,12 +28,14 @@ from app.features.consultations.ai_schemas import (
 )
 from app.features.consultations.prompts import PromptStage
 from app.features.consultations.schemas import (
+    GUIDED_TOPIC_ORDER,
     ApprovableResult,
     ConsultationResultInput,
     ConsultationStatus,
     EmotionInput,
     EventDetailsDraft,
     EventDetailsInput,
+    GuidedTopic,
     HandlingType,
     SafetyGuidance,
     SafetyGuidanceDraft,
@@ -65,6 +67,10 @@ class ConsultationStateConflict(Exception):
     """相談の状態と操作が矛盾している（APIでは409）"""
 
 
+class GuidedSkipNotAllowed(Exception):
+    """背景以外の質問で「まだ分からない」（skipped）が指定された（APIでは422）"""
+
+
 @dataclass(frozen=True)
 class ApprovedConsultation:
     """I-05（保存）へ渡す承認済みの結果。一時状態から切り離したコピー"""
@@ -81,6 +87,15 @@ def can_ask_more(state: ConsultationState) -> bool:
 
 def correction_limit_reached(state: ConsultationState) -> bool:
     return state.correction_count >= CORRECTION_LIMIT
+
+
+def current_guided_topic(state: ConsultationState) -> GuidedTopic | None:
+    """本音・背景・望みの対話で、いま質問している項目（サーバーが回答回数から決める）"""
+    if state.status is not ConsultationStatus.GUIDED_DIALOGUE:
+        return None
+    if state.guided_turn_count >= len(GUIDED_TOPIC_ORDER):
+        return None
+    return GUIDED_TOPIC_ORDER[state.guided_turn_count]
 
 
 def _normalize_safety(draft: SafetyGuidanceDraft | None) -> SafetyGuidance:
@@ -277,6 +292,7 @@ class ConsultationService:
                 PromptStage.EMOTION,
                 [*state.messages, new_turn],
                 answer_count=state.question_count,
+                guided_next_topic=GUIDED_TOPIC_ORDER[0],
             )
             self._ensure_still_exists(state)
 
@@ -286,6 +302,8 @@ class ConsultationService:
                 return state, None
 
             state.emotion = emotion
+            state.guided_turn_count = 0
+            state.background_skipped = False
             state.ai_question = output.ai_question
             state.messages.extend(
                 [new_turn, prompts.assistant_turn(f"{output.ai_response}\n{output.ai_question}")]
@@ -305,8 +323,24 @@ class ConsultationService:
         answer: str | None,
         skipped: bool,
     ) -> ConsultationState:
+        """本音 → 背景 → 望みの順に1問ずつ進める。
+
+        順序と完了のタイミングはサーバーが回答回数から決める（AIの判断より優先する）。
+        AIが指定と違う動作（完了の前に complete、完了すべきときに ask）を返した場合は、
+        AIの出力不正（502）として状態を変えない。
+        """
         async with self._store.locked(user_id, consultation_id) as state:
             _require_status(state, ConsultationStatus.GUIDED_DIALOGUE)
+            topic = current_guided_topic(state)
+            if topic is None:
+                raise ConsultationStateConflict
+            if skipped and topic is not GuidedTopic.BACKGROUND:
+                # 「まだ分からない」は背景の質問中だけ選べる（画面設計に合わせる）
+                raise GuidedSkipNotAllowed
+
+            answered = state.guided_turn_count + 1
+            completes = answered >= len(GUIDED_TOPIC_ORDER)
+            next_topic = None if completes else GUIDED_TOPIC_ORDER[answered]
 
             new_turn = prompts.user_turn(prompts.SKIPPED_ANSWER_TEXT if skipped else answer)
             output = await self._call_ai(
@@ -315,7 +349,9 @@ class ConsultationService:
                 PromptStage.GUIDED,
                 [*state.messages, new_turn],
                 answer_count=state.question_count,
-                guided_turn_count=state.guided_turn_count + 1,
+                guided_turn_count=answered,
+                guided_next_topic=next_topic,
+                guided_complete=completes,
             )
             self._ensure_still_exists(state)
 
@@ -324,15 +360,25 @@ class ConsultationService:
                 state.touch()
                 return state
 
-            state.guided_turn_count += 1
+            expected = "complete" if completes else "ask"
+            if output.next_action != expected:
+                raise AIOutputInvalid("指定と異なる進め方が返されました")
+
+            state.guided_turn_count = answered
+            if skipped:
+                state.background_skipped = True
             state.messages.append(new_turn)
-            if output.next_action == "ask":
-                state.ai_question = output.ai_question
-                state.messages.append(prompts.assistant_turn(output.ai_question))
-            else:
-                state.result = output.result
+            if completes:
+                result = output.result
+                if state.background_skipped:
+                    # 背景が「まだ分からない」の場合は、AIが補った内容があっても空にする
+                    result = result.model_copy(update={"background": ""})
+                state.result = result
                 state.ai_question = None
                 state.status = ConsultationStatus.RESULT_READY
+            else:
+                state.ai_question = output.ai_question
+                state.messages.append(prompts.assistant_turn(output.ai_question))
             state.touch()
             return state
 

@@ -34,8 +34,10 @@ from app.features.consultations.schemas import (
 from app.features.consultations.service import (
     ConsultationService,
     ConsultationStateConflict,
+    GuidedSkipNotAllowed,
     can_ask_more,
     correction_limit_reached,
+    current_guided_topic,
 )
 from app.features.consultations.state import ConsultationState
 from app.features.consultations.store import (
@@ -90,6 +92,21 @@ _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
 
 
 def _error_response(exc: Exception) -> JSONResponse | None:
+    if isinstance(exc, GuidedSkipNotAllowed):
+        # 状態によって決まる入力値の誤り。共通の422と同じ形式で返す
+        logger.info("consultation api error: VALIDATION_ERROR")
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "入力内容を確認してください。",
+                    "details": [
+                        {"field": "skipped", "reason": "この質問では選択できません。"}
+                    ],
+                }
+            },
+        )
     for exc_type, (status_code, code, message) in _ERRORS.items():
         if isinstance(exc, exc_type):
             # 例外の種類だけを記録し、メッセージ（内容）は出さない
@@ -171,6 +188,7 @@ def _view(state: ConsultationState, *, include_id: bool = False) -> Consultation
                 "event_details": state.event_details,
                 "emotion_category": state.emotion.category if state.emotion else None,
                 "ai_question": state.ai_question,
+                "current_topic": current_guided_topic(state),
             }
         case ConsultationStatus.RESULT_READY | ConsultationStatus.HANDLING_SELECTION:
             fields |= {"approved": state.approved}
@@ -265,7 +283,10 @@ async def submit_emotion(
     state, ai_response = await service.submit_emotion(user_id, consultation_id, body)
     if state.status is ConsultationStatus.GUIDED_DIALOGUE:
         return ConsultationView(
-            status=state.status, ai_response=ai_response, ai_question=state.ai_question
+            status=state.status,
+            ai_response=ai_response,
+            ai_question=state.ai_question,
+            current_topic=current_guided_topic(state),
         )
     return _view(state)
 
@@ -280,7 +301,11 @@ async def guided_dialogue(
     """本音・背景・望みの対話（6.3.4）"""
     state = await service.guided_dialogue(user_id, consultation_id, body.answer, body.skipped)
     if state.status is ConsultationStatus.GUIDED_DIALOGUE:
-        return ConsultationView(status=state.status, ai_question=state.ai_question)
+        return ConsultationView(
+            status=state.status,
+            ai_question=state.ai_question,
+            current_topic=current_guided_topic(state),
+        )
     if state.status is ConsultationStatus.RESULT_READY:
         return ConsultationView(status=state.status)
     return _view(state)

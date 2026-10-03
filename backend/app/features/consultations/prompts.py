@@ -9,15 +9,17 @@
 from enum import Enum
 
 from app.features.consultations.schemas import (
+    GUIDED_TOPIC_ORDER,
     EmotionCategory,
     EmotionInput,
     EventDetailsInput,
+    GuidedTopic,
     ThemeCategory,
 )
 from app.features.consultations.state import DialogueTurn
 
 # 本音・背景・望みの標準質問数（Q-13）。最大往復回数はI-03Bで決める
-GUIDED_STANDARD_QUESTIONS = 3
+GUIDED_STANDARD_QUESTIONS = len(GUIDED_TOPIC_ORDER)
 # 出来事の対話で要約へ進む目安の回答回数（上限の強制はI-03B）
 EVENT_STANDARD_ANSWERS = 3
 
@@ -42,6 +44,13 @@ EMOTION_LABELS = {
     EmotionCategory.HURT: "傷ついた",
     EmotionCategory.SELF_BLAME: "自分を責める気持ち（情けなさ・罪悪感）",
     EmotionCategory.OTHER: "その他・まだよく分からない",
+}
+
+
+GUIDED_TOPIC_LABELS = {
+    GuidedTopic.TRUE_FEELING: "本音（本当はどう感じていたか、どうしてほしかったか）",
+    GuidedTopic.BACKGROUND: "背景（そう感じる理由になっている本人の経験や大切にしていること）",
+    GuidedTopic.WISH: "望み（これからどうなってほしいか）",
 }
 
 
@@ -103,16 +112,15 @@ next_action を "ask" にし、これまでの内容についての理解を ai_
 いまの段階：感情の受け止め
 直前のuserメッセージは、本人が選んだ感情と、その具体化である。
 感情を評価せずに受け止める一言を ai_response に書き、
-本人の本音（本当はどうしてほしかったか、どう感じていたか）を聞く質問を ai_question に書く。
+最後に書かれている「次に聞く項目」についての質問を ai_question に書く。
 """,
     PromptStage.GUIDED: f"""\
 いまの段階：本音・背景・望みの整理
-本音 → 背景（そう感じる理由になっている本人の経験や大切にしていること）→ 望み の順に、
-1つずつ質問する。標準は{GUIDED_STANDARD_QUESTIONS}問とする。
-本人が「{SKIPPED_ANSWER_TEXT}」と答えた項目は、無理に聞き直さず次へ進む。
-- まだ聞いていない項目がある場合：next_action を "ask" にし、次の質問を ai_question に書く。result は null にする。
-- 3つを聞き終えた場合：next_action を "complete" にし、これまでの会話から result を作る。ai_question は null にする。
-  - event_summary：出来事を1〜2文で
+質問する項目は、最後に書かれている指定に従う。自分で順番を変えたり、同じ項目を聞き直したりしない。
+本人が「{SKIPPED_ANSWER_TEXT}」と答えた項目は、聞き直さない。
+- 「次に聞く項目」が指定されている場合：next_action を "ask" にし、その項目についての質問を ai_question に書く。result は null にする。
+- 「整理を完了する」と指定されている場合：next_action を "complete" にし、これまでの会話から result を作る。ai_question は null にする。
+  - event_summary：出来事を1〜2文で。本人が話していない表現を加えない
   - emotion：本人が選んだ感情と、その具体化
   - true_feeling：本人の本音。相手の事情の推測やアドバイスにしない
   - background：本人が話した背景。話していない・分からない場合は空文字にし、推測で補わない
@@ -127,6 +135,8 @@ def build_system_prompt(
     *,
     answer_count: int = 0,
     guided_turn_count: int = 0,
+    guided_next_topic: GuidedTopic | None = None,
+    guided_complete: bool = False,
 ) -> str:
     """systemメッセージを作る。ユーザーの入力はここに入れない"""
     progress = (
@@ -134,6 +144,11 @@ def build_system_prompt(
         f"出来事についての本人の回答回数：{answer_count}\n"
         f"本音・背景・望みについての本人の回答回数：{guided_turn_count}\n"
     )
+    # 本音・背景・望みの進め方はサーバーが決め、AIには指定に従わせる
+    if guided_next_topic is not None:
+        progress += f"次に聞く項目（指定）：{GUIDED_TOPIC_LABELS[guided_next_topic]}\n"
+    if guided_complete:
+        progress += "指定：本音・背景・望みを聞き終えたので、整理を完了する\n"
     return f"{COMMON_INSTRUCTIONS}\n{STAGE_INSTRUCTIONS[stage]}\n{progress}"
 
 
@@ -144,10 +159,17 @@ def build_messages(
     *,
     answer_count: int = 0,
     guided_turn_count: int = 0,
+    guided_next_topic: GuidedTopic | None = None,
+    guided_complete: bool = False,
 ) -> list[dict[str, str]]:
     """AIへ渡すメッセージを作る。会話の履歴は user／assistant のまま渡す"""
     system = build_system_prompt(
-        stage, theme, answer_count=answer_count, guided_turn_count=guided_turn_count
+        stage,
+        theme,
+        answer_count=answer_count,
+        guided_turn_count=guided_turn_count,
+        guided_next_topic=guided_next_topic,
+        guided_complete=guided_complete,
     )
     return [{"role": "system", "content": system}] + [
         {"role": turn.role, "content": turn.content} for turn in history

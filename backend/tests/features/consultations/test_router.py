@@ -121,15 +121,29 @@ def test_full_normal_flow(client, ai):
         "status": "guided_dialogue",
         "ai_response": "架空の受け止め",
         "ai_question": "架空の本音の質問",
+        "current_topic": "true_feeling",
     }
 
     # 本音・背景・望み
     ai.push(fakes.guided_ask())
     response = client.post(f"{BASE}/{cid}/guided-dialogue", json={"answer": "架空の本音"})
-    assert response.json() == {"status": "guided_dialogue", "ai_question": "架空の背景の質問"}
+    assert response.json() == {
+        "status": "guided_dialogue",
+        "ai_question": "架空の背景の質問",
+        "current_topic": "background",
+    }
+
+    ai.push(fakes.guided_ask(question="架空の望みの質問"))
+    response = client.post(f"{BASE}/{cid}/guided-dialogue", json={"skipped": True})
+    assert response.json()["current_topic"] == "wish"
+
+    # 応答を受け取れなかった場合も、GETで直近の質問と項目を取得できる
+    response = client.get(f"{BASE}/{cid}")
+    assert response.json()["ai_question"] == "架空の望みの質問"
+    assert response.json()["current_topic"] == "wish"
 
     ai.push(fakes.guided_complete())
-    response = client.post(f"{BASE}/{cid}/guided-dialogue", json={"skipped": True})
+    response = client.post(f"{BASE}/{cid}/guided-dialogue", json={"answer": "架空の望み"})
     assert response.json() == {"status": "result_ready"}
 
     # 整理結果の取得・編集・承認
@@ -180,6 +194,21 @@ def test_invalid_request_returns_422_without_input(client, ai, path, payload):
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert "架空" not in response.text
+
+
+def test_skip_outside_background_returns_422(client, ai):
+    cid = start(client, ai)
+    ai.push(fakes.event_summarize())
+    client.post(f"{BASE}/{cid}/event-dialogue", json={"action": "answer", "answer": "架空"})
+    client.post(f"{BASE}/{cid}/event-summary/confirm", json={"action": "proceed"})
+    ai.push(fakes.emotion_output())
+    client.post(f"{BASE}/{cid}/emotion", json={"category": "sad", "cannot_verbalize": True})
+
+    response = client.post(f"{BASE}/{cid}/guided-dialogue", json={"skipped": True})
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [
+        {"field": "skipped", "reason": "この質問では選択できません。"}
+    ]
 
 
 def test_patch_result_rejects_approved_and_empty(client, ai):

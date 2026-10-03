@@ -15,6 +15,7 @@ from app.features.consultations.schemas import (
     EmotionCategory,
     EventDetailsDraft,
     EventDetailsInput,
+    GuidedTopic,
     HandlingType,
     SafetyGuidance,
     ThemeCategory,
@@ -79,7 +80,10 @@ class EventSummaryConfirmRequest(_Request):
 
 
 class GuidedDialogueRequest(_Request):
-    """POST /consultations/{id}/guided-dialogue（6.3.4）。「まだ分からない」は skipped=true（Q-13）"""
+    """POST /consultations/{id}/guided-dialogue（6.3.4）。
+
+    「まだ分からない」は skipped=true（Q-13）。背景の質問中だけ指定でき、それ以外は422。
+    """
 
     answer: str | None = Field(default=None, min_length=1, max_length=ANSWER_MAX_LENGTH)
     skipped: bool = False
@@ -111,6 +115,7 @@ class ConsultationView(BaseModel):
     ai_understanding: str | None = None
     ai_question: str | None = None
     ai_response: str | None = None
+    current_topic: GuidedTopic | None = None  # 本音・背景・望みで、いま質問している項目
     event_details: EventDetailsDraft | None = None
     emotion_category: EmotionCategory | None = None
     handling: HandlingType | None = None

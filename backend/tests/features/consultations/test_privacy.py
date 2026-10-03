@@ -29,6 +29,7 @@ def test_full_flow_does_not_log_consultation_content(caplog):
             fakes.event_summarize(),
             fakes.emotion_output(),
             fakes.guided_ask(),
+            fakes.guided_ask(),
             fakes.guided_complete(),
         ]
     )
@@ -52,6 +53,7 @@ def test_full_flow_does_not_log_consultation_content(caplog):
         ("post", "emotion", {"category": "angry", "detail": "架空の具体化"}),
         ("post", "guided-dialogue", {"answer": "架空の本音"}),
         ("post", "guided-dialogue", {"skipped": True}),
+        ("post", "guided-dialogue", {"answer": "架空の望み"}),
         ("patch", "result", {"wish": "架空の編集"}),
         ("post", "result/approve", None),
         ("post", "handling", {"handling": "not_tell"}),

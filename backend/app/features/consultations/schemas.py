@@ -52,6 +52,18 @@ class EmotionCategory(str, Enum):
     OTHER = "other"  # その他・まだよく分からない
 
 
+class GuidedTopic(str, Enum):
+    """本音・背景・望みの対話で、いま質問している項目（Q-13。順序はサーバーが管理する）"""
+
+    TRUE_FEELING = "true_feeling"  # 本音
+    BACKGROUND = "background"  # 背景
+    WISH = "wish"  # 望み
+
+
+# 質問する順序。標準の質問数はこの長さ（3問）
+GUIDED_TOPIC_ORDER = (GuidedTopic.TRUE_FEELING, GuidedTopic.BACKGROUND, GuidedTopic.WISH)
+
+
 class HandlingType(str, Enum):
     """扱い方（4.4）"""
 
