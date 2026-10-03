@@ -15,14 +15,15 @@ from app.features.consultations.schemas import (
     HandlingType,
     ThemeCategory,
 )
+from app.features.consultations.exceptions import (
+    ConsultationStateConflict,
+    GuidedSkipNotAllowed,
+)
+from app.features.consultations.public import discard_consultation, get_approved_result
 from app.features.consultations.service import (
     SAFETY_MESSAGE_PLACEHOLDER,
     ConsultationService,
-    ConsultationStateConflict,
-    GuidedSkipNotAllowed,
     current_guided_topic,
-    discard_consultation,
-    get_approved_result,
 )
 from app.features.consultations.store import (
     ConsultationBusy,
@@ -140,13 +141,13 @@ async def test_full_normal_flow(service, store, ai):
     assert state.handling is HandlingType.TELL
 
     # I-05へ公開する関数
-    approved = get_approved_result(store, USER, cid)
+    approved = await get_approved_result(USER, cid, store=store)
     assert approved.result.wish == "架空の編集した望み"
     assert approved.handling is HandlingType.TELL
-    discard_consultation(store, USER, cid)
-    discard_consultation(store, USER, cid)  # 2回目も安全
+    await discard_consultation(USER, cid, store=store)
+    await discard_consultation(USER, cid, store=store)  # 2回目も安全
     with pytest.raises(ConsultationNotFound):
-        get_approved_result(store, USER, cid)
+        await get_approved_result(USER, cid, store=store)
 
 
 @pytest.mark.asyncio
@@ -276,7 +277,7 @@ async def test_cannot_edit_after_approval(service, store, ai):
         await service.approve_result(USER, cid)
     # 扱い方が未選択のうちは、I-05へ承認済み結果を渡さない
     with pytest.raises(ConsultationStateConflict):
-        get_approved_result(store, USER, cid)
+        await get_approved_result(USER, cid, store=store)
 
 
 @pytest.mark.asyncio

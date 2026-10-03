@@ -2,21 +2,16 @@
 
 - Routerの登録（main.py）は結合Issue（I-06）で行う
 - 認証は I-01 の get_current_user に置き換えるまで、仮の依存（常に401）を使う
-- 相談機能の例外は、このRouterの中で設計書3.5の形式のエラーへ変換する
+- 相談機能の例外は、http_errors.ConsultationRoute で設計書3.5の形式のエラーへ変換する
   （共通の errors.py・main.py を変更しないため、Routerごとの APIRoute で変換する）
 - エラーの本文・ログに、相談内容やAIの出力を含めない
 """
 
-import logging
-from collections.abc import Callable, Coroutine
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response, status
-from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
+from fastapi import APIRouter, Depends, status
 
-from app.features.consultations.ai_schemas import AIOutputInvalid
 from app.features.consultations.api_schemas import (
     ConsultationResultView,
     ConsultationView,
@@ -31,34 +26,22 @@ from app.features.consultations.schemas import (
     EmotionInput,
     HandlingChoice,
 )
+from app.features.consultations.exceptions import NotAuthenticated
+from app.features.consultations.http_errors import ConsultationRoute
 from app.features.consultations.service import (
     ConsultationService,
-    ConsultationStateConflict,
-    GuidedSkipNotAllowed,
-    ResultNotReady,
     can_ask_more,
     correction_limit_reached,
     current_guided_topic,
 )
 from app.features.consultations.state import ConsultationState
-from app.features.consultations.store import (
-    ConsultationBusy,
-    ConsultationNotFound,
-    ConsultationStore,
-    get_consultation_store,
-)
-from app.integrations.openrouter.client import AIClientError, OpenRouterClient, get_ai_client
-
-logger = logging.getLogger(__name__)
+from app.features.consultations.store import ConsultationStore, get_consultation_store
+from app.integrations.openrouter.client import OpenRouterClient, get_ai_client
 
 
 # ---------------------------------------------------------------------------
 # 認証（I-01完了までの仮の依存）
 # ---------------------------------------------------------------------------
-
-
-class NotAuthenticated(Exception):
-    pass
 
 
 async def get_current_user_id() -> UUID:
@@ -68,73 +51,6 @@ async def get_current_user_id() -> UUID:
     テストでは dependency_overrides で固定UUIDを返す。
     """
     raise NotAuthenticated
-
-
-# ---------------------------------------------------------------------------
-# 例外 → 設計書3.5の形式のエラー
-# ---------------------------------------------------------------------------
-
-_ERRORS: dict[type[Exception], tuple[int, str, str]] = {
-    NotAuthenticated: (401, "UNAUTHORIZED", "ログインしてください。"),
-    ConsultationNotFound: (
-        404,
-        "CONSULTATION_NOT_FOUND",
-        "相談が見つかりません。最初からやり直してください。",
-    ),
-    ConsultationBusy: (409, "CONSULTATION_BUSY", "前の操作を処理しています。"),
-    # ResultNotReady は ConsultationStateConflict の一種のため、先に判定する
-    ResultNotReady: (409, "RESULT_NOT_READY", "整理結果はまだできていません。"),
-    ConsultationStateConflict: (
-        409,
-        "CONSULTATION_STATE_CONFLICT",
-        "現在の相談の状態では、この操作はできません。",
-    ),
-    AIClientError: (502, "AI_UNAVAILABLE", "AIの応答を取得できませんでした。"),
-    AIOutputInvalid: (502, "AI_OUTPUT_INVALID", "AIの応答を取得できませんでした。"),
-}
-
-
-def _error_response(exc: Exception) -> JSONResponse | None:
-    if isinstance(exc, GuidedSkipNotAllowed):
-        # 状態によって決まる入力値の誤り。共通の422と同じ形式で返す
-        logger.info("consultation api error: VALIDATION_ERROR")
-        return JSONResponse(
-            status_code=422,
-            content={
-                "error": {
-                    "code": "VALIDATION_ERROR",
-                    "message": "入力内容を確認してください。",
-                    "details": [
-                        {"field": "skipped", "reason": "この質問では選択できません。"}
-                    ],
-                }
-            },
-        )
-    for exc_type, (status_code, code, message) in _ERRORS.items():
-        if isinstance(exc, exc_type):
-            # 例外の種類だけを記録し、メッセージ（内容）は出さない
-            logger.info("consultation api error: %s", code)
-            return JSONResponse(
-                status_code=status_code,
-                content={"error": {"code": code, "message": message}},
-            )
-    return None
-
-
-class ConsultationRoute(APIRoute):
-    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
-        handler = super().get_route_handler()
-
-        async def route_handler(request: Request) -> Response:
-            try:
-                return await handler(request)
-            except Exception as exc:
-                response = _error_response(exc)
-                if response is None:
-                    raise
-                return response
-
-        return route_handler
 
 
 # ---------------------------------------------------------------------------

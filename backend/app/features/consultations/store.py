@@ -10,15 +10,15 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from uuid import UUID
 
+from app.features.consultations.exceptions import ConsultationBusy, ConsultationNotFound
 from app.features.consultations.state import ConsultationState
 
-
-class ConsultationNotFound(Exception):
-    """一時状態が存在しない、または本人のものでない（APIでは404）"""
-
-
-class ConsultationBusy(Exception):
-    """同じ相談の別のリクエストを処理中（APIでは409）"""
+__all__ = [
+    "ConsultationBusy",
+    "ConsultationNotFound",
+    "ConsultationStore",
+    "get_consultation_store",
+]
 
 
 class ConsultationStore:

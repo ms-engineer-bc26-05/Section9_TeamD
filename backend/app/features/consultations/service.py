@@ -11,8 +11,6 @@ I-03Aでは正常系を実装する。次はI-03Bで実装する：
 - TTL・DELETE・ユーザー単位の破棄
 """
 
-from dataclasses import dataclass
-from datetime import datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -25,6 +23,12 @@ from app.features.consultations.ai_schemas import (
     AIOutputInvalid,
     AIOutputKind,
     parse_ai_output,
+)
+from app.features.consultations.exceptions import (
+    ConsultationNotFound,
+    ConsultationStateConflict,
+    GuidedSkipNotAllowed,
+    ResultNotReady,
 )
 from app.features.consultations.prompts import PromptStage
 from app.features.consultations.schemas import (
@@ -42,10 +46,7 @@ from app.features.consultations.schemas import (
     ThemeCategory,
 )
 from app.features.consultations.state import ConsultationState, utc_now
-from app.features.consultations.store import (
-    ConsultationNotFound,
-    ConsultationStore,
-)
+from app.features.consultations.store import ConsultationStore
 from app.integrations.openrouter.client import OpenRouterClient
 
 # 上限値（設計書6.3.1・6.3.2）。上限到達時の強制遷移と409はI-03Bで実装する
@@ -61,28 +62,6 @@ RESULT_STATUSES = {
     ConsultationStatus.HANDLING_SELECTION,
     ConsultationStatus.SAVE_CONFIRMATION,
 }
-
-
-class ConsultationStateConflict(Exception):
-    """相談の状態と操作が矛盾している（APIでは409）"""
-
-
-class ResultNotReady(ConsultationStateConflict):
-    """整理結果ができる前に取得しようとした（APIでは409・RESULT_NOT_READY）"""
-
-
-class GuidedSkipNotAllowed(Exception):
-    """背景以外の質問で「まだ分からない」（skipped）が指定された（APIでは422）"""
-
-
-@dataclass(frozen=True)
-class ApprovedConsultation:
-    """I-05（保存）へ渡す承認済みの結果。一時状態から切り離したコピー"""
-
-    consultation_id: UUID
-    result: ApprovableResult
-    approved_at: datetime
-    handling: HandlingType
 
 
 def can_ask_more(state: ConsultationState) -> bool:
@@ -446,37 +425,3 @@ class ConsultationService:
             state.status = ConsultationStatus.SAVE_CONFIRMATION
             state.touch()
             return state
-
-
-# ----------------------------------------------------------------------
-# I-05（保存）へ公開するService関数
-# ----------------------------------------------------------------------
-
-
-def get_approved_result(
-    store: ConsultationStore, user_id: UUID, consultation_id: UUID
-) -> ApprovedConsultation:
-    """承認済みの結果を取得する。
-
-    - 状態がない・本人のものでない → ConsultationNotFound（404）
-    - 未承認・扱い方が未選択      → ConsultationStateConflict（409）
-    """
-    state = store.get(user_id, consultation_id)
-    if (
-        state.status is not ConsultationStatus.SAVE_CONFIRMATION
-        or state.approved_result is None
-        or state.approved_at is None
-        or state.handling is None
-    ):
-        raise ConsultationStateConflict
-    return ApprovedConsultation(
-        consultation_id=state.consultation_id,
-        result=state.approved_result.model_copy(deep=True),
-        approved_at=state.approved_at,
-        handling=state.handling,
-    )
-
-
-def discard_consultation(store: ConsultationStore, user_id: UUID, consultation_id: UUID) -> None:
-    """保存成功後に一時状態を破棄する。何度呼んでも安全"""
-    store.discard(user_id, consultation_id)
