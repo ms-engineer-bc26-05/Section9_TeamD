@@ -225,6 +225,25 @@ def test_wrong_state_returns_409(client, ai):
     assert response.json()["error"]["code"] == "CONSULTATION_STATE_CONFLICT"
 
 
+def test_result_before_ready_returns_result_not_ready(client, ai):
+    cid = start(client, ai)
+    response = client.get(f"{BASE}/{cid}/result")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "RESULT_NOT_READY"
+
+
+def test_result_in_safety_guidance_returns_state_conflict(client, ai):
+    ai.push(fakes.safety_output(ai_question=None))
+    cid = client.post(BASE, json={"theme": "other", "detail": "架空の相談本文"}).json()[
+        "consultation_id"
+    ]
+    response = client.get(f"{BASE}/{cid}/result")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CONSULTATION_STATE_CONFLICT"
+
+
 def test_other_user_and_missing_return_same_404(client, ai, current_user):
     cid = start(client, ai)
     current_user["id"] = uuid4()

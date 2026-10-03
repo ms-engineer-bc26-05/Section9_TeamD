@@ -35,6 +35,7 @@ from app.features.consultations.service import (
     ConsultationService,
     ConsultationStateConflict,
     GuidedSkipNotAllowed,
+    ResultNotReady,
     can_ask_more,
     correction_limit_reached,
     current_guided_topic,
@@ -81,6 +82,8 @@ _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
         "相談が見つかりません。最初からやり直してください。",
     ),
     ConsultationBusy: (409, "CONSULTATION_BUSY", "前の操作を処理しています。"),
+    # ResultNotReady は ConsultationStateConflict の一種のため、先に判定する
+    ResultNotReady: (409, "RESULT_NOT_READY", "整理結果はまだできていません。"),
     ConsultationStateConflict: (
         409,
         "CONSULTATION_STATE_CONFLICT",

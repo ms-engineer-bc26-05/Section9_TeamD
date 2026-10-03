@@ -67,6 +67,10 @@ class ConsultationStateConflict(Exception):
     """相談の状態と操作が矛盾している（APIでは409）"""
 
 
+class ResultNotReady(ConsultationStateConflict):
+    """整理結果ができる前に取得しようとした（APIでは409・RESULT_NOT_READY）"""
+
+
 class GuidedSkipNotAllowed(Exception):
     """背景以外の質問で「まだ分からない」（skipped）が指定された（APIでは422）"""
 
@@ -388,8 +392,12 @@ class ConsultationService:
 
     def get_result(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
         state = self._store.get(user_id, consultation_id)
-        _require_status(state, *RESULT_STATUSES)
-        return state
+        if state.status in RESULT_STATUSES:
+            return state
+        if state.status is ConsultationStatus.SAFETY_GUIDANCE:
+            # 安全案内へ切り替わった相談には整理結果がない
+            raise ConsultationStateConflict
+        raise ResultNotReady
 
     async def update_result(
         self, user_id: UUID, consultation_id: UUID, changes: ConsultationResultInput
