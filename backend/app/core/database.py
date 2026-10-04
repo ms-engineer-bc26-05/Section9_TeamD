@@ -4,9 +4,15 @@ from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core import config
+from collections.abc import AsyncIterator
 
 
 NAMING_CONVENTION = {
@@ -72,3 +78,19 @@ async def dispose_engine() -> None:
 
     await _engine.dispose()
     _engine = None
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """共通Engineを使い、新しいセッションを作るための窓口を返す。"""
+    return async_sessionmaker(
+        bind=get_engine(),
+        expire_on_commit=False,
+    )
+
+
+async def get_session() -> AsyncIterator[AsyncSession]:
+    """セッションを渡し、処理終了後に閉じる。自動コミットはしない。"""
+    factory = get_session_factory()
+
+    async with factory() as session:
+        yield session

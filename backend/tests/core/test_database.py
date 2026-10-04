@@ -220,3 +220,88 @@ with patch(
     assert database._engine is None
 """
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+async def test_get_session_exits_without_committing(monkeypatch):
+    session = Mock()
+    session.commit = AsyncMock()
+
+    context = AsyncMock()
+    context.__aenter__.return_value = session
+    context.__aexit__.return_value = False
+
+    factory = Mock(return_value=context)
+    monkeypatch.setattr(
+        database,
+        "get_session_factory",
+        Mock(return_value=factory),
+    )
+
+    dependency = database.get_session()
+    received = await anext(dependency)
+
+    assert received is session
+    context.__aexit__.assert_not_awaited()
+
+    with pytest.raises(StopAsyncIteration):
+        await anext(dependency)
+
+    context.__aexit__.assert_awaited_once_with(None, None, None)
+    session.commit.assert_not_called()
+    factory.assert_called_once_with()
+
+
+async def test_get_session_exits_on_error_without_committing(monkeypatch):
+    session = Mock()
+    session.commit = AsyncMock()
+
+    context = AsyncMock()
+    context.__aenter__.return_value = session
+    context.__aexit__.return_value = False
+
+    factory = Mock(return_value=context)
+    monkeypatch.setattr(
+        database,
+        "get_session_factory",
+        Mock(return_value=factory),
+    )
+
+    dependency = database.get_session()
+    await anext(dependency)
+    error = RuntimeError("Dummy service failure")
+
+    with pytest.raises(RuntimeError) as caught:
+        await dependency.athrow(error)
+
+    assert caught.value is error
+    context.__aexit__.assert_awaited_once()
+    assert context.__aexit__.await_args.args[0] is RuntimeError
+    assert context.__aexit__.await_args.args[1] is error
+    session.commit.assert_not_called()
+
+
+async def test_session_factory_creates_independent_sessions(monkeypatch):
+    engine = database.create_async_engine(
+        "postgresql+asyncpg://dummy:dummy@db/test_db"
+    )
+    connect = Mock(
+        side_effect=AssertionError("DB connection must not occur")
+    )
+    monkeypatch.setattr(engine.sync_engine.pool, "connect", connect)
+    monkeypatch.setattr(database, "get_engine", lambda: engine)
+
+    try:
+        factory = database.get_session_factory()
+
+        async with factory() as first, factory() as second:
+            assert first is not second
+            assert first.bind is engine
+            assert second.bind is engine
+            assert first.sync_session.expire_on_commit is False
+            assert second.sync_session.expire_on_commit is False
+            assert not first.in_transaction()
+            assert not second.in_transaction()
+
+        connect.assert_not_called()
+    finally:
+        await engine.dispose()
