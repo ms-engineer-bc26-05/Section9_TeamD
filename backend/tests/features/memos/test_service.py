@@ -147,6 +147,40 @@ async def test_commit_failure_keeps_state_for_retry(repo, cipher, store):
     assert len(repo.rows) == 1
 
 
+async def test_discard_failure_after_commit_is_still_saved(repo, cipher, store, caplog):
+    state = make_save_confirmation_state(store, USER_ID)
+    calls = 0
+
+    async def failing_discard(user_id, consultation_id):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("fake discard failure 架空")
+
+    service = MemoSaveService(
+        repo,
+        cipher,
+        get_approved=partial(get_approved_result, store=store),
+        discard=failing_discard,
+    )
+
+    # 保存失敗とは区別し、保存済みとして返す
+    first, created = await service.save(USER_ID, state.consultation_id, None)
+    assert created is True
+    assert len(repo.rows) == 1
+    assert "架空" not in caplog.text
+
+    # 一時状態が残っていても、再試行では既存のメモを返し、二重保存しない
+    assert store.exists(USER_ID, state.consultation_id)
+    second, created = await make_service(repo, cipher, store).save(
+        USER_ID, state.consultation_id, None
+    )
+    assert created is False
+    assert second == first
+    assert len(repo.rows) == 1
+    assert not store.exists(USER_ID, state.consultation_id)
+    assert calls == 1
+
+
 async def test_concurrent_saves_create_only_one_memo(repo, cipher, store):
     state = make_save_confirmation_state(store, USER_ID)
     service = make_service(repo, cipher, store)

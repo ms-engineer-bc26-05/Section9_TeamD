@@ -6,11 +6,13 @@
   3. 整理結果・扱い方・理由を暗号化する（暗号文の中に user_id・memo_id を含めて結び付ける）
   4. トランザクション内でユーザー行をロック → 保存済みメモを再検索 → INSERT
   5. commit に成功してから一時状態を破棄する（失敗した場合は一時状態を残し、再試行できるようにする）
+     破棄だけが失敗しても保存は成功として返す。残った一時状態は、再試行時に既存のメモを返して破棄する
 
 相談機能からは app.features.consultations.public だけをimportする。
 本文・鍵・暗号文をログ・例外のメッセージに含めない。
 """
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -36,6 +38,8 @@ from app.features.memos.repository import (
     NewMemo,
     StoredMemo,
 )
+
+logger = logging.getLogger(__name__)
 
 # 暗号化の方式・鍵・復号後のデータ構造の版（DB設計 approved_memos）
 ENCRYPTION_VERSION = "fernet-v1"
@@ -90,7 +94,7 @@ class MemoSaveService:
         """保存したメモと、新規に作成したかどうかを返す（新規なら201、保存済みなら200）"""
         existing = await self._repository.find_by_consultation(user_id, consultation_id)
         if existing is not None:
-            await self._discard(user_id, consultation_id)
+            await self._discard_after_save(user_id, consultation_id)
             return self._to_saved(existing, user_id), False
 
         # 状態がない・本人のものでない → 404、未承認・扱い方未選択 → 409
@@ -114,8 +118,16 @@ class MemoSaveService:
             created = False
 
         # commit に成功した後だけ一時状態を破棄する
-        await self._discard(user_id, consultation_id)
+        await self._discard_after_save(user_id, consultation_id)
         return self._to_saved(stored, user_id), created
+
+    async def _discard_after_save(self, user_id: UUID, consultation_id: UUID) -> None:
+        """保存済みのメモがある状態で一時状態を破棄する。失敗しても保存の失敗とは扱わない"""
+        try:
+            await self._discard(user_id, consultation_id)
+        except Exception as exc:
+            # 例外の種類だけを記録し、メッセージは出さない
+            logger.warning("consultation discard failed after memo save: %s", type(exc).__name__)
 
     def _build_new_memo(
         self, user_id: UUID, approved: ApprovedConsultation, reason: str | None

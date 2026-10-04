@@ -5,6 +5,7 @@ main.py への登録は結合Issue（I-06）で行うため、メモRouterだけ
 テストデータはすべて架空。
 """
 
+import dataclasses
 import logging
 from uuid import UUID, uuid4
 
@@ -89,12 +90,24 @@ def test_blank_reason_is_saved_as_null(client, state):
     assert response.json()["reason"] is None
 
 
-def test_reason_too_long_is_422(client, state, repo):
-    response = client.post(f"{BASE}/{state.consultation_id}/save", json={"reason": "あ" * 501})
+def test_reason_up_to_500_chars_is_saved_without_truncation(client, state):
+    response = client.post(f"{BASE}/{state.consultation_id}/save", json={"reason": "あ" * 500})
+
+    assert response.status_code == 201
+    assert response.json()["reason"] == "あ" * 500
+
+
+def test_reason_too_long_is_422_without_sent_value(client, state, repo, store):
+    reason = ("架空の理由" * 101)[:501]
+
+    response = client.post(f"{BASE}/{state.consultation_id}/save", json={"reason": reason})
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    # 送信値をエラー本文に含めない
+    assert "架空" not in response.text
     assert repo.rows == {}
+    assert store.exists(USER_ID, state.consultation_id)
 
 
 def test_server_managed_fields_are_rejected(client, state, repo):
@@ -151,6 +164,18 @@ def test_missing_key_is_500_without_details(app, state, repo, monkeypatch):
         }
     }
     assert repo.rows == {}
+
+
+def test_ciphertext_moved_to_another_memo_is_500_without_details(client, state, repo):
+    client.post(f"{BASE}/{state.consultation_id}/save", json={"reason": "架空の理由"})
+    key = (USER_ID, state.consultation_id)
+    repo.rows[key] = dataclasses.replace(repo.rows[key], id=uuid4())
+
+    response = client.post(f"{BASE}/{state.consultation_id}/save", json={})
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "INTERNAL_ERROR"
+    assert "架空" not in response.text
 
 
 def test_commit_failure_is_not_reported_as_saved(app, state, repo, store):
