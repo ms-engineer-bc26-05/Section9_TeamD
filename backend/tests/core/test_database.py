@@ -15,6 +15,13 @@ from sqlalchemy import (
 
 from app.core.database import Base, make_database_url
 
+from unittest.mock import AsyncMock, Mock
+
+from app.core import database
+
+import subprocess
+import sys
+
 
 def test_composite_unique_name_contains_all_columns():
     metadata = MetaData(
@@ -139,3 +146,77 @@ def test_database_url_rejects_invalid_input_without_echoing_it(value):
     }
     assert "INVALID_DUMMY_MARKER" not in str(caught.value)
     assert "dummy" not in str(caught.value)
+
+
+def test_get_engine_creates_once_and_reuses(monkeypatch):
+    fake_engine = Mock()
+    create_engine = Mock(return_value=fake_engine)
+
+    monkeypatch.setattr(database, "_engine", None)
+    monkeypatch.setattr(
+        database.config,
+        "DATABASE_URL",
+        "postgresql://dummy:dummy@db/test_db",
+    )
+    monkeypatch.setattr(database.config, "CONNECT_TIMEOUT_SECONDS", 3)
+    monkeypatch.setattr(database, "create_async_engine", create_engine)
+
+    assert create_engine.call_count == 0
+
+    first = database.get_engine()
+    second = database.get_engine()
+
+    assert first is fake_engine
+    assert second is first
+    create_engine.assert_called_once_with(
+        database.make_database_url("postgresql://dummy:dummy@db/test_db"),
+        echo=False,
+        hide_parameters=True,
+        pool_pre_ping=True,
+        connect_args={"timeout": 3},
+    )
+
+
+async def test_dispose_engine_closes_and_resets(monkeypatch):
+    fake_engine = Mock()
+    fake_engine.dispose = AsyncMock()
+    monkeypatch.setattr(database, "_engine", fake_engine)
+
+    await database.dispose_engine()
+
+    fake_engine.dispose.assert_awaited_once()
+    assert database._engine is None
+
+    await database.dispose_engine()
+
+    fake_engine.dispose.assert_awaited_once()
+
+
+async def test_dispose_engine_before_creation_does_nothing(monkeypatch):
+    create_engine = Mock()
+    monkeypatch.setattr(database, "_engine", None)
+    monkeypatch.setattr(database, "create_async_engine", create_engine)
+
+    await database.dispose_engine()
+
+    create_engine.assert_not_called()
+    assert database._engine is None
+
+
+def test_import_does_not_create_engine_or_require_database_url():
+    code = """
+from unittest.mock import patch
+from app.core import config
+
+config.DATABASE_URL = ""
+
+with patch(
+    "sqlalchemy.ext.asyncio.create_async_engine",
+    side_effect=AssertionError("Engine must not be created during import"),
+) as create_engine:
+    from app.core import database
+
+    create_engine.assert_not_called()
+    assert database._engine is None
+"""
+    subprocess.run([sys.executable, "-c", code], check=True)

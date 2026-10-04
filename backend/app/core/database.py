@@ -4,6 +4,9 @@ from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+from app.core import config
 
 
 NAMING_CONVENTION = {
@@ -37,3 +40,35 @@ def make_database_url(value: str) -> URL:
         raise ValueError("DB接続先はPostgreSQLを指定してください。")
 
     return url.set(drivername="postgresql+asyncpg")
+
+
+_engine: AsyncEngine | None = None
+
+
+def get_engine() -> AsyncEngine:
+    """最初に必要になったときだけEngineを作り、再利用する。"""
+    global _engine
+
+    if _engine is None:
+        _engine = create_async_engine(
+            make_database_url(config.DATABASE_URL),
+            echo=False,
+            hide_parameters=True,
+            pool_pre_ping=True,
+            connect_args={
+                "timeout": config.CONNECT_TIMEOUT_SECONDS,
+            },
+        )
+
+    return _engine
+
+
+async def dispose_engine() -> None:
+    """アプリ終了時に、Engineが管理する接続を片付ける。"""
+    global _engine
+
+    if _engine is None:
+        return
+
+    await _engine.dispose()
+    _engine = None
