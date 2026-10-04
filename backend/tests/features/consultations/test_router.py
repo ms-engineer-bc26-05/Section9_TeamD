@@ -307,12 +307,17 @@ def advance_to_result_ready(client, ai):
 def test_result_is_available_after_approval(client, ai):
     cid = advance_to_result_ready(client, ai)
 
-    client.post(f"{BASE}/{cid}/result/approve")
+    response = client.post(f"{BASE}/{cid}/result/approve")
+    assert response.status_code == 200
+    assert response.json()["status"] == "handling_selection"
     response = client.get(f"{BASE}/{cid}/result")  # handling_selection
     assert response.status_code == 200
     assert response.json()["approved"] is True
 
-    client.post(f"{BASE}/{cid}/handling", json={"handling": "tell"})
+    # 扱い方の選択が成功し、save_confirmation へ進んだことも確認する
+    response = client.post(f"{BASE}/{cid}/handling", json={"handling": "tell"})
+    assert response.status_code == 200
+    assert response.json() == {"status": "save_confirmation"}
     response = client.get(f"{BASE}/{cid}/result")  # save_confirmation
     assert response.status_code == 200
     assert response.json()["approved"] is True
