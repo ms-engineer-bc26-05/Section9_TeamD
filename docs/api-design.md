@@ -59,6 +59,7 @@
 
 - 日時は ISO 8601（例：`2026-09-23T10:00:00+09:00`）を仮の形式とする。
 - ID形式（UUID⁄連番のどちらを採用するか）はDB設計と合わせて**未定**。本資料のサンプル表記はUUID形式に統一済み。
+  - DB設計（PR #23）でUUIDに確定済み。本節の記載はI-05 #52で修正予定。
 
 ### 3.4 共通レスポンス形式
 
@@ -216,13 +217,23 @@ class ConsultationResultDraft(BaseModel):
     wish: str = Field(max_length=500)                # 望み
 
 class ConsultationResultInput(BaseModel):
-    """本人が確認・編集して送り返す内容（ユーザー編集リクエスト）。approvedはここでは受け付けない"""
-    model_config = ConfigDict(extra="forbid")
+    """本人が確認・編集して送り返す内容（ユーザー編集リクエスト・部分更新）。approvedはここでは受け付けない"""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     event_summary: Optional[str] = Field(default=None, min_length=1, max_length=500)
     emotion: Optional[str] = Field(default=None, min_length=1, max_length=300)
     true_feeling: Optional[str] = Field(default=None, min_length=1, max_length=500)
     background: Optional[str] = Field(default=None, max_length=500)
     wish: Optional[str] = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def check_fields(self) -> "ConsultationResultInput":
+        # 更新する項目を1つも含まない {} は拒否する（6.4.2）
+        if not self.model_fields_set:
+            raise ValueError("更新する項目がありません")
+        # 送られた項目に null は認めない（空文字にできるのは background のみ）
+        if any(getattr(self, name) is None for name in self.model_fields_set):
+            raise ValueError("nullは指定できません")
+        return self
 ```
 
 `approved`（本人が承認したか）はサーバー管理状態であり、`ConsultationResultInput`（PATCH）では受け付けず、専用の`/result/approve`（6.4.3）でのみ更新する。
@@ -580,7 +591,7 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
   "correction_limit_reached": false
 }
 ```
-訂正回数が上限に達した場合のresponse例（`action: "correct"`のレスポンスとして、`event_dialogue`から`event_summary_ready`へ直接遷移し、要約と編集可能な状態を返す。ワイヤーフレーム画面6-Aの「少し違います」導線はここで終了し、画面6-Bの「要約を直接編集する」導線へ引き継ぐ。訂正上限到達後は追加質問も受け付けないため、`can_ask_more`は`false`を返す）
+訂正回数が上限に達した場合のresponse例（**I-03B #50で実装**。`action: "correct"`のレスポンスとして、`event_dialogue`から`event_summary_ready`へ直接遷移し、要約と編集可能な状態を返す。ワイヤーフレーム画面6-Aの「少し違います」導線はここで終了し、画面6-Bの「要約を直接編集する」導線へ引き継ぐ。訂正上限到達後は追加質問も受け付けないため、`can_ask_more`は`false`を返す）
 ```json
 {
   "status": "event_summary_ready",
@@ -614,7 +625,7 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
 
 `answer`・`correction_input`の文字数上限は1000文字（**仮**）。
 
-主なエラー：`401`、`404`（`CONSULTATION_NOT_FOUND`。一時状態が存在しない・消失している・本人所有でない場合。§2参照）、`409`（`CONSULTATION_BUSY`：同じ相談を処理中。`CONSULTATION_STATE_CONFLICT`：`status`が既に`event_dialogue`から遷移済みの状態で本APIを呼び出した場合、`question_count`が3に達している状態で回答を続けようとした場合、`correction_count`が上限に達した状態で`correct`を指定した場合）、`422`（`VALIDATION_ERROR`。`answer`または`correction_input`が空、`action`と合わない項目を指定した、両方またはどちらも指定していない等）、`502`（`AI_UNAVAILABLE`・`AI_OUTPUT_INVALID`。AIの呼び出し失敗・AI出力の検証失敗）
+主なエラー：`401`、`404`（`CONSULTATION_NOT_FOUND`。一時状態が存在しない・消失している・本人所有でない場合。§2参照）、`409`（`CONSULTATION_BUSY`：同じ相談を処理中。`CONSULTATION_STATE_CONFLICT`：`status`が既に`event_dialogue`から遷移済みの状態で本APIを呼び出した場合、`question_count`が3に達している状態で回答を続けようとした場合（I-03B #50で実装）、`correction_count`が上限に達した状態で`correct`を指定した場合（I-03B #50で実装））、`422`（`VALIDATION_ERROR`。`answer`または`correction_input`が空、`action`と合わない項目を指定した、両方またはどちらも指定していない等）、`502`（`AI_UNAVAILABLE`・`AI_OUTPUT_INVALID`。AIの呼び出し失敗・AI出力の検証失敗）
 
 > **I-03B #50への引き継ぎ**：`question_count`・`correction_count`の上限に達したときの強制遷移（訂正上限到達時の`event_summary_ready`への遷移を含む）と上限超過時の`409`は、I-03Bで実装する。I-03A（PR #73）では、状態の不一致による`409`まで実装済み。
 
@@ -1235,12 +1246,12 @@ stateDiagram-v2
     event_dialogue --> event_dialogue: event-dialogue（answer継続・correct訂正）
     event_dialogue --> event_summary_ready: event-dialogue（要約完成 または correction_limit_reached到達）
     event_dialogue --> safety_guidance: event-dialogue（危機検知）
-    event_summary_ready --> event_dialogue: confirm（ask_more・訂正上限未到達のときのみ）
+    event_summary_ready --> event_dialogue: confirm（ask_more・can_ask_moreがtrueのときのみ）
     event_summary_ready --> emotion_selection: confirm（proceed）
     event_summary_ready --> safety_guidance: confirm（ask_more・危機検知）
     emotion_selection --> guided_dialogue: emotion
     emotion_selection --> safety_guidance: emotion（危機検知）
-    guided_dialogue --> guided_dialogue: guided-dialogue（本音→背景の回答後。current_topicが進む）
+    guided_dialogue --> guided_dialogue: guided-dialogue（本音・背景の回答後。current_topicが進む）
     guided_dialogue --> result_ready: guided-dialogue（望みの回答後に整理結果を作成）
     guided_dialogue --> safety_guidance: guided-dialogue（危機検知）
     result_ready --> result_ready: PATCH result（編集）
