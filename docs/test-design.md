@@ -1,7 +1,7 @@
 # ぽろり。MVPテスト設計書
 
 - 作成日：2026年9月26日
-- 更新日：2026年9月30日
+- 更新日：2026年10月4日
 - ステータス：初稿（9/30のレビュー指摘を反映済み・再レビュー依頼中）
 - 対応Issue：#16「MVPテスト設計書の初稿を作成する」
 - 主担当：るな
@@ -26,19 +26,19 @@
 
 ## 2. 前提・参照資料
 
-本書は以下の資料（2026年9月30日時点）をもとにした初稿であり、設計の確定に合わせて更新する。未マージの設計書は、照合したブランチを記載する。
+本書は以下の資料（2026年10月4日時点）をもとにした初稿であり、設計の確定に合わせて更新する。未マージの設計書は、照合したブランチを記載する。
 
 | 資料 | 関連Issue | 状態 |
 | --- | --- | --- |
 | docs/mvp-decisions.md、ワイヤーフレーム案、企画案 v0.3 | #2 | 確定 |
-| docs/screen-design.md | #9 | 初稿・未マージ（`origin/docs/issue-9-screen-design`、2026年9月30日時点） |
-| docs/api-design.md | #10 | 初稿・未マージ（`origin/docs/issue-10-API_first_design` 68c0d3c、2026年9月30日版） |
+| docs/screen-design.md | #9 | developへマージ済み（a73aca3） |
+| docs/api-design.md | #10 | developへマージ済み（2fd82dd）。本書は68c0d3cで照合し、その後の差分（表記の修正、一時状態の検討先の変更）は期待結果に影響しないことを確認済み |
+| docs/db-design.md | #11 | レビュー承認済み・未マージ（`origin/docs/issue-11-db-design` 77f27d2）。テーブル名・列名は照合のために参照し、確定値として扱わない |
 | technical-verification/openrouter-model-comparison/ | #4 | マージ済み |
 | technical-verification/auth-firebase-fastapi/ | #5 | マージ済み |
 | technical-verification/stripe-test-payment/ | #6 | マージ済み |
 | technical-verification/encryption-non-persistence/ | #7 | マージ済み |
 | technical-verification/redis-usage-limit/README.md | #8 | マージ済み（TTL・複数ユーザーの分離・フェイルオープンを参照） |
-| docs/db-design.md | #11 | 初稿・未マージ（`origin/docs/issue-11-db-design`、2026年9月30日時点。テーブル名・列名は照合のために参照し、確定値として扱わない） |
 | AGENTS.md | - | プロンプトインジェクション・AI出力の扱い（AI-12） |
 
 ### 期待結果の前提とする決定済みの方針
@@ -562,3 +562,4 @@ docker compose logs --no-color backend db frontend | grep -c "PORORI_TEST_MARKER
 | 2026-09-27 | じま | Q-20の合意と条件、3.4の書き方、分類ルール、Q-01・Q-07・Q-08・Q-16の更新、利用回数のタイミング（Q-21）、404方針 | 2節・3.1・3.3・3.4・7節・8節に反映 |
 | 2026-09-29 | じま | 4節・5.1の粒度確認。event_detailsへの項目名修正、N-05〜N-07の期待結果、パラメータ化、モックの書き方、AI出力スキーマ（Q-22）、P0への安全案内の追加、ログイン・ログアウトの扱い、N-01の優先度 | 2節・3.2・3.4・4節・5.1・8節に反映 |
 | 2026-09-30 | じま | 9/30版のAPI設計・DB設計との照合（DELETEの冪等な204、二重保存時の200、退会の物理削除と`deleting`、訂正上限到達時の遷移、扱い方の選び直し、一時状態のB案、`plan_code`）、テストの抜け（二重決済の防止、一時状態の消失、プロンプトインジェクションなど）、6節のBYTEA列の見逃し、要確認事項の状態の更新 | 2節・3.4・4節・5.1〜5.9・6節・8節に反映。ST-06・AU-21は削除せず別の項目に置き換え |
+| 2026-10-04 | るな | 画面設計（a73aca3）・API設計（2fd82dd）のマージと、DB設計（77f27d2）の更新を確認 | 2節の状態を更新。期待結果への影響なし |
