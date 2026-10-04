@@ -421,3 +421,24 @@ async def test_ai_asking_after_last_topic_is_invalid(service, ai):
         await service.guided_dialogue(USER, cid, "架空の望み", skipped=False)
     assert state.guided_turn_count == 2
     assert current_guided_topic(state) is GuidedTopic.WISH
+
+
+@pytest.mark.asyncio
+async def test_discard_while_ai_is_waiting_does_not_update_or_revive(service, store, ai):
+    # PRレビュー（もえさん）：AI応答待ちの間に破棄された相談は、応答後も更新・復活しない
+    state = await start(service, ai)
+    cid = state.consultation_id
+
+    ai.wait_event = asyncio.Event()
+    ai.started.clear()
+    ai.push(fakes.event_ask())
+    waiting = asyncio.create_task(service.event_dialogue(USER, cid, "answer", "架空の回答"))
+    await ai.started.wait()
+
+    store.discard(USER, cid)  # DELETE相当（I-03Bで実装予定の処理を模す）
+    ai.wait_event.set()
+
+    with pytest.raises(ConsultationNotFound):
+        await waiting
+    assert not store.exists(USER, cid)
+    assert state.question_count == 0

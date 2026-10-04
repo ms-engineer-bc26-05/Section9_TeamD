@@ -11,6 +11,10 @@ I-05からは、このモジュールだけをimportする。
   save_confirmation 状態ではAIを呼ぶ処理がなく、状態の更新は await を挟まずに終わるため、
   1つのイベントループ内では、書き換え途中の状態を読むことはない
 - 例外を404・409へ変換するには、Routerに route_class=ConsultationRoute を指定する
+
+テストに限り、次の2つもimportしてよい（AIを通さずに save_confirmation 状態を作るため）。
+  from app.features.consultations.store import ConsultationStore
+  from tests.features.consultations.factories import make_save_confirmation_state
 """
 
 from dataclasses import dataclass

@@ -4,9 +4,11 @@ main.py への登録は結合Issue（I-06）で行うため、相談Routerだけ
 認証は dependency_overrides で固定UUIDのユーザーにし、AIは FakeAIClient で模す（外部APIへ接続しない）。
 """
 
+import asyncio
 import logging
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -281,3 +283,91 @@ def test_requires_authentication(ai):
 
     assert response.status_code == 401
     assert ai.calls == []
+
+
+# --- I-04の画面実装が依存する契約（PRレビューでの追加） ----------------------------
+
+
+def advance_to_result_ready(client, ai):
+    cid = start(client, ai)
+    ai.push(fakes.event_summarize())
+    client.post(f"{BASE}/{cid}/event-dialogue", json={"action": "answer", "answer": "架空"})
+    client.post(f"{BASE}/{cid}/event-summary/confirm", json={"action": "proceed"})
+    ai.push(fakes.emotion_output())
+    client.post(f"{BASE}/{cid}/emotion", json={"category": "sad", "cannot_verbalize": True})
+    ai.push(fakes.guided_ask(), fakes.guided_ask())
+    client.post(f"{BASE}/{cid}/guided-dialogue", json={"answer": "架空の本音"})
+    client.post(f"{BASE}/{cid}/guided-dialogue", json={"answer": "架空の背景"})
+    ai.push(fakes.guided_complete(background="架空の背景のまとめ"))
+    response = client.post(f"{BASE}/{cid}/guided-dialogue", json={"answer": "架空の望み"})
+    assert response.json() == {"status": "result_ready"}
+    return cid
+
+
+def test_result_is_available_after_approval(client, ai):
+    cid = advance_to_result_ready(client, ai)
+
+    client.post(f"{BASE}/{cid}/result/approve")
+    response = client.get(f"{BASE}/{cid}/result")  # handling_selection
+    assert response.status_code == 200
+    assert response.json()["approved"] is True
+
+    client.post(f"{BASE}/{cid}/handling", json={"handling": "tell"})
+    response = client.get(f"{BASE}/{cid}/result")  # save_confirmation
+    assert response.status_code == 200
+    assert response.json()["approved"] is True
+
+
+def test_patch_background_to_empty_returns_whole_result(client, ai):
+    cid = advance_to_result_ready(client, ai)
+
+    response = client.patch(f"{BASE}/{cid}/result", json={"background": ""})
+    assert response.status_code == 200
+    assert response.json() == {
+        "event_summary": "架空の出来事",
+        "emotion": "架空の感情",
+        "true_feeling": "架空の本音",
+        "background": "",
+        "wish": "架空の望み",
+        "approved": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_concurrent_request_returns_409_busy(ai, current_user):
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.include_router(router)
+    store = ConsultationStore()
+    app.dependency_overrides[get_consultation_store] = lambda: store
+    app.dependency_overrides[get_ai_client] = lambda: ai
+    app.dependency_overrides[get_current_user_id] = lambda: current_user["id"]
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        ai.push(fakes.first_question())
+        response = await client.post(BASE, json={"theme": "other", "detail": "架空の相談本文"})
+        cid = response.json()["consultation_id"]
+
+        # 1件目はAIの応答待ちで止めておく
+        ai.wait_event = asyncio.Event()
+        ai.started.clear()
+        ai.push(fakes.event_ask())
+        first = asyncio.create_task(
+            client.post(
+                f"{BASE}/{cid}/event-dialogue", json={"action": "answer", "answer": "架空の回答1"}
+            )
+        )
+        await ai.started.wait()
+
+        second = await client.post(
+            f"{BASE}/{cid}/event-dialogue", json={"action": "answer", "answer": "架空の回答2"}
+        )
+        assert second.status_code == 409
+        assert second.json()["error"]["code"] == "CONSULTATION_BUSY"
+        assert "架空" not in second.text
+
+        ai.wait_event.set()
+        response = await first
+        assert response.status_code == 200
+        assert response.json()["question_count"] == 1
