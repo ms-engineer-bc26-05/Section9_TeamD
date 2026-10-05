@@ -150,6 +150,29 @@ def test_unapproved_state_is_409(client, state, repo):
     assert repo.rows == {}
 
 
+@pytest.mark.parametrize(
+    ("status", "status_code", "error"),
+    [
+        (None, 401, {"code": "UNAUTHORIZED", "message": "ログインしてください。"}),
+        (
+            "deleting",
+            403,
+            {"code": "ACCOUNT_DELETING", "message": "退会処理中のため利用できません。"},
+        ),
+    ],
+    ids=["user-missing", "deleting"],
+)
+def test_user_changed_after_auth_is_rejected(client, state, repo, store, status, status_code, error):
+    repo.user_statuses[USER_ID] = status
+
+    response = client.post(f"{BASE}/{state.consultation_id}/save", json={"reason": "架空の理由"})
+
+    assert response.status_code == status_code
+    assert response.json() == {"error": error}
+    assert repo.rows == {}
+    assert store.exists(USER_ID, state.consultation_id)
+
+
 def test_missing_key_is_500_without_details(app, state, repo, monkeypatch):
     del app.dependency_overrides[get_memo_cipher]
     monkeypatch.delenv("MEMO_ENCRYPTION_KEY", raising=False)

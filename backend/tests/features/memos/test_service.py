@@ -19,6 +19,7 @@ from app.features.consultations.public import (
 from app.features.consultations.schemas import ConsultationStatus, HandlingType
 from app.features.consultations.store import ConsultationStore
 from app.features.memos.crypto import MemoEncryptionError, create_fernet, decrypt_payload
+from app.features.memos.repository import UserNotActive, UserNotFound
 from app.features.memos.service import MemoSaveService
 
 from tests.features.consultations.factories import make_save_confirmation_state
@@ -179,6 +180,31 @@ async def test_discard_failure_after_commit_is_still_saved(repo, cipher, store, 
     assert len(repo.rows) == 1
     assert not store.exists(USER_ID, state.consultation_id)
     assert calls == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "error"),
+    [(None, UserNotFound), ("deleting", UserNotActive)],
+    ids=["user-missing", "deleting"],
+)
+async def test_user_changed_after_auth_is_not_saved(repo, cipher, store, status, error):
+    """認証後に内部ユーザーが削除された・退会処理が始まった場合（ロック後の再確認で止める）"""
+    state = make_save_confirmation_state(store, USER_ID)
+    service = make_service(repo, cipher, store)
+
+    async def get_approved_then_user_changes(user_id, consultation_id):
+        approved = await get_approved_result(user_id, consultation_id, store=store)
+        repo.user_statuses[user_id] = status
+        return approved
+
+    service._get_approved = get_approved_then_user_changes
+
+    with pytest.raises(error):
+        await service.save(USER_ID, state.consultation_id, None)
+
+    # INSERTへ進まず、一時状態も破棄しない
+    assert repo.rows == {}
+    assert store.exists(USER_ID, state.consultation_id)
 
 
 async def test_concurrent_saves_create_only_one_memo(repo, cipher, store):

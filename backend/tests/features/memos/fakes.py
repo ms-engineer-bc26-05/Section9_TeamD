@@ -1,7 +1,8 @@
 """テスト用のメモリ上のMemoRepository。DBを使わずにServiceのテストを書くために使う。
 
 - transaction() はブロックを正常に抜けたときだけ反映（commit）し、例外なら破棄（rollback）する
-- lock_user はユーザーごとの asyncio.Lock を取り、トランザクション終了まで保持する
+- lock_user はユーザーごとの asyncio.Lock を取り、トランザクション終了まで保持する。
+  ロック後に user_statuses でユーザーの状態を再確認する（未設定は active、None は不在）
 - commit_error を設定すると、次の commit でその例外を送出する（保存失敗の再現用）
 """
 
@@ -11,7 +12,13 @@ from datetime import UTC, datetime
 from typing import AsyncIterator
 from uuid import UUID
 
-from app.features.memos.repository import DuplicateMemo, NewMemo, StoredMemo
+from app.features.memos.repository import (
+    DuplicateMemo,
+    NewMemo,
+    StoredMemo,
+    UserNotActive,
+    UserNotFound,
+)
 
 _Key = tuple[UUID, UUID]  # (user_id, source_consultation_id)
 
@@ -20,6 +27,8 @@ class InMemoryMemoRepository:
     def __init__(self) -> None:
         self.rows: dict[_Key, StoredMemo] = {}
         self.commit_error: Exception | None = None
+        # ユーザーの状態（未設定は active、None は内部ユーザーが存在しない）
+        self.user_statuses: dict[UUID, str | None] = {}
         self._user_locks: dict[UUID, asyncio.Lock] = {}
 
     async def find_by_consultation(
@@ -55,6 +64,11 @@ class _InMemoryTransaction:
             return
         await lock.acquire()
         self._held.append(lock)
+        status = self._repo.user_statuses.get(user_id, "active")
+        if status is None:
+            raise UserNotFound
+        if status != "active":
+            raise UserNotActive
 
     async def find_by_consultation(
         self, user_id: UUID, consultation_id: UUID

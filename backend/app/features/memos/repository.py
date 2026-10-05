@@ -5,8 +5,13 @@ DBの実装（SQLAlchemy）はI-01のORM・マイグレーション基盤が届�
 
 保存の流れ（DB設計「保存処理」・API設計6.5.2）：
   1. トランザクションの外で find_by_consultation により保存済みを確認する
-  2. transaction() の中で lock_user → find_by_consultation（再検索）→ insert
+  2. transaction() の中で lock_user（ユーザーの存在・status=active の再確認を含む）
+     → find_by_consultation（再検索）→ insert
   3. insert が DuplicateMemo を送出した場合は、既存のメモを取得して返す
+
+DBの実装で確認すること：
+  トランザクションの外の find_by_consultation と transaction() が同じ AsyncSession を使う場合、
+  検索で自動的に始まったトランザクションと session.begin() が衝突しない構成にする
 """
 
 from contextlib import AbstractAsyncContextManager
@@ -18,6 +23,14 @@ from uuid import UUID
 
 class DuplicateMemo(Exception):
     """UNIQUE (user_id, source_consultation_id) に違反した（同じ相談のメモが保存済み）"""
+
+
+class UserNotFound(Exception):
+    """ロック後の再確認で、内部ユーザーが存在しなかった（認証後に削除された）"""
+
+
+class UserNotActive(Exception):
+    """ロック後の再確認で、ユーザーの status が active でなかった（認証後に退会処理が始まった）"""
 
 
 @dataclass(frozen=True)
@@ -55,7 +68,12 @@ class MemoTransaction(Protocol):
     """1回のDBトランザクション。正常に抜けたらcommit、例外ならrollbackする"""
 
     async def lock_user(self, user_id: UUID) -> None:
-        """対象のユーザー行をロックする（保存・退会・利用権限変更で取得順序をそろえる）"""
+        """対象のユーザー行をロックし、ロック後にユーザーの状態を再確認する
+
+        ロックの取得順序は、保存・退会・利用権限変更でそろえる。
+        ユーザーが存在しない場合は UserNotFound、status が active でない場合は
+        UserNotActive を送出する（トランザクションは rollback され、INSERT へ進まない）。
+        """
 
     async def find_by_consultation(
         self, user_id: UUID, consultation_id: UUID

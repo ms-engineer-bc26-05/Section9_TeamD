@@ -4,7 +4,8 @@
   1. 保存済みメモを検索する（あれば一時状態を確認せずに返す。保存成功後の再試行に対応する）
   2. 相談機能の public.get_approved_result で、承認済み・扱い方選択済みの結果を取得する
   3. 整理結果・扱い方・理由を暗号化する（暗号文の中に user_id・memo_id を含めて結び付ける）
-  4. トランザクション内でユーザー行をロック → 保存済みメモを再検索 → INSERT
+  4. トランザクション内でユーザー行をロック（ユーザーの存在・status=active を再確認）
+     → 保存済みメモを再検索 → INSERT
   5. commit に成功してから一時状態を破棄する（失敗した場合は一時状態を残し、再試行できるようにする）
      破棄だけが失敗しても保存は成功として返す。残った一時状態は、再試行時に既存のメモを返して破棄する
 
@@ -104,6 +105,7 @@ class MemoSaveService:
         created = False
         try:
             async with self._repository.transaction() as tx:
+                # ユーザー不在・active でない場合は例外で抜け、INSERT・一時状態の破棄へ進まない
                 await tx.lock_user(user_id)
                 stored = await tx.find_by_consultation(user_id, consultation_id)
                 if stored is None:

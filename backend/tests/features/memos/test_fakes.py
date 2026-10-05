@@ -6,7 +6,12 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.features.memos.repository import DuplicateMemo, NewMemo
+from app.features.memos.repository import (
+    DuplicateMemo,
+    NewMemo,
+    UserNotActive,
+    UserNotFound,
+)
 from tests.features.memos.fakes import InMemoryMemoRepository
 
 USER_ID = UUID("11111111-1111-4111-8111-111111111111")
@@ -108,3 +113,20 @@ async def test_lock_user_serializes_transactions_for_same_user():
     await asyncio.gather(first(), second())
 
     assert order == ["first-done", "second-locked"]
+
+
+@pytest.mark.parametrize(
+    ("status", "error"),
+    [(None, UserNotFound), ("deleting", UserNotActive)],
+)
+async def test_lock_user_rechecks_user_and_releases_lock(status, error):
+    repo = InMemoryMemoRepository()
+    repo.user_statuses[USER_ID] = status
+
+    with pytest.raises(error):
+        async with repo.transaction() as tx:
+            await tx.lock_user(USER_ID)
+            await tx.insert(make_new_memo())
+
+    assert repo.rows == {}
+    assert not repo.user_lock(USER_ID).locked()
