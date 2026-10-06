@@ -82,20 +82,21 @@ async def test_unavailable_user_is_rejected_and_session_closed(
 
 
 @pytest.mark.parametrize(
-    "error",
+    ("error", "expected_error"),
     [
-        InvalidTokenError("Invalid authentication token"),
-        AuthServiceUnavailableError("Authentication service unavailable"),
+        (InvalidTokenError("Dummy secret"), service.AuthenticationRequiredError),
+        (AuthServiceUnavailableError("Dummy secret"), service.AuthServiceUnavailableError),
     ],
 )
-async def test_verification_failure_does_not_open_db(auth_mocks, error):
+async def test_verification_failure_does_not_open_db(auth_mocks, error, expected_error):
     _, lookup, thread, _, context, factory = auth_mocks
     thread.side_effect = error
 
-    with pytest.raises(type(error)) as caught:
+    with pytest.raises(expected_error) as caught:
         await service.authenticate_user("dummy-token")
 
-    assert caught.value is error
+    assert "Dummy secret" not in str(caught.value)
+    assert caught.value.__suppress_context__ is True
     service.get_session_factory.assert_not_called()
     factory.assert_not_called()
     context.__aenter__.assert_not_awaited()
