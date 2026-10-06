@@ -13,6 +13,12 @@
 - 上限の確認・AI呼び出し・回数の更新はロックの中で行うため、同時リクエストでも上限を超えない
 - 成功したAI呼び出しは1回の相談で最大12回
   （開始1・出来事の回答と訂正あわせて最大4・追加質問最大3・感情1・本音・背景・望み3）
+
+安全案内（I-03B。Q-09・Q-28）：
+- 利用者の自由入力をAIへ送る4つの処理（開始・出来事の対話・感情・本音〜望み）では、
+  AIを呼ぶ前にキーワードで判定し、該当すればAIを呼ばずに安全案内へ切り替える
+- AIが安全案内を示した場合（kind="safety" または risk_detected=true）も切り替える
+- 安全案内へ切り替えたら相談内容を消去し、サーバーの固定文言だけを返す
 """
 
 from typing import Literal
@@ -27,6 +33,11 @@ from app.features.consultations.ai_schemas import (
     AIOutputInvalid,
     AIOutputKind,
     parse_ai_output,
+)
+from app.features.consultations.safety import (
+    SAFETY_MESSAGE,
+    contains_crisis_keyword,
+    fixed_safety_guidance,
 )
 from app.features.consultations.exceptions import (
     ConsultationNotFound,
@@ -45,8 +56,6 @@ from app.features.consultations.schemas import (
     EventDetailsInput,
     GuidedTopic,
     HandlingType,
-    SafetyGuidance,
-    SafetyGuidanceDraft,
     ThemeCategory,
 )
 from app.features.consultations.state import ConsultationState, utc_now
@@ -57,8 +66,8 @@ from app.integrations.openrouter.client import OpenRouterClient
 QUESTION_LIMIT = 3
 CORRECTION_LIMIT = 2
 
-# 安全案内の仮の固定文言。I-03B（Q-09）で、確認済みの相談窓口の案内に差し替える
-SAFETY_MESSAGE_PLACEHOLDER = "（仮）安全案内の文言はI-03Bで確定します。"
+# 安全案内の固定文言（safety.py で管理する。既存のテストのため、この名前でも参照できるようにする）
+SAFETY_MESSAGE_PLACEHOLDER = SAFETY_MESSAGE
 
 # 整理結果を返せる状態
 RESULT_STATUSES = {
@@ -85,18 +94,10 @@ def current_guided_topic(state: ConsultationState) -> GuidedTopic | None:
     return GUIDED_TOPIC_ORDER[state.guided_turn_count]
 
 
-def _normalize_safety(draft: SafetyGuidanceDraft | None) -> SafetyGuidance:
-    # AIの生成文（draft.safety_message）は使わず、固定文言へ差し替える（設計書4.5）
-    return SafetyGuidance(
-        risk_detected=True,
-        safety_message=SAFETY_MESSAGE_PLACEHOLDER,
-        continued_normal_structuring=False,
-    )
-
-
-def _apply_safety(state: ConsultationState, draft: SafetyGuidanceDraft | None) -> None:
+def _apply_safety(state: ConsultationState) -> None:
+    """安全案内へ切り替える。相談内容を消去し、AIの生成文は使わず固定文言を入れる（設計書4.5）"""
     state.clear_content()
-    state.safety_guidance = _normalize_safety(draft)
+    state.safety_guidance = fixed_safety_guidance()
     state.status = ConsultationStatus.SAFETY_GUIDANCE
 
 
@@ -132,11 +133,17 @@ class ConsultationService:
             theme=theme,
             status=ConsultationStatus.EVENT_DIALOGUE,
         )
+        if contains_crisis_keyword(detail):
+            # AIを呼ばずに安全案内へ切り替える（Q-09）
+            _apply_safety(state)
+            self._store.add(state)
+            return state
+
         history = [prompts.user_turn(detail)]
         output = await self._call_ai(FIRST_QUESTION, state, PromptStage.FIRST_QUESTION, history)
 
         if output.kind is AIOutputKind.SAFETY:
-            _apply_safety(state, output.safety)
+            _apply_safety(state)
         else:
             state.messages = [*history, prompts.assistant_turn(output.ai_question)]
             state.ai_question = output.ai_question
@@ -161,6 +168,10 @@ class ConsultationService:
     ) -> ConsultationState:
         async with self._store.locked(user_id, consultation_id) as state:
             _require_status(state, ConsultationStatus.EVENT_DIALOGUE)
+            if contains_crisis_keyword(text):
+                _apply_safety(state)
+                state.touch()
+                return state
 
             # 上限を超える操作は、AIを呼ぶ前に拒否する（通常は状態が先に進んでいるため起こらない）
             if action == "answer":
@@ -190,7 +201,7 @@ class ConsultationService:
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
-                _apply_safety(state, output.safety)
+                _apply_safety(state)
                 state.touch()
                 return state
 
@@ -264,7 +275,7 @@ class ConsultationService:
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
-                _apply_safety(state, output.safety)
+                _apply_safety(state)
             elif output.next_action != "ask":
                 # 追加の質問を求めたのに質問が返らない場合は、AIの出力不正として扱う
                 raise AIOutputInvalid("追加の質問がありません")
@@ -286,6 +297,10 @@ class ConsultationService:
         """感情を受け付ける。戻り値の2つ目は受け止めの一言（ai_response）"""
         async with self._store.locked(user_id, consultation_id) as state:
             _require_status(state, ConsultationStatus.EMOTION_SELECTION)
+            if contains_crisis_keyword(emotion.detail):
+                _apply_safety(state)
+                state.touch()
+                return state, None
 
             new_turn = prompts.emotion_turn(emotion)
             output = await self._call_ai(
@@ -299,7 +314,7 @@ class ConsultationService:
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
-                _apply_safety(state, output.safety)
+                _apply_safety(state)
                 state.touch()
                 return state, None
 
@@ -333,6 +348,10 @@ class ConsultationService:
         """
         async with self._store.locked(user_id, consultation_id) as state:
             _require_status(state, ConsultationStatus.GUIDED_DIALOGUE)
+            if contains_crisis_keyword(answer):
+                _apply_safety(state)
+                state.touch()
+                return state
             topic = current_guided_topic(state)
             if topic is None:
                 raise ConsultationStateConflict
@@ -358,7 +377,7 @@ class ConsultationService:
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
-                _apply_safety(state, output.safety)
+                _apply_safety(state)
                 state.touch()
                 return state
 

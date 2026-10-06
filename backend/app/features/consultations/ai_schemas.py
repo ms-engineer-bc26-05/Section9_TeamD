@@ -5,10 +5,15 @@ OpenAI系モデルのstrictモードに合わせて、全項目を required と�
 項目の組み合わせ（例：ask なのに ai_question が null）はPydanticで検証し、不正な場合は
 AIOutputInvalid（APIでは502）とする。
 
+ただし、安全案内を示す印（kind="safety"、または safety.risk_detected=true）を読み取れる場合は、
+ほかの項目が不正でも安全案内（SafetyOutput）として扱う（Q-28。I-03Bで決定）。
+安全案内の文言はもともとAIの出力を使わず固定文言に差し替えるため、印だけを使えば安全に案内できる。
+
 AIへ渡すJSON Schemaは、strictモードで対応が分かれるキーワード（maxLength・default等）を使わず、
 型・必須・列挙値・additionalPropertiesだけで書く。文字数はPydantic側で検証する。
 """
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal, TypeVar
 
@@ -173,12 +178,40 @@ class GuidedDialogueAIOutput(_AIOutputBase):
 OutputT = TypeVar("OutputT", bound=_AIOutputBase)
 
 
-def parse_ai_output(model: type[OutputT], content: dict[str, Any]) -> OutputT:
+@dataclass(frozen=True)
+class SafetyOutput:
+    """安全案内と判定したAIの出力（Q-28）。
+
+    AIが返した safety の中身（safety_message など）は使わないため、何も持たない。
+    呼び出し側は、通常の出力と同じく kind で分岐できる。
+    """
+
+    kind: AIOutputKind = AIOutputKind.SAFETY
+    safety: None = None
+
+
+def reads_as_safety(content: dict[str, Any]) -> bool:
+    """AIの出力から、安全案内を示す印を読み取れるか（Q-28）。
+
+    - kind が "safety"
+    - または safety.risk_detected が true（kind が "normal" でも安全側に倒す）
+    値は型まで一致する場合だけ読み取れたとみなす（"true" などの文字列は読み取れない扱い）。
+    """
+    if content.get("kind") == AIOutputKind.SAFETY.value:
+        return True
+    safety = content.get("safety")
+    return isinstance(safety, dict) and safety.get("risk_detected") is True
+
+
+def parse_ai_output(model: type[OutputT], content: dict[str, Any]) -> OutputT | SafetyOutput:
     """AIの出力を検証する。
 
+    安全案内を示す印を読み取れる場合は、ほかの項目を検証せずに SafetyOutput を返す（Q-28）。
     PydanticのValidationErrorは入力値（AIの出力）をメッセージに含むため、
     そのまま外へ出さず、内容を含まない AIOutputInvalid に置き換える。
     """
+    if reads_as_safety(content):
+        return SafetyOutput()
     try:
         return model.model_validate(content)
     except ValidationError:
