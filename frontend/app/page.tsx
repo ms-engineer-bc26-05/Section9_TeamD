@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 // ブラウザから直接FastAPIを呼ぶため、PC側の公開URL（localhost）を使う
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Q-01 #46：Actions上で故意に失敗させる確認用（このPRはマージしない）
+const broken: number = "x";
+
 type CheckState = "loading" | "ok" | "error";
 
 const CHECKS = [

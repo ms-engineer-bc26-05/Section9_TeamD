@@ -24,7 +24,7 @@ async def test_health_returns_ok():
     response = await _get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "backend"}
+    assert response.json() == {"status": "intentional-failure-check", "service": "backend"}
 
 
 async def test_db_failure_returns_fixed_error(monkeypatch, caplog):
