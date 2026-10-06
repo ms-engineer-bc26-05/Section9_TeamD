@@ -55,12 +55,21 @@ class ConsultationStore:
         ロック中であれば待たずに ConsultationBusy を送出する。
         locked() の確認からロック取得までの間に await を挟まないため、
         1つのイベントループ内では確認と取得の間に別のリクエストが割り込まない。
+
+        ロックの中で例外が起きた場合は、ロック取得時の状態へ戻してから解放する。
+        状態を書き換えた後に想定外のエラー（500）が起きても、回数や段階が進んだまま
+        残らないようにするため（テスト設計書 ST-19）。
         """
         state = self.get(user_id, consultation_id)
         if state.lock.locked():
             raise ConsultationBusy
         async with state.lock:
-            yield state
+            before = state.snapshot()
+            try:
+                yield state
+            except BaseException:
+                state.restore(before)
+                raise
 
 
 # APIプロセスで共有するストア。テストでは get_consultation_store を差し替える

@@ -5,9 +5,10 @@
 """
 
 import asyncio
-from dataclasses import dataclass, field
+import copy
+from dataclasses import dataclass, field, fields
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from app.features.consultations.schemas import (
@@ -88,3 +89,18 @@ class ConsultationState:
     def touch(self) -> None:
         """更新に成功したときに最終操作時刻を更新する（GETでは呼ばない）"""
         self.updated_at = utc_now()
+
+    def snapshot(self) -> dict[str, Any]:
+        """更新前の値の控えをとる（ロックは除く）。
+
+        リストは中身ごと書き換わるためコピーする。Pydanticのモデルは、更新時に
+        丸ごと差し替える（model_copy）ため、参照をそのまま控えればよい。
+        """
+        return {
+            f.name: copy.copy(getattr(self, f.name)) for f in fields(self) if f.name != "lock"
+        }
+
+    def restore(self, snapshot: dict[str, Any]) -> None:
+        """snapshot() でとった控えへ戻す"""
+        for name, value in snapshot.items():
+            setattr(self, name, value)
