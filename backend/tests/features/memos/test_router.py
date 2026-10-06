@@ -201,15 +201,22 @@ def test_ciphertext_moved_to_another_memo_is_500_without_details(client, state, 
     assert "架空" not in response.text
 
 
-def test_commit_failure_is_not_reported_as_saved(app, state, repo, store):
-    repo.commit_error = RuntimeError("fake commit failure")
+def test_commit_failure_is_500_without_details(client, state, repo, store, caplog):
+    caplog.set_level(logging.DEBUG)
+    # DBの例外はメッセージにSQLのパラメータ（暗号文）を含みうる
+    repo.commit_error = RuntimeError("fake commit failure: secret-parameter")
 
-    response = TestClient(app, raise_server_exceptions=False).post(
-        f"{BASE}/{state.consultation_id}/save", json={}
-    )
+    response = client.post(f"{BASE}/{state.consultation_id}/save", json={})
 
     assert response.status_code == 500
-    assert "架空" not in response.text
+    assert response.json() == {
+        "error": {
+            "code": "INTERNAL_ERROR",
+            "message": "メモを保存できませんでした。時間をおいてもう一度お試しください。",
+        }
+    }
+    assert "secret-parameter" not in caplog.text
+    assert "Traceback" not in caplog.text
     assert repo.rows == {}
     assert store.exists(USER_ID, state.consultation_id)
 

@@ -3,10 +3,13 @@
 保存の順序：
   1. 保存済みメモを検索する（あれば一時状態を確認せずに返す。保存成功後の再試行に対応する）
   2. 相談機能の public.get_approved_result で、承認済み・扱い方選択済みの結果を取得する
+     一時状態がない場合は保存済みメモを再検索する（1の後に別のリクエストが保存・破棄した場合に、
+     404ではなく保存済みのメモを返す）
   3. 整理結果・扱い方・理由を暗号化する（暗号文の中に user_id・memo_id を含めて結び付ける）
   4. トランザクション内でユーザー行をロック（ユーザーの存在・status=active を再確認）
      → 保存済みメモを再検索 → INSERT
-  5. commit に成功してから一時状態を破棄する（失敗した場合は一時状態を残し、再試行できるようにする）
+  5. commit に成功してから、返すメモを復号・照合し、一時状態を破棄する
+     （commit に失敗した場合は一時状態を残し、再試行できるようにする）
      破棄だけが失敗しても保存は成功として返す。残った一時状態は、再試行時に既存のメモを返して破棄する
 
 相談機能からは app.features.consultations.public だけをimportする。
@@ -25,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.features.consultations.public import (
     ApprovedConsultation,
+    ConsultationNotFound,
     discard_consultation,
     get_approved_result,
 )
@@ -51,6 +55,9 @@ PAYLOAD_VERSION = 1
 GetApproved = Callable[[UUID, UUID], Awaitable[ApprovedConsultation]]
 Discard = Callable[[UUID, UUID], Awaitable[None]]
 
+# 扱い方（API設計書4.4）。保存する内容とAPIのレスポンスで同じ型を使う
+MemoHandling = Literal["tell", "hold", "not_tell"]
+
 
 class MemoPayload(BaseModel):
     """暗号化して保存する内容（payload_version=1）。復号後もこの形で検証する"""
@@ -62,7 +69,7 @@ class MemoPayload(BaseModel):
     true_feeling: str
     background: str
     wish: str
-    handling: Literal["tell", "hold", "not_tell"]
+    handling: MemoHandling
     reason: str | None
 
 
@@ -70,7 +77,7 @@ class MemoPayload(BaseModel):
 class SavedMemo:
     memo_id: UUID
     created_at: datetime
-    handling: str
+    handling: MemoHandling
     reason: str | None
     event_summary: str
 
@@ -95,11 +102,17 @@ class MemoSaveService:
         """保存したメモと、新規に作成したかどうかを返す（新規なら201、保存済みなら200）"""
         existing = await self._repository.find_by_consultation(user_id, consultation_id)
         if existing is not None:
-            await self._discard_after_save(user_id, consultation_id)
-            return self._to_saved(existing, user_id), False
+            return await self._return_saved(existing, user_id, consultation_id), False
 
         # 状態がない・本人のものでない → 404、未承認・扱い方未選択 → 409
-        approved = await self._get_approved(user_id, consultation_id)
+        try:
+            approved = await self._get_approved(user_id, consultation_id)
+        except ConsultationNotFound:
+            # 最初の検索の後に、別のリクエスト（二度押し・再試行）が保存して一時状態を破棄した
+            stored = await self._repository.find_by_consultation(user_id, consultation_id)
+            if stored is None:
+                raise
+            return await self._return_saved(stored, user_id, consultation_id), False
         new_memo = self._build_new_memo(user_id, approved, reason)
 
         created = False
@@ -113,15 +126,26 @@ class MemoSaveService:
                     stored = await tx.insert(new_memo)
                     created = True
         except DuplicateMemo:
-            # 同時リクエストが先に保存した。rollback 後に保存済みのメモを取得して返す
+            # 同時リクエストが先に保存した（INSERT・commit のどちらで分かった場合も）。
+            # rollback 後に保存済みのメモを取得して返す
             stored = await self._repository.find_by_consultation(user_id, consultation_id)
             if stored is None:
                 raise
             created = False
 
         # commit に成功した後だけ一時状態を破棄する
+        return await self._return_saved(stored, user_id, consultation_id), created
+
+    async def _return_saved(
+        self, stored: StoredMemo, user_id: UUID, consultation_id: UUID
+    ) -> SavedMemo:
+        """保存済みのメモを復号・照合してから、一時状態を破棄する。
+
+        復号・照合に失敗した場合は破棄せず、一時状態を残す。
+        """
+        saved = self._to_saved(stored, user_id)
         await self._discard_after_save(user_id, consultation_id)
-        return self._to_saved(stored, user_id), created
+        return saved
 
     async def _discard_after_save(self, user_id: UUID, consultation_id: UUID) -> None:
         """保存済みのメモがある状態で一時状態を破棄する。失敗しても保存の失敗とは扱わない"""

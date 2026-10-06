@@ -4,6 +4,8 @@
 - lock_user はユーザーごとの asyncio.Lock を取り、トランザクション終了まで保持する。
   ロック後に user_statuses でユーザーの状態を再確認する（未設定は active、None は不在）
 - commit_error を設定すると、次の commit でその例外を送出する（保存失敗の再現用）
+- 検索・INSERT・commit では await asyncio.sleep(0) で処理を譲り、実DBの通信待ちを再現する
+  （同時リクエストのテストで、もう一方のリクエストが途中に割り込めるようにする）
 """
 
 import asyncio
@@ -34,6 +36,7 @@ class InMemoryMemoRepository:
     async def find_by_consultation(
         self, user_id: UUID, consultation_id: UUID
     ) -> StoredMemo | None:
+        await asyncio.sleep(0)
         return self.rows.get((user_id, consultation_id))
 
     @asynccontextmanager
@@ -41,6 +44,7 @@ class InMemoryMemoRepository:
         tx = _InMemoryTransaction(self)
         try:
             yield tx
+            await asyncio.sleep(0)
             if self.commit_error is not None:
                 error, self.commit_error = self.commit_error, None
                 raise error
@@ -73,10 +77,12 @@ class _InMemoryTransaction:
     async def find_by_consultation(
         self, user_id: UUID, consultation_id: UUID
     ) -> StoredMemo | None:
+        await asyncio.sleep(0)
         key = (user_id, consultation_id)
         return self.pending.get(key) or self._repo.rows.get(key)
 
     async def insert(self, memo: NewMemo) -> StoredMemo:
+        await asyncio.sleep(0)
         key = (memo.user_id, memo.source_consultation_id)
         if key in self.pending or key in self._repo.rows:
             raise DuplicateMemo

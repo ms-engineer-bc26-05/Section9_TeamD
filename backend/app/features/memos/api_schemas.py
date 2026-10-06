@@ -1,10 +1,11 @@
 """メモ保存APIのリクエスト・レスポンス（docs/api-design.md 6.5.2）。"""
 
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.features.memos.service import MemoHandling
 
 # 文字数上限（仮置き。Issue #52で相談中）
 REASON_MAX_LENGTH = 500
@@ -27,6 +28,6 @@ class SaveMemoRequest(BaseModel):
 class SavedMemoView(BaseModel):
     memo_id: UUID
     created_at: datetime
-    handling: Literal["tell", "hold", "not_tell"]
+    handling: MemoHandling
     reason: str | None
     event_summary: str

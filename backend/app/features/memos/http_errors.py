@@ -2,6 +2,10 @@
 
 相談機能の例外（404・409）は、継承元の ConsultationRoute で変換する。
 エラーの本文・ログに、本文・鍵・暗号文を含めない。
+
+想定外の例外（commit失敗など）も500（INTERNAL_ERROR）へ変換し、上へ送らない。
+DBの例外はメッセージにSQLのパラメータ（暗号文）を含みうるため、
+トレースバック・メッセージを出さず、例外の種類だけを記録する。
 """
 
 import logging
@@ -9,7 +13,9 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from fastapi import Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException
 
 from app.features.consultations.public import ConsultationRoute
 from app.features.memos.crypto import MemoEncryptionError
@@ -35,16 +41,22 @@ _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
 }
 
 
-def memo_error_response(exc: Exception) -> JSONResponse | None:
+def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"code": code, "message": message}},
+    )
+
+
+def memo_error_response(exc: Exception) -> JSONResponse:
     for exc_type, (status_code, code, message) in _ERRORS.items():
         if isinstance(exc, exc_type):
             # 例外の種類だけを記録し、メッセージは出さない
             logger.info("memo api error: %s", code)
-            return JSONResponse(
-                status_code=status_code,
-                content={"error": {"code": code, "message": message}},
-            )
-    return None
+            return _error_response(status_code, code, message)
+    # 想定外の例外。メッセージ・トレースバックは出さない
+    logger.error("memo api unexpected error: %s", type(exc).__name__)
+    return _error_response(*_SAVE_FAILED)
 
 
 class MemoRoute(ConsultationRoute):
@@ -54,10 +66,10 @@ class MemoRoute(ConsultationRoute):
         async def route_handler(request: Request) -> Response:
             try:
                 return await handler(request)
+            except (RequestValidationError, HTTPException):
+                # 422・400などは共通のエラーハンドラ（app.core.errors）で変換する
+                raise
             except Exception as exc:
-                response = memo_error_response(exc)
-                if response is None:
-                    raise
-                return response
+                return memo_error_response(exc)
 
         return route_handler

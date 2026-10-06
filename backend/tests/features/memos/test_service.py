@@ -19,11 +19,11 @@ from app.features.consultations.public import (
 from app.features.consultations.schemas import ConsultationStatus, HandlingType
 from app.features.consultations.store import ConsultationStore
 from app.features.memos.crypto import MemoEncryptionError, create_fernet, decrypt_payload
-from app.features.memos.repository import UserNotActive, UserNotFound
+from app.features.memos.repository import DuplicateMemo, UserNotActive, UserNotFound
 from app.features.memos.service import MemoSaveService
 
 from tests.features.consultations.factories import make_save_confirmation_state
-from tests.features.memos.fakes import InMemoryMemoRepository
+from tests.features.memos.fakes import InMemoryMemoRepository, _InMemoryTransaction
 
 USER_ID = UUID("11111111-1111-4111-8111-111111111111")
 OTHER_USER_ID = UUID("22222222-2222-4222-8222-222222222222")
@@ -210,12 +210,23 @@ async def test_user_changed_after_auth_is_not_saved(repo, cipher, store, status,
 async def test_concurrent_saves_create_only_one_memo(repo, cipher, store):
     state = make_save_confirmation_state(store, USER_ID)
     service = make_service(repo, cipher, store)
+    approved_count = 0
+
+    async def count_get_approved(user_id, consultation_id):
+        nonlocal approved_count
+        approved = await get_approved_result(user_id, consultation_id, store=store)
+        approved_count += 1
+        return approved
+
+    service._get_approved = count_get_approved
 
     results = await asyncio.gather(
         service.save(USER_ID, state.consultation_id, None),
         service.save(USER_ID, state.consultation_id, None),
     )
 
+    # 2件とも最初の検索・一時状態の取得を通過し、2件目はロック後の再検索で既存のメモを見つけた
+    assert approved_count == 2
     assert sorted(created for _, created in results) == [False, True]
     assert results[0][0].memo_id == results[1][0].memo_id
     assert len(repo.rows) == 1
@@ -239,6 +250,62 @@ async def test_returns_memo_saved_between_check_and_lock(repo, cipher, store):
     assert created is False
     assert memo.memo_id == repo.rows[(USER_ID, state.consultation_id)].id
     assert len(repo.rows) == 1
+
+
+async def test_returns_memo_saved_and_discarded_before_get_approved(repo, cipher, store):
+    """最初の検索の後に、別のリクエストが保存して一時状態を破棄した場合（404ではなく200）"""
+    state = make_save_confirmation_state(store, USER_ID)
+    service = make_service(repo, cipher, store)
+    other_request = make_service(repo, cipher, store)
+
+    async def other_saves_then_get_approved(user_id, consultation_id):
+        await other_request.save(user_id, consultation_id, None)
+        return await get_approved_result(user_id, consultation_id, store=store)
+
+    service._get_approved = other_saves_then_get_approved
+
+    memo, created = await service.save(USER_ID, state.consultation_id, None)
+
+    assert created is False
+    assert memo.memo_id == repo.rows[(USER_ID, state.consultation_id)].id
+    assert len(repo.rows) == 1
+    assert not store.exists(USER_ID, state.consultation_id)
+
+
+async def test_state_missing_without_saved_memo_is_still_not_found(repo, cipher, store):
+    service = make_service(repo, cipher, store)
+
+    with pytest.raises(ConsultationNotFound):
+        await service.save(USER_ID, uuid4(), None)
+
+
+class _DuplicateOnCommitRepository(InMemoryMemoRepository):
+    """INSERTでは重複が分からず、commit 時に一意制約違反になる場合を再現する
+
+    別のリクエストの行が先に commit された状態にしてから、DuplicateMemo を送出する。
+    """
+
+    @asynccontextmanager
+    async def transaction(self):
+        tx = _InMemoryTransaction(self)
+        try:
+            yield tx
+            self.rows.update(tx.pending)
+            raise DuplicateMemo
+        finally:
+            tx.release_locks()
+
+
+async def test_duplicate_on_commit_returns_existing_memo(cipher, store):
+    repo = _DuplicateOnCommitRepository()
+    state = make_save_confirmation_state(store, USER_ID)
+    service = make_service(repo, cipher, store)
+
+    memo, created = await service.save(USER_ID, state.consultation_id, None)
+
+    assert created is False
+    assert memo.memo_id == repo.rows[(USER_ID, state.consultation_id)].id
+    assert not store.exists(USER_ID, state.consultation_id)
 
 
 class _MissInTransactionRepository(InMemoryMemoRepository):
