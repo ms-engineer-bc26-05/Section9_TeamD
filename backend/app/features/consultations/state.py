@@ -43,7 +43,9 @@ class ConsultationState:
     user_id: UUID  # 所有者確認に使う（CurrentUser.user_id）
     theme: ThemeCategory
     status: ConsultationStatus
-    updated_at: datetime = field(default_factory=utc_now)  # TTL（I-03B）で使う
+    # 最後に更新が成功した時刻。保持時間（TTL）の判定に使う。
+    # テストで時計を差し替えられるよう、呼び出し時に utc_now を参照する
+    updated_at: datetime = field(default_factory=lambda: utc_now())
 
     # AIへ渡す会話の文脈
     messages: list[DialogueTurn] = field(default_factory=list, repr=False)

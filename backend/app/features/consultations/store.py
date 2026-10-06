@@ -4,16 +4,28 @@
 - 取得時に user_id を照合し、本人のものでなければ存在しない場合と同じ扱いにする
 - 同じ相談への更新は相談IDごとの asyncio.Lock で直列化する
 - ロック中の相談へのリクエストは待たずに ConsultationBusy とする（二重送信とみなす）
+
+保持時間（TTL。I-03Bで決定）：
+- 最後に更新が成功してから CONSULTATION_TTL が経過した相談は、存在しない相談と同じ扱い（404）
+- GETでは延長しない（更新が成功したときの touch() だけが時刻を進める）
+- 常駐の見回り処理は作らず、その相談へのアクセス時と、新しい相談の登録時に消す
+- ロック中（AIの応答待ちなど）の相談は、処理中のため期限切れとして扱わない
 """
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from uuid import UUID
 
+from app.features.consultations import state as state_module
 from app.features.consultations.exceptions import ConsultationBusy, ConsultationNotFound
 from app.features.consultations.state import ConsultationState
 
+# 一時状態の保持時間（最後に更新が成功してから）
+CONSULTATION_TTL = timedelta(minutes=30)
+
 __all__ = [
+    "CONSULTATION_TTL",
     "ConsultationBusy",
     "ConsultationNotFound",
     "ConsultationStore",
@@ -26,15 +38,42 @@ class ConsultationStore:
         self._states: dict[UUID, ConsultationState] = {}
 
     def add(self, state: ConsultationState) -> None:
-        """一時状態を登録する。AI呼び出しが成功した後に呼び、失敗時に状態を残さない"""
+        """一時状態を登録する。AI呼び出しが成功した後に呼び、失敗時に状態を残さない。
+
+        登録のついでに、期限切れの一時状態をまとめて消す。
+        """
+        self.purge_expired()
         self._states[state.consultation_id] = state
 
     def get(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
-        state = self._states.get(consultation_id)
-        if state is None or state.user_id != user_id:
-            # 他人の相談と存在しない相談を区別しない
+        state = self._find(user_id, consultation_id)
+        if state is None:
+            # 他人の相談・存在しない相談・期限切れの相談を区別しない
             raise ConsultationNotFound
         return state
+
+    def purge_expired(self) -> None:
+        """期限切れの一時状態をすべて消す"""
+        now = state_module.utc_now()
+        for consultation_id, state in list(self._states.items()):
+            if self._is_expired(state, now):
+                del self._states[consultation_id]
+
+    def _find(self, user_id: UUID, consultation_id: UUID) -> ConsultationState | None:
+        """本人の一時状態を返す。期限切れの場合は消してから None を返す"""
+        state = self._states.get(consultation_id)
+        if state is None or state.user_id != user_id:
+            return None
+        if self._is_expired(state, state_module.utc_now()):
+            del self._states[consultation_id]
+            return None
+        return state
+
+    @staticmethod
+    def _is_expired(state: ConsultationState, now) -> bool:
+        if state.lock.locked():
+            return False
+        return now - state.updated_at >= CONSULTATION_TTL
 
     def discard(self, user_id: UUID, consultation_id: UUID) -> None:
         """一時状態を破棄する。存在しない・本人のものでない場合も何もせず終わる（冪等）"""
@@ -43,8 +82,7 @@ class ConsultationStore:
             del self._states[consultation_id]
 
     def exists(self, user_id: UUID, consultation_id: UUID) -> bool:
-        state = self._states.get(consultation_id)
-        return state is not None and state.user_id == user_id
+        return self._find(user_id, consultation_id) is not None
 
     @asynccontextmanager
     async def locked(
