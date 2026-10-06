@@ -19,7 +19,12 @@ from app.features.consultations.public import (
 from app.features.consultations.schemas import ConsultationStatus, HandlingType
 from app.features.consultations.store import ConsultationStore
 from app.features.memos.crypto import MemoEncryptionError, create_fernet, decrypt_payload
-from app.features.memos.repository import DuplicateMemo, UserNotActive, UserNotFound
+from app.features.memos.repository import (
+    DuplicateMemo,
+    StoredMemo,
+    UserNotActive,
+    UserNotFound,
+)
 from app.features.memos.service import MemoSaveService
 
 from tests.features.consultations.factories import make_save_confirmation_state
@@ -282,29 +287,44 @@ async def test_state_missing_without_saved_memo_is_still_not_found(repo, cipher,
 class _DuplicateOnCommitRepository(InMemoryMemoRepository):
     """INSERTでは重複が分からず、commit 時に一意制約違反になる場合を再現する
 
-    別のリクエストの行が先に commit された状態にしてから、DuplicateMemo を送出する。
+    自分の行は反映せず、別のリクエストの行（other_row）が先に commit された状態にしてから、
+    DuplicateMemo を送出する。
     """
+
+    def __init__(self, other_row: StoredMemo) -> None:
+        super().__init__()
+        self.other_row = other_row
 
     @asynccontextmanager
     async def transaction(self):
         tx = _InMemoryTransaction(self)
         try:
             yield tx
-            self.rows.update(tx.pending)
+            key = (self.other_row.user_id, self.other_row.source_consultation_id)
+            self.rows[key] = self.other_row
             raise DuplicateMemo
         finally:
             tx.release_locks()
 
 
-async def test_duplicate_on_commit_returns_existing_memo(cipher, store):
-    repo = _DuplicateOnCommitRepository()
+async def test_duplicate_on_commit_returns_other_requests_memo(cipher, store):
     state = make_save_confirmation_state(store, USER_ID)
+    # 別のリクエストが作った行（同じ相談・別のメモID）
+    approved = await get_approved_result(USER_ID, state.consultation_id, store=store)
+    other_memo = make_service(InMemoryMemoRepository(), cipher, store)._build_new_memo(
+        USER_ID, approved, "架空の別の理由"
+    )
+    other_row = StoredMemo(**dataclasses.asdict(other_memo), created_at=datetime.now(UTC))
+    repo = _DuplicateOnCommitRepository(other_row)
     service = make_service(repo, cipher, store)
 
     memo, created = await service.save(USER_ID, state.consultation_id, None)
 
+    # 自分の行ではなく、先に commit された別のリクエストのメモを返す
     assert created is False
-    assert memo.memo_id == repo.rows[(USER_ID, state.consultation_id)].id
+    assert memo.memo_id == other_memo.id
+    assert memo.reason == "架空の別の理由"
+    assert len(repo.rows) == 1
     assert not store.exists(USER_ID, state.consultation_id)
 
 

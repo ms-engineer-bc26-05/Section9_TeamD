@@ -68,6 +68,8 @@ class MemoRoute(ConsultationRoute):
                 return await handler(request)
             except (RequestValidationError, HTTPException):
                 # 422・400などは共通のエラーハンドラ（app.core.errors）で変換する
+                # I-01（#47）との接続時：#47の認証・DB用の専用例外（401・403・503）も
+                # ここで共通ハンドラへ送り、500に変換しないようにする
                 raise
             except Exception as exc:
                 return memo_error_response(exc)

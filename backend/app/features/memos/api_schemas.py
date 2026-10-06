@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.features.memos.service import MemoHandling
 
-# 文字数上限（仮置き。Issue #52で相談中）
+# 文字数上限（暫定。Issue #52で合意）
 REASON_MAX_LENGTH = 500
 
 
