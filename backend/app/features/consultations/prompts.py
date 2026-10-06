@@ -18,9 +18,10 @@ from app.features.consultations.schemas import (
 )
 from app.features.consultations.state import DialogueTurn
 
-# 本音・背景・望みの標準質問数（Q-13）。最大往復回数はI-03Bで決める
+# 本音・背景・望みの標準質問数（Q-13）。最大往復回数も同じ3回（Q-33。I-03Bで決定）
 GUIDED_STANDARD_QUESTIONS = len(GUIDED_TOPIC_ORDER)
-# 出来事の対話で要約へ進む目安の回答回数（上限の強制はI-03B）
+# 出来事の対話で要約へ進む目安の回答回数。上限（service.QUESTION_LIMIT）に達した回は、
+# サーバーが「要約する」と指定し、AIの判断より優先する（I-03B）
 EVENT_STANDARD_ANSWERS = 3
 
 # 「まだ分からない」を選んだときに会話へ入れる文（Q-13）
@@ -95,12 +96,15 @@ STAGE_INSTRUCTIONS = {
 - 両方が分かった場合、または本人の回答が{EVENT_STANDARD_ANSWERS}回に達した場合：
   next_action を "summarize" にし、event_details に本人の言葉に沿って要約する。
   ai_understanding と ai_question は null にする。
+最後に「要約する」と指定されている場合は、必ず "summarize" にする。
 """,
     PromptStage.EVENT_CORRECTION: """\
 いまの段階：出来事の整理（理解の訂正）
 直前のuserメッセージは、あなたの理解に対する本人の訂正である。
 next_action を "ask" にし、訂正を反映した理解を ai_understanding に1文で書き、
 次の質問を ai_question に書く。event_details は null にする。
+ただし、最後に「要約する」と指定されている場合は、next_action を "summarize" にし、
+訂正を反映して event_details に本人の言葉に沿って要約する。ai_understanding と ai_question は null にする。
 """,
     PromptStage.EVENT_ASK_MORE: """\
 いまの段階：出来事の整理（追加の質問）
@@ -137,6 +141,7 @@ def build_system_prompt(
     guided_turn_count: int = 0,
     guided_next_topic: GuidedTopic | None = None,
     guided_complete: bool = False,
+    event_must_summarize: bool = False,
 ) -> str:
     """systemメッセージを作る。ユーザーの入力はここに入れない"""
     progress = (
@@ -149,6 +154,9 @@ def build_system_prompt(
         progress += f"次に聞く項目（指定）：{GUIDED_TOPIC_LABELS[guided_next_topic]}\n"
     if guided_complete:
         progress += "指定：本音・背景・望みを聞き終えたので、整理を完了する\n"
+    # 出来事の回答・訂正が上限に達した回は、サーバーが要約を指定する（I-03B）
+    if event_must_summarize:
+        progress += "指定：回答または訂正の回数が上限に達したので、要約する\n"
     return f"{COMMON_INSTRUCTIONS}\n{STAGE_INSTRUCTIONS[stage]}\n{progress}"
 
 
@@ -161,6 +169,7 @@ def build_messages(
     guided_turn_count: int = 0,
     guided_next_topic: GuidedTopic | None = None,
     guided_complete: bool = False,
+    event_must_summarize: bool = False,
 ) -> list[dict[str, str]]:
     """AIへ渡すメッセージを作る。会話の履歴は user／assistant のまま渡す"""
     system = build_system_prompt(
@@ -170,6 +179,7 @@ def build_messages(
         guided_turn_count=guided_turn_count,
         guided_next_topic=guided_next_topic,
         guided_complete=guided_complete,
+        event_must_summarize=event_must_summarize,
     )
     return [{"role": "system", "content": system}] + [
         {"role": turn.role, "content": turn.content} for turn in history

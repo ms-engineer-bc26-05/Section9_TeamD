@@ -5,10 +5,14 @@
   （失敗した場合は、訂正回数なども含めて状態を変えない）
 - AIの出力は表示用の文字列・整理結果の一次案としてだけ使い、権限判定やDB操作には使わない
 
-I-03Aでは正常系を実装する。次はI-03Bで実装する：
-- 質問回数・訂正回数・往復回数の上限に達したときの強制遷移と409
-- 安全案内の固定文言・危機の判定方法
-- TTL・DELETE・ユーザー単位の破棄
+回数の上限（I-03B）：
+- 出来事の回答は QUESTION_LIMIT 回、訂正は CORRECTION_LIMIT 回まで。上限に達する回は、
+  AIへ「要約する」と指定し、要約（event_summary_ready）へ進める。AIが従わない場合は502
+- 上限を超える操作は、AIを呼ぶ前に409（CONSULTATION_STATE_CONFLICT）
+- 本音・背景・望みは3往復（GUIDED_TOPIC_ORDER）で整理完了（Q-33）
+- 上限の確認・AI呼び出し・回数の更新はロックの中で行うため、同時リクエストでも上限を超えない
+- 成功したAI呼び出しは1回の相談で最大12回
+  （開始1・出来事の回答と訂正あわせて最大4・追加質問最大3・感情1・本音・背景・望み3）
 """
 
 from typing import Literal
@@ -49,7 +53,7 @@ from app.features.consultations.state import ConsultationState, utc_now
 from app.features.consultations.store import ConsultationStore
 from app.integrations.openrouter.client import OpenRouterClient
 
-# 上限値（設計書6.3.1・6.3.2）。上限到達時の強制遷移と409はI-03Bで実装する
+# 上限値（設計書6.3.1・6.3.2）
 QUESTION_LIMIT = 3
 CORRECTION_LIMIT = 2
 
@@ -158,19 +162,30 @@ class ConsultationService:
         async with self._store.locked(user_id, consultation_id) as state:
             _require_status(state, ConsultationStatus.EVENT_DIALOGUE)
 
-            new_turn = prompts.user_turn(text)
+            # 上限を超える操作は、AIを呼ぶ前に拒否する（通常は状態が先に進んでいるため起こらない）
             if action == "answer":
+                if state.question_count >= QUESTION_LIMIT:
+                    raise ConsultationStateConflict
                 stage = PromptStage.EVENT_ANSWER
                 answer_count = state.question_count + 1
+                # この回答で上限に達する場合は、要約へ進める
+                must_summarize = answer_count >= QUESTION_LIMIT
             else:
+                if correction_limit_reached(state):
+                    raise ConsultationStateConflict
                 stage = PromptStage.EVENT_CORRECTION
                 answer_count = state.question_count
+                # この訂正で上限に達する場合は、訂正を反映した要約へ進める（設計書6.3.1）
+                must_summarize = state.correction_count + 1 >= CORRECTION_LIMIT
+
+            new_turn = prompts.user_turn(text)
             output = await self._call_ai(
                 EVENT_DIALOGUE,
                 state,
                 stage,
                 [*state.messages, new_turn],
                 answer_count=answer_count,
+                event_must_summarize=must_summarize,
             )
             self._ensure_still_exists(state)
 
@@ -178,6 +193,10 @@ class ConsultationService:
                 _apply_safety(state, output.safety)
                 state.touch()
                 return state
+
+            if must_summarize and output.next_action != "summarize":
+                # 上限に達したのに要約が返らない場合は、AIの出力不正として回数を増やさない
+                raise AIOutputInvalid("指定と異なる進め方が返されました")
 
             # AIの呼び出しが成功した時点で回数を確定する
             if action == "answer":
