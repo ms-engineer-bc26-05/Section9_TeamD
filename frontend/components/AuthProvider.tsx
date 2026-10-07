@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 type AuthState = {
   user: FirebaseUser | null; // Firebase側のログイン状態
@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
-      auth,
+      getFirebaseAuth(),
       (user) => setState({ user, loading: false, error: false }),
       () => setState({ user: null, loading: false, error: true }),
     );

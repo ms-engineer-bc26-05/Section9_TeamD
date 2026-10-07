@@ -9,7 +9,7 @@
  * - 生のレスポンス本文は message・ログに入れない
  */
 
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 export type ApiErrorKind =
   | "bad_request" // 400
@@ -114,7 +114,7 @@ async function readErrorBody(
 }
 
 async function getToken(forceRefresh: boolean): Promise<string> {
-  const user = auth.currentUser;
+  const user = getFirebaseAuth().currentUser;
   if (!user) throw new ApiError("unauthenticated");
   try {
     return await user.getIdToken(forceRefresh);

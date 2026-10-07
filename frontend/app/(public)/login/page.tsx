@@ -6,7 +6,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { toAuthErrorMessage } from "@/lib/authErrors";
 
 // 相談窓口の案内先は未確定のため仮置き(確定したら差し替える)
@@ -29,9 +29,9 @@ export default function LoginPage() {
     setErrorMessage(null);
     try {
       if (mode === "login") {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
+        await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password);
       } else {
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await createUserWithEmailAndPassword(getFirebaseAuth(), email.trim(), password);
       }
       router.push("/home");
     } catch (error) {

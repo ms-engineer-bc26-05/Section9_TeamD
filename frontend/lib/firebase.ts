@@ -1,5 +1,5 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -8,7 +8,13 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// 二重初期化を防ぐ(開発時の再読み込み対策)
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+let cachedAuth: Auth | null = null;
 
-export const auth = getAuth(app);
+// 初回呼び出し時にだけ初期化する(ビルド時のページ生成で落ちないようにする)
+export function getFirebaseAuth(): Auth {
+  if (!cachedAuth) {
+    const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    cachedAuth = getAuth(app);
+  }
+  return cachedAuth;
+}
