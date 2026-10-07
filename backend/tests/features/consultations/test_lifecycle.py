@@ -8,6 +8,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -24,11 +25,12 @@ from app.features.consultations.service import ConsultationService
 from app.features.consultations.state import ConsultationState, DialogueTurn
 from app.features.consultations.store import (
     CONSULTATION_TTL,
+    ConsultationBusy,
     ConsultationNotFound,
     ConsultationStore,
     get_consultation_store,
 )
-from app.integrations.openrouter.client import get_ai_client
+from app.integrations.openrouter.client import AIClientError, get_ai_client
 
 from tests.features.consultations import fakes
 
@@ -348,3 +350,390 @@ def test_result_draft_is_not_kept_after_ttl(client, store, user_id, clock):
     response = client.get(f"{BASE}/{state.consultation_id}/result")
     assert response.status_code == 404
     assert MARKER not in response.text
+
+
+# --- DELETE /consultations/{id}：中断・保存せず終了（冪等な204） -------------------
+
+
+def _ops():
+    return [
+        ("get", "", None),
+        ("post", "/event-dialogue", {"action": "answer", "answer": "架空の回答"}),
+        ("get", "/result", None),
+        ("post", "/handling", {"handling": "hold"}),
+    ]
+
+
+@pytest.mark.parametrize("status", [s for s in ConsultationStatus])
+def test_delete_discards_own_consultation_in_any_status(
+    client, store, user_id, caplog, status
+):
+    # N-18・N-19・ST-13（安全案内からの終了）
+    caplog.set_level(logging.DEBUG)
+    state = make_state(store, user_id, status)
+
+    response = client.delete(f"{BASE}/{state.consultation_id}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"{BASE}/{state.consultation_id}").status_code == 404
+    # 相談内容が残らない（NP-07・NP-08）
+    assert MARKER not in repr(store._states)
+    assert MARKER not in caplog.text
+
+
+@pytest.mark.parametrize(("method", "path", "payload"), _ops())
+def test_deleted_consultation_returns_same_404_as_missing(
+    client, ai, store, user_id, method, path, payload
+):
+    # ST-14
+    state = make_state(store, user_id)
+    client.delete(f"{BASE}/{state.consultation_id}")
+    kwargs = {"json": payload} if payload is not None else {}
+
+    deleted = getattr(client, method)(f"{BASE}/{state.consultation_id}{path}", **kwargs)
+    missing = getattr(client, method)(f"{BASE}/{uuid4()}{path}", **kwargs)
+
+    assert deleted.status_code == missing.status_code == 404
+    assert deleted.json() == missing.json()
+    assert ai.calls == []
+
+
+def test_delete_is_idempotent(client, store, user_id):
+    # ST-14：同じIDで何度呼んでも204
+    state = make_state(store, user_id)
+
+    assert client.delete(f"{BASE}/{state.consultation_id}").status_code == 204
+    assert client.delete(f"{BASE}/{state.consultation_id}").status_code == 204
+    assert client.delete(f"{BASE}/{uuid4()}").status_code == 204
+
+
+def test_delete_does_not_discard_other_users_consultation(client, store, user_id):
+    # AU-12：204を返すが、他人の一時状態は破棄しない
+    other = make_state(store, uuid4())
+
+    response = client.delete(f"{BASE}/{other.consultation_id}")
+
+    assert response.status_code == 204
+    assert other.consultation_id in store._states
+
+
+def test_delete_after_ttl_returns_204(client, store, user_id, clock):
+    state = make_state(store, user_id)
+    clock.advance(minutes=30)
+
+    assert client.delete(f"{BASE}/{state.consultation_id}").status_code == 204
+
+
+def test_delete_requires_authentication(ai):
+    # 認証依存を差し替えない場合は、I-01へ置き換えるまで常に401
+    app = FastAPI()
+    app.include_router(router)
+    response = TestClient(app).delete(f"{BASE}/{uuid4()}")
+
+    assert response.status_code == 401
+
+
+# --- 新しい相談を始めたら、同じユーザーの既存の相談を破棄する（1ユーザー1件） ------
+
+
+def _start_new(client, ai, detail="架空の新しい相談本文"):
+    ai.push(fakes.first_question())
+    return client.post(BASE, json={"theme": "other", "detail": detail})
+
+
+def test_new_consultation_replaces_existing_one(client, ai, store, user_id):
+    old = make_state(store, user_id)
+    others = make_state(store, uuid4())  # 別のユーザーの相談
+
+    response = _start_new(client, ai)
+
+    assert response.status_code == 201
+    new_id = response.json()["consultation_id"]
+    # 古い相談は404になり、新しい相談だけが残る
+    assert client.get(f"{BASE}/{old.consultation_id}").status_code == 404
+    assert client.get(f"{BASE}/{new_id}").status_code == 200
+    user_states = [s for s in store._states.values() if s.user_id == user_id]
+    assert len(user_states) == 1
+    # 別のユーザーの相談は残る
+    assert others.consultation_id in store._states
+
+
+def test_lost_consultation_id_does_not_block_new_consultation(client, ai, store, user_id):
+    # フロントが相談IDを失い、APIに一時状態だけが残っている場合でも、新しい相談を始められる
+    make_state(store, user_id, ConsultationStatus.GUIDED_DIALOGUE)
+
+    response = _start_new(client, ai)
+
+    assert response.status_code == 201
+    assert len([s for s in store._states.values() if s.user_id == user_id]) == 1
+
+
+@pytest.mark.parametrize("failure", [AIClientError("失敗"), {"kind": "normal"}])
+def test_failed_new_consultation_keeps_existing_one(client, ai, store, user_id, failure):
+    old = make_state(store, user_id)
+    ai.push(failure)
+
+    response = client.post(BASE, json={"theme": "other", "detail": "架空の相談本文"})
+
+    assert response.status_code == 502
+    assert client.get(f"{BASE}/{old.consultation_id}").status_code == 200
+
+
+def test_safety_on_new_consultation_also_replaces_existing_one(client, ai, store, user_id):
+    old = make_state(store, user_id)
+    ai.push(fakes.safety_output(ai_question=None))
+
+    response = client.post(BASE, json={"theme": "other", "detail": "架空の相談本文"})
+
+    assert response.json()["status"] == "safety_guidance"
+    assert client.get(f"{BASE}/{old.consultation_id}").status_code == 404
+
+
+async def test_second_start_while_starting_is_busy(store, ai, user_id):
+    # ⑦：同じユーザーの開始処理中に2つ目の開始が届いたら409（CONSULTATION_BUSY）
+    service = ConsultationService(store, ai)
+    ai.wait_event = asyncio.Event()
+    ai.push(fakes.first_question())
+    first = asyncio.create_task(service.start(user_id, ThemeCategory.OTHER, "架空の相談本文1"))
+    await ai.started.wait()
+
+    with pytest.raises(ConsultationBusy):
+        # 待たずに409になることを確かめる（待ってしまう場合はタイムアウトで失敗させる）
+        await asyncio.wait_for(
+            service.start(user_id, ThemeCategory.OTHER, "架空の相談本文2"), timeout=5
+        )
+    assert len(ai.calls) == 1  # 2つ目はAIを呼ばない
+
+    ai.wait_event.set()
+    state = await first
+    assert [s for s in store._states.values() if s.user_id == user_id] == [state]
+
+    # 1つ目が終わった後は、新しい相談を開始できる
+    ai.wait_event = None
+    ai.push(fakes.first_question())
+    await service.start(user_id, ThemeCategory.OTHER, "架空の相談本文3")
+    assert len([s for s in store._states.values() if s.user_id == user_id]) == 1
+
+
+async def test_other_users_can_start_while_starting(store, ai, user_id):
+    service = ConsultationService(store, ai)
+    ai.wait_event = asyncio.Event()
+    ai.push(fakes.first_question())
+    first = asyncio.create_task(service.start(user_id, ThemeCategory.OTHER, "架空の相談本文"))
+    await ai.started.wait()
+
+    other_ai = fakes.FakeAIClient([fakes.first_question()])
+    other = await ConsultationService(store, other_ai).start(
+        uuid4(), ThemeCategory.OTHER, "架空の相談本文"
+    )
+    assert other.consultation_id in store._states
+
+    ai.wait_event.set()
+    await first
+
+
+async def test_concurrent_start_returns_409_busy(ai, store, user_id):
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.include_router(router)
+    app.dependency_overrides[get_consultation_store] = lambda: store
+    app.dependency_overrides[get_ai_client] = lambda: ai
+    app.dependency_overrides[get_current_user_id] = lambda: user_id
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        ai.wait_event = asyncio.Event()
+        ai.push(fakes.first_question())
+        body = {"theme": "other", "detail": f"架空の相談本文 {MARKER}_detail"}
+        first = asyncio.create_task(client.post(BASE, json=body))
+        await ai.started.wait()
+
+        second = await asyncio.wait_for(client.post(BASE, json=body), timeout=5)
+        assert second.status_code == 409
+        assert second.json()["error"]["code"] == "CONSULTATION_BUSY"
+        assert MARKER not in second.text
+
+        ai.wait_event.set()
+        assert (await first).status_code == 201
+
+
+@pytest.mark.parametrize("failure", [None, AIClientError("失敗")])
+async def test_user_discard_while_starting_does_not_register(store, ai, user_id, failure):
+    # ⑨：開始処理中に退会でユーザー単位の破棄が呼ばれたら、AIの応答後も登録しない
+    from app.features.consultations.public import discard_user_consultations
+
+    old = make_state(store, user_id)
+    service = ConsultationService(store, ai)
+    ai.wait_event = asyncio.Event()
+    ai.push(failure or fakes.first_question())
+    starting = asyncio.create_task(
+        service.start(user_id, ThemeCategory.OTHER, "架空の相談本文")
+    )
+    await ai.started.wait()
+
+    await discard_user_consultations(user_id, store=store)
+    ai.wait_event.set()
+
+    with pytest.raises(ConsultationNotFound if failure is None else AIClientError):
+        await starting
+    assert [s for s in store._states.values() if s.user_id == user_id] == []
+    assert old.consultation_id not in store._states
+    # 予約も残らない（次の開始を妨げない）
+    assert user_id not in store._starting
+
+
+# --- AIの応答待ち中に破棄された場合は、書き込まず404（復活させない） ---------------
+
+
+async def _wait_ai_then(store, ai, user_id, discard):
+    state = make_state(store, user_id)
+    service = ConsultationService(store, ai)
+    ai.wait_event = asyncio.Event()
+    ai.push(fakes.event_ask())
+    waiting = asyncio.create_task(
+        service.event_dialogue(user_id, state.consultation_id, "answer", "架空の回答")
+    )
+    await ai.started.wait()
+
+    await discard(service, state)
+    ai.wait_event.set()
+
+    with pytest.raises(ConsultationNotFound):
+        await waiting
+    assert not store.exists(user_id, state.consultation_id)
+    assert state.consultation_id not in store._states
+    assert state.question_count == 0
+    return state
+
+
+async def test_delete_while_ai_is_waiting(store, ai, user_id):
+    async def discard(service, state):
+        service.discard(user_id, state.consultation_id)
+
+    await _wait_ai_then(store, ai, user_id, discard)
+
+
+async def test_new_consultation_while_ai_is_waiting(store, ai, user_id):
+    other_ai = fakes.FakeAIClient([fakes.first_question()])
+
+    async def discard(service, state):
+        await ConsultationService(store, other_ai).start(
+            user_id, ThemeCategory.OTHER, "架空の新しい相談本文"
+        )
+
+    await _wait_ai_then(store, ai, user_id, discard)
+    assert len([s for s in store._states.values() if s.user_id == user_id]) == 1
+
+
+async def test_user_discard_while_ai_is_waiting(store, ai, user_id):
+    from app.features.consultations.public import discard_user_consultations
+
+    async def discard(service, state):
+        await discard_user_consultations(user_id, store=store)
+
+    await _wait_ai_then(store, ai, user_id, discard)
+
+
+async def _discard_by_delete(store, user_id, state):
+    ConsultationService(store, fakes.FakeAIClient()).discard(user_id, state.consultation_id)
+
+
+async def _discard_by_new_consultation(store, user_id, state):
+    other_ai = fakes.FakeAIClient([fakes.first_question()])
+    await ConsultationService(store, other_ai).start(
+        user_id, ThemeCategory.OTHER, "架空の新しい相談本文"
+    )
+
+
+async def _discard_by_user(store, user_id, state):
+    from app.features.consultations.public import discard_user_consultations
+
+    await discard_user_consultations(user_id, store=store)
+
+
+DISCARDS = [_discard_by_delete, _discard_by_new_consultation, _discard_by_user]
+
+
+@pytest.mark.parametrize("discard", DISCARDS)
+async def test_discarded_state_is_not_revived_when_ai_fails(store, ai, user_id, discard):
+    # ⑧：AIの応答待ち中に破棄され、その後AIが失敗（502）しても、巻き戻しで復活しない
+    state = make_state(store, user_id)
+    service = ConsultationService(store, ai)
+    ai.wait_event = asyncio.Event()
+    ai.push(AIClientError("失敗"))
+    waiting = asyncio.create_task(
+        service.event_dialogue(user_id, state.consultation_id, "answer", "架空の回答")
+    )
+    await ai.started.wait()
+
+    await discard(store, user_id, state)
+    ai.wait_event.set()
+
+    with pytest.raises(AIClientError):
+        await waiting
+    assert state.consultation_id not in store._states
+    assert not store.exists(user_id, state.consultation_id)
+
+
+@pytest.mark.parametrize("discard", DISCARDS)
+async def test_discarded_state_is_not_revived_by_internal_error(
+    store, ai, user_id, discard, monkeypatch
+):
+    # ⑧・ST-19：AIの応答待ち中に破棄され、その後に想定外のエラーが起きても復活しない
+    state = make_state(store, user_id)
+    service = ConsultationService(store, ai)
+    ai.wait_event = asyncio.Event()
+    ai.push(fakes.event_ask())
+
+    original_exists = store.exists
+
+    def failing_exists(*args):
+        # 破棄の確認の直前に想定外のエラーを起こす
+        raise RuntimeError("想定外のエラー")
+
+    waiting = asyncio.create_task(
+        service.event_dialogue(user_id, state.consultation_id, "answer", "架空の回答")
+    )
+    await ai.started.wait()
+    await discard(store, user_id, state)
+    monkeypatch.setattr(store, "exists", failing_exists)
+    ai.wait_event.set()
+
+    with pytest.raises(RuntimeError):
+        await waiting
+    monkeypatch.setattr(store, "exists", original_exists)
+    assert state.consultation_id not in store._states
+    assert not store.exists(user_id, state.consultation_id)
+    assert state.question_count == 0
+
+
+# --- ユーザー単位の破棄（F-06：退会処理から呼ぶ） -----------------------------------
+
+
+async def test_discard_user_consultations(store, user_id):
+    from app.features.consultations.public import discard_user_consultations
+
+    mine = [make_state(store, user_id) for _ in range(2)]  # 直接登録した場合も含め、すべて破棄する
+    other = make_state(store, uuid4())
+
+    await discard_user_consultations(user_id, store=store)
+
+    assert all(s.consultation_id not in store._states for s in mine)
+    assert other.consultation_id in store._states
+    assert MARKER not in repr(store._states.get(mine[0].consultation_id))
+
+    # 0件でも、何度呼んでも安全
+    await discard_user_consultations(user_id, store=store)
+    await discard_user_consultations(uuid4(), store=store)
+    assert other.consultation_id in store._states
+
+
+async def test_discard_user_consultations_while_lock_is_held(store, user_id):
+    from app.features.consultations.public import discard_user_consultations
+
+    state = make_state(store, user_id)
+    async with store.locked(user_id, state.consultation_id):
+        # 処理中でも待たずに破棄できる
+        await discard_user_consultations(user_id, store=store)
+    assert state.consultation_id not in store._states

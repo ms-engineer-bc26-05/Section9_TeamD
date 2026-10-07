@@ -1,4 +1,4 @@
-"""相談API（docs/api-design.md 6.2〜6.5の正常系）。
+"""相談API（docs/api-design.md 6.2〜6.5）。
 
 - Routerの登録（main.py）は結合Issue（I-06）で行う
 - 認証は I-01 の get_current_user に置き換えるまで、仮の依存（常に401）を使う
@@ -10,7 +10,7 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
 from app.features.consultations.api_schemas import (
     ConsultationResultView,
@@ -272,3 +272,18 @@ async def choose_handling(
     """扱い方の選択（6.5.1）"""
     state = await service.choose_handling(user_id, consultation_id, body.handling)
     return ConsultationView(status=state.status)
+
+
+@router.delete("/{consultation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_consultation(
+    consultation_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    service: ConsultationService = Depends(get_consultation_service),
+) -> Response:
+    """相談の中断・保存せず終了（6.5.3）。
+
+    本人の相談がある場合だけ破棄する。存在しない・破棄済み・本人のものでない場合も
+    204を返し、相談の存在や所有者を区別しない（冪等）。
+    """
+    service.discard(user_id, consultation_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

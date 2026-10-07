@@ -19,6 +19,14 @@
   AIを呼ぶ前にキーワードで判定し、該当すればAIを呼ばずに安全案内へ切り替える
 - AIが安全案内を示した場合（kind="safety" または risk_detected=true）も切り替える
 - 安全案内へ切り替えたら相談内容を消去し、サーバーの固定文言だけを返す
+
+破棄（I-03B）：
+- 新しい相談を始めたら、同じユーザーの既存の相談を破棄する（1ユーザー1件）。
+  破棄するのは新しい相談の開始に成功した後（失敗した場合は既存の相談を残す）
+- 同じユーザーの開始処理中に2つ目の開始が届いたら409（CONSULTATION_BUSY）
+- 開始処理中に退会でユーザー単位の破棄が呼ばれたら、AIの応答後も登録せず404
+- DELETE /consultations/{id} はロックを取らずに破棄し、何度呼んでも安全（冪等）
+- AIの応答待ちの間に破棄された相談には書き込まず、404とする（復活させない）
 """
 
 from typing import Literal
@@ -118,7 +126,8 @@ class ConsultationService:
         return parse_ai_output(model, result.content)
 
     def _ensure_still_exists(self, state: ConsultationState) -> None:
-        # AIの応答待ちの間に破棄された相談へは書き込まない（DELETEとの競合の網羅はI-03B）
+        # AIの応答待ちの間に破棄された相談（DELETE・新しい相談による置き換え・ユーザー単位の
+        # 破棄・保持時間の経過）へは書き込まない
         if not self._store.exists(state.user_id, state.consultation_id):
             raise ConsultationNotFound
 
@@ -127,33 +136,41 @@ class ConsultationService:
     # ------------------------------------------------------------------
 
     async def start(self, user_id: UUID, theme: ThemeCategory, detail: str) -> ConsultationState:
-        state = ConsultationState(
-            consultation_id=uuid4(),
-            user_id=user_id,
-            theme=theme,
-            status=ConsultationStatus.EVENT_DIALOGUE,
-        )
-        if contains_crisis_keyword(detail):
-            # AIを呼ばずに安全案内へ切り替える（Q-09）
-            _apply_safety(state)
-            self._store.add(state)
+        with self._store.reserve_start(user_id) as reservation:
+            state = ConsultationState(
+                consultation_id=uuid4(),
+                user_id=user_id,
+                theme=theme,
+                status=ConsultationStatus.EVENT_DIALOGUE,
+            )
+            if contains_crisis_keyword(detail):
+                # AIを呼ばずに安全案内へ切り替える（Q-09）
+                _apply_safety(state)
+                reservation.commit(state)
+                return state
+
+            history = [prompts.user_turn(detail)]
+            output = await self._call_ai(
+                FIRST_QUESTION, state, PromptStage.FIRST_QUESTION, history
+            )
+
+            if output.kind is AIOutputKind.SAFETY:
+                _apply_safety(state)
+            else:
+                state.messages = [*history, prompts.assistant_turn(output.ai_question)]
+                state.ai_question = output.ai_question
+            # AIの呼び出しが成功してから登録する（失敗時に空の相談を残さず、既存の相談も残す）。
+            # 応答待ちの間に退会で予約が取り消されていた場合は、登録せず404とする
+            reservation.commit(state)
             return state
-
-        history = [prompts.user_turn(detail)]
-        output = await self._call_ai(FIRST_QUESTION, state, PromptStage.FIRST_QUESTION, history)
-
-        if output.kind is AIOutputKind.SAFETY:
-            _apply_safety(state)
-        else:
-            state.messages = [*history, prompts.assistant_turn(output.ai_question)]
-            state.ai_question = output.ai_question
-        # AIの呼び出しが成功してから登録する（失敗時に空の相談を残さない）
-        self._store.add(state)
-        return state
 
     def get(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
         # GETでは最終操作時刻を更新しない（設計書7章）
         return self._store.get(user_id, consultation_id)
+
+    def discard(self, user_id: UUID, consultation_id: UUID) -> None:
+        """相談を中断・終了する（6.5.3）。本人の相談がない場合も何もせず終わる（冪等）"""
+        self._store.discard(user_id, consultation_id)
 
     # ------------------------------------------------------------------
     # 出来事の対話・訂正（6.3.1）
