@@ -1,0 +1,12 @@
+# Ruff（Formatter・Lint）の設定。決定の経緯は Issue #46 を参照
+line-length = 100
+target-version = "py312"
+
+[lint]
+# E4・E7・E9・F：Ruffの標準のルール
+# I：importの並び順（isort相当）
+# B：バグにつながりやすい書き方（flake8-bugbear相当）
+select = ["E4", "E7", "E9", "F", "I", "B"]
+# B008：引数の既定値での関数呼び出しを指摘するルール。
+# FastAPIの依存注入（`Depends()`）は既定値に書くのが公式の書き方のため、対象外にする
+ignore = ["B008"]
