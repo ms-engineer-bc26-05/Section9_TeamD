@@ -12,7 +12,8 @@ from app.integrations.firebase.client import (
     InvalidTokenError,
 )
 
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
+
 
 
 @pytest.fixture
@@ -119,5 +120,43 @@ async def test_db_failure_propagates_and_closes_session(auth_mocks):
     context.__aexit__.assert_awaited_once()
     assert context.__aexit__.await_args.args[0] is OperationalError
     assert context.__aexit__.await_args.args[1] is error
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+
+
+async def test_db_connection_failure_is_converted_and_session_closed(auth_mocks):
+    _, lookup, _, session, context, _ = auth_mocks
+    marker = "DUMMY_DB_ERROR_MARKER"
+    lookup.side_effect = OperationalError(
+        "SELECT dummy",
+        {},
+        ConnectionRefusedError(marker),
+    )
+
+    with pytest.raises(service.DatabaseUnavailableError) as caught:
+        await service.authenticate_user("dummy-token")
+
+    assert str(caught.value) == "Database connection unavailable"
+    assert marker not in str(caught.value)
+    assert caught.value.__suppress_context__ is True
+    context.__aexit__.assert_awaited_once()
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+
+
+async def test_integrity_error_is_not_converted(auth_mocks):
+    _, lookup, _, session, context, _ = auth_mocks
+    error = IntegrityError(
+        "INSERT dummy",
+        {},
+        Exception("DUMMY_CONSTRAINT_ERROR"),
+    )
+    lookup.side_effect = error
+
+    with pytest.raises(IntegrityError) as caught:
+        await service.authenticate_user("dummy-token")
+
+    assert caught.value is error
+    context.__aexit__.assert_awaited_once()
     session.add.assert_not_called()
     session.commit.assert_not_called()
