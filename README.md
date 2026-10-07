@@ -180,7 +180,7 @@ docker compose up
 Pull Requestでは、GitHub Actionsが次のチェックを自動実行します。
 
 - バックエンド：pytest、整形の確認（`ruff format --check`）、Lint（`ruff check`）
-- フロントエンド：ビルド、整形の確認（`prettier --check .`）、Lint（`eslint .`）
+- フロントエンド：ビルド、整形の確認（`prettier --check .`）、Lint（`eslint . --max-warnings 0`）
 
 ローカルでは、コンテナを起動した状態で、別のターミナルから実行します。
 
@@ -214,12 +214,14 @@ docker compose run --rm --no-deps frontend npm run lint              # フロン
 整形・自動修正する（ファイルを書き換える）：
 
 ```bash
-docker compose exec backend ruff format                              # バックエンドの整形
-docker compose exec backend ruff check --fix                         # バックエンドのLintの自動修正
+docker compose exec backend ruff check --fix                         # バックエンドのLintの自動修正（importの並べ替えなど）
+docker compose exec backend ruff format                              # バックエンドの整形（--fixのあとに実行する）
 docker compose run --rm --no-deps frontend npm run format            # フロントエンドの整形
 ```
 
 設定は、`backend/ruff.toml`、`frontend/eslint.config.mjs`、`frontend/.prettierrc.json`にあります。1行の長さは、どちらも100文字です。
+
+ESLintは、warningも1件あればエラーとして扱います（`--max-warnings 0`）。どうしても対応できない箇所は、`// eslint-disable-next-line ルール名 -- 理由`のように、理由を書いて個別に対象外にします。
 
 **脆弱性チェック**
 
