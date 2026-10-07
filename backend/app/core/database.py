@@ -1,6 +1,6 @@
 """ORMの共通基盤。DB接続はimport時に行わない。"""
 
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, event
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core import config
+from app.core.exceptions import DatabaseUnavailableError
 from collections.abc import AsyncIterator
 
 
@@ -51,12 +52,22 @@ def make_database_url(value: str) -> URL:
 _engine: AsyncEngine | None = None
 
 
+def _connect_with_timeout_handling(dialect, connection_record, cargs, cparams):
+    """新しいDB接続を作る処理のタイムアウトだけを変換する。"""
+    try:
+        return dialect.connect(*cargs, **cparams)
+    except TimeoutError:
+        raise DatabaseUnavailableError(
+            "Database connection unavailable"
+        ) from None
+
+
 def get_engine() -> AsyncEngine:
     """最初に必要になったときだけEngineを作り、再利用する。"""
     global _engine
 
     if _engine is None:
-        _engine = create_async_engine(
+        engine = create_async_engine(
             make_database_url(config.DATABASE_URL),
             echo=False,
             hide_parameters=True,
@@ -65,6 +76,12 @@ def get_engine() -> AsyncEngine:
                 "timeout": config.CONNECT_TIMEOUT_SECONDS,
             },
         )
+        event.listen(
+            engine.sync_engine,
+            "do_connect",
+            _connect_with_timeout_handling,
+        )
+        _engine = engine
 
     return _engine
 

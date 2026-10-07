@@ -163,6 +163,9 @@ def test_get_engine_creates_once_and_reuses(monkeypatch):
 
     assert create_engine.call_count == 0
 
+    listen = Mock()
+    monkeypatch.setattr(database.event, "listen", listen)
+
     first = database.get_engine()
     second = database.get_engine()
 
@@ -174,6 +177,12 @@ def test_get_engine_creates_once_and_reuses(monkeypatch):
         hide_parameters=True,
         pool_pre_ping=True,
         connect_args={"timeout": 3},
+    )
+
+    listen.assert_called_once_with(
+        fake_engine.sync_engine,
+        "do_connect",
+        database._connect_with_timeout_handling,
     )
 
 
@@ -305,3 +314,78 @@ async def test_session_factory_creates_independent_sessions(monkeypatch):
         connect.assert_not_called()
     finally:
         await engine.dispose()
+
+
+def test_connection_timeout_is_converted():
+    marker = "DUMMY_CONNECTION_ERROR"
+    dialect = Mock()
+    dialect.connect.side_effect = TimeoutError(marker)
+
+    with pytest.raises(database.DatabaseUnavailableError) as caught:
+        database._connect_with_timeout_handling(
+            dialect,
+            None,
+            [],
+            {"timeout": 3},
+        )
+
+    dialect.connect.assert_called_once_with(timeout=3)
+    assert str(caught.value) == "Database connection unavailable"
+    assert marker not in str(caught.value)
+    assert caught.value.__suppress_context__ is True
+
+
+def test_connection_success_returns_connection():
+    connection = Mock()
+    dialect = Mock()
+    dialect.connect.return_value = connection
+
+    received = database._connect_with_timeout_handling(
+        dialect,
+        None,
+        ["dummy-argument"],
+        {"timeout": 3},
+    )
+
+    assert received is connection
+    dialect.connect.assert_called_once_with("dummy-argument", timeout=3)
+
+
+def test_other_connection_error_is_not_converted():
+    error = ValueError("DUMMY_CONFIGURATION_ERROR")
+    dialect = Mock()
+    dialect.connect.side_effect = error
+
+    with pytest.raises(ValueError) as caught:
+        database._connect_with_timeout_handling(
+            dialect,
+            None,
+            [],
+            {"timeout": 3},
+        )
+
+    assert caught.value is error
+
+
+async def test_engine_connection_timeout_is_converted(monkeypatch):
+    monkeypatch.setattr(database, "_engine", None)
+    monkeypatch.setattr(
+        database.config,
+        "DATABASE_URL",
+        "postgresql://dummy:dummy@db/test_db",
+    )
+
+    engine = database.get_engine()
+    connect = Mock(side_effect=TimeoutError("DUMMY_CONNECTION_ERROR"))
+    monkeypatch.setattr(engine.sync_engine.dialect, "connect", connect)
+
+    try:
+        with pytest.raises(database.DatabaseUnavailableError) as caught:
+            async with engine.connect():
+                pytest.fail("Connection must not succeed")
+
+        connect.assert_called_once()
+        assert str(caught.value) == "Database connection unavailable"
+        assert "DUMMY_CONNECTION_ERROR" not in str(caught.value)
+    finally:
+        await database.dispose_engine()
