@@ -1,4 +1,4 @@
-"""通常APIで使う認証処理。内部ユーザーは作成しない。"""
+"""通常APIの認証と、初回ログイン時の内部ユーザー登録処理。"""
 
 from asyncio import to_thread
 
@@ -10,7 +10,11 @@ from app.core.exceptions import (
     DatabaseUnavailableError,
 )
 from app.features.auth.schemas import CurrentUser
-from app.features.users.service import get_user_by_firebase_uid
+from app.features.users.schemas import UserResponse
+from app.features.users.service import (
+    get_or_create_user,
+    get_user_by_firebase_uid,
+)
 from app.integrations.firebase.client import (
     AuthServiceUnavailableError as FirebaseUnavailableError,
     InvalidTokenError,
@@ -56,3 +60,43 @@ async def authenticate_user(token: str) -> CurrentUser:
         raise
 
     return current_user
+
+
+async def register_or_get_user(token: str) -> tuple[UserResponse, bool]:
+    """初回ログイン用。検証・状態確認・保存確定後に結果を返す。"""
+    try:
+        firebase_uid = await to_thread(
+            verify_token,
+            token,
+            check_revoked=True,
+        )
+    except InvalidTokenError:
+        raise AuthenticationRequiredError("Authentication required") from None
+    except FirebaseUnavailableError:
+        raise AuthServiceUnavailableError(
+            "Authentication service unavailable"
+        ) from None
+
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            async with session.begin():
+                user, created = await get_or_create_user(session, firebase_uid)
+
+                if user.status == "deleting":
+                    raise AccountDeletingError("Account is being deleted")
+                if user.status != "active":
+                    raise RuntimeError("Unexpected account status")
+
+                response = UserResponse(
+                    user_id=user.id,
+                    has_seen_notice=user.has_seen_notice,
+                )
+    except Exception as error:
+        if is_database_connection_error(error):
+            raise DatabaseUnavailableError(
+                "Database connection unavailable"
+            ) from None
+        raise
+
+    return response, created
