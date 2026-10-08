@@ -170,6 +170,17 @@
   line-height: 1.5;
 }
 
+.requestErrorMessage {
+  padding: 12px 14px;
+  margin: 16px 0 0;
+  color: #7c382f;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  background: #f7e4df;
+  border: 1px solid #d98978;
+  border-radius: 12px;
+}
+
 .privacyNotice {
   padding: 14px 18px;
   margin-top: 26px;

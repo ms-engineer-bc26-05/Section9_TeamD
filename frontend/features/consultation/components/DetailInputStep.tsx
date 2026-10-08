@@ -11,6 +11,7 @@ interface DetailInputStepProps {
   detail: string;
   maxLength: number;
   isSubmitting: boolean;
+  startErrorMessage: string | null;
   onDetailChange: (detail: string) => void;
   onBack: () => void;
   onCancel: () => void;
@@ -22,6 +23,7 @@ export function DetailInputStep({
   detail,
   maxLength,
   isSubmitting,
+  startErrorMessage,
   onDetailChange,
   onBack,
   onCancel,
@@ -58,9 +60,15 @@ export function DetailInputStep({
     onStart(detail);
   }
 
-  const describedBy = showRequiredError
-    ? "detail-input-help detail-input-privacy detail-input-count detail-input-error"
-    : "detail-input-help detail-input-privacy detail-input-count";
+  const describedBy = [
+    "detail-input-help",
+    "detail-input-privacy",
+    "detail-input-count",
+    showRequiredError ? "detail-input-error" : null,
+    startErrorMessage ? "consultation-start-error" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <main className={styles.page}>
@@ -132,6 +140,16 @@ export function DetailInputStep({
           {showRequiredError ? (
             <p id="detail-input-error" className={styles.errorMessage} role="alert">
               気になっていることを入力してください。
+            </p>
+          ) : null}
+
+          {startErrorMessage ? (
+            <p
+              id="consultation-start-error"
+              className={styles.requestErrorMessage}
+              role="alert"
+            >
+              {startErrorMessage}
             </p>
           ) : null}
 

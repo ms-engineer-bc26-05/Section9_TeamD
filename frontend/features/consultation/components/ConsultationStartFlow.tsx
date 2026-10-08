@@ -6,6 +6,8 @@ import type {
   StartConsultationRequest,
   ThemeCategory,
 } from "../model/contracts";
+import { getStartConsultationErrorMessage } from "../model/errorMessages";
+import type { ConsultationErrorCode } from "../model/state";
 import { DetailInputStep } from "./DetailInputStep";
 import { ThemeSelectionStep } from "./ThemeSelectionStep";
 
@@ -14,6 +16,7 @@ type StartStep = "theme" | "detail";
 interface ConsultationStartFlowProps {
   detailMaxLength: number;
   isSubmitting: boolean;
+  startErrorCode: ConsultationErrorCode | null;
   onBackToNotice: () => void;
   onCancel: () => void;
   onStartConsultation: (request: StartConsultationRequest) => void;
@@ -22,6 +25,7 @@ interface ConsultationStartFlowProps {
 export function ConsultationStartFlow({
   detailMaxLength,
   isSubmitting,
+  startErrorCode,
   onBackToNotice,
   onCancel,
   onStartConsultation,
@@ -29,6 +33,8 @@ export function ConsultationStartFlow({
   const [step, setStep] = useState<StartStep>("theme");
   const [selectedTheme, setSelectedTheme] = useState<ThemeCategory | null>(null);
   const [detail, setDetail] = useState("");
+  const startErrorMessage =
+    getStartConsultationErrorMessage(startErrorCode);
 
   function handleThemeNext(theme: ThemeCategory) {
     setSelectedTheme(theme);
@@ -58,6 +64,7 @@ export function ConsultationStartFlow({
         detail={detail}
         maxLength={detailMaxLength}
         isSubmitting={isSubmitting}
+        startErrorMessage={startErrorMessage}
         onDetailChange={setDetail}
         onBack={handleDetailBack}
         onCancel={onCancel}
