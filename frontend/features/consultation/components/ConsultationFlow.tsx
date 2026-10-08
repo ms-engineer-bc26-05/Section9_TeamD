@@ -13,6 +13,7 @@ import type {
   UpdateConsultationResultRequest,
 } from "../model/contracts";
 import type { ConsultationScreen } from "../model/screen";
+import { getConsultationErrorMessage } from "../model/errorMessages";
 import {
   isConsultationPending,
   type ConsultationState,
@@ -20,6 +21,7 @@ import {
 import { ConsultationScreenRouter } from "./ConsultationScreenRouter";
 import { ConsultationStartFlow } from "./ConsultationStartFlow";
 import { ConsultationUnavailableStep } from "./ConsultationUnavailableStep";
+import { ConsultationErrorNotice } from "./ConsultationErrorNotice";
 import { EmotionInputFlow } from "./EmotionInputFlow";
 import { EventDialogueStep } from "./EventDialogueStep";
 import { EventSummaryStep } from "./EventSummaryStep";
@@ -84,6 +86,10 @@ export function ConsultationFlow({
 }: ConsultationFlowProps) {
   const isSubmitting = isConsultationPending(state);
   const selectedEmotion = state.emotionCategory ?? draft.selectedEmotion;
+  const errorMessage =
+    state.status === null
+      ? null
+      : getConsultationErrorMessage(state.errorCode);
   const unavailableScreen = (
     <ConsultationUnavailableStep
       onReturnHome={actions.onReturnHomeAfterStateLoss}
@@ -209,10 +215,12 @@ export function ConsultationFlow({
   } satisfies Record<ConsultationScreen, ReactNode>;
 
   return (
-    <ConsultationScreenRouter
-      state={state}
-      screens={screens}
-      onFinishSafetyGuidance={actions.onFinishSafetyGuidance}
-    />
+    <ConsultationErrorNotice message={errorMessage}>
+      <ConsultationScreenRouter
+        state={state}
+        screens={screens}
+        onFinishSafetyGuidance={actions.onFinishSafetyGuidance}
+      />
+    </ConsultationErrorNotice>
   );
 }
