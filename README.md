@@ -221,7 +221,7 @@ docker compose run --rm --no-deps frontend npm run format            # フロン
 
 設定は、`backend/ruff.toml`、`frontend/eslint.config.mjs`、`frontend/.prettierrc.json`にあります。1行の長さは、どちらも100文字です。
 
-ESLintは、warningも1件あればエラーとして扱います（`--max-warnings 0`）。どうしても対応できない箇所は、`// eslint-disable-next-line ルール名 -- 理由`のように、理由を書いて個別に対象外にします。
+ESLintは、warningも1件あればエラーとして扱います（`--max-warnings 0`）。どうしても対応できない箇所は、`// eslint-disable-next-line ルール名 -- 理由`のように、理由を書いて個別に対象外にします。指摘の原因を直したら、`eslint-disable`のコメントも消してください（使われていないコメントもwarningになり、CIが失敗します）。
 
 **脆弱性チェック**
 
