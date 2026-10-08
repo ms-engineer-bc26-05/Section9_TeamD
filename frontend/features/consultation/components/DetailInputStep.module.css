@@ -122,6 +122,7 @@
 
 .textarea {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   min-height: 272px;
   padding: 26px 18px 46px;

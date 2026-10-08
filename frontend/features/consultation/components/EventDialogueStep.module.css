@@ -214,6 +214,7 @@
 
 .input {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   min-height: 66px;
   max-height: 180px;

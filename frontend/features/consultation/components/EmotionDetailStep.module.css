@@ -126,6 +126,10 @@
   background: #d98978;
 }
 
+.steps .completedStep:not(:last-child)::after {
+  background: #d98978;
+}
+
 .emotionSummary {
   display: flex;
   gap: 10px;
@@ -175,6 +179,7 @@
 
 .textarea {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   min-height: 190px;
   padding: 26px 18px 46px;

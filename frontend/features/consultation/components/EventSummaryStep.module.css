@@ -158,6 +158,7 @@
 
 .summaryInput {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   min-height: 124px;
   padding: 22px 16px 30px;

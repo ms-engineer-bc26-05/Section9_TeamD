@@ -224,6 +224,7 @@
 
 .answerInput {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   min-height: 86px;
   padding: 15px 64px 15px 18px;

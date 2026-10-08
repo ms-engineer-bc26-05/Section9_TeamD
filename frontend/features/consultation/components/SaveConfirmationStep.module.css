@@ -92,6 +92,7 @@
 }
 
 .textarea {
+  box-sizing: border-box;
   width: 100%;
   min-height: 152px;
   padding: 18px 18px 38px;

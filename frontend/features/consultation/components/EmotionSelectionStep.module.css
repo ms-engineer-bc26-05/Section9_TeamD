@@ -101,6 +101,10 @@
   background: #d98978;
 }
 
+.steps .completedStep:not(:last-child)::after {
+  background: #d98978;
+}
+
 .title {
   margin: 38px 0 0;
   font-size: 1.375rem;
