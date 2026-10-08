@@ -18,6 +18,7 @@ import type {
 import {
   ConsultationFlow,
   type ConsultationFlowLimits,
+  type ConsultationSaveState,
 } from "./ConsultationFlow";
 
 export interface ConsultationSaveRequest {
@@ -25,10 +26,16 @@ export interface ConsultationSaveRequest {
   reason: string | null;
 }
 
+const IDLE_SAVE_STATE: ConsultationSaveState = {
+  isSubmitting: false,
+  errorCode: null,
+};
+
 interface ConsultationFlowContainerProps {
   api: ConsultationApi;
   limits: ConsultationFlowLimits;
   resultLoadingScreen: ReactNode;
+  saveState?: ConsultationSaveState;
   onBackToNotice: () => void;
   onReturnHome: () => void;
   onOpenPlan: () => void;
@@ -43,6 +50,7 @@ export function ConsultationFlowContainer({
   api,
   limits,
   resultLoadingScreen,
+  saveState = IDLE_SAVE_STATE,
   onBackToNotice,
   onReturnHome,
   onOpenPlan,
@@ -162,6 +170,7 @@ export function ConsultationFlowContainer({
       }}
       limits={limits}
       resultLoadingScreen={resultLoadingScreen}
+      saveState={saveState}
       actions={{
         onBackToNotice: handleBackToNotice,
         onReturnHomeAfterStateLoss: handleReturnHome,

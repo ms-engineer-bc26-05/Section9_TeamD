@@ -16,6 +16,7 @@ import type { ConsultationScreen } from "../model/screen";
 import { getConsultationErrorMessage } from "../model/errorMessages";
 import {
   isConsultationPending,
+  type ConsultationErrorCode,
   type ConsultationState,
 } from "../model/state";
 import { ConsultationScreenRouter } from "./ConsultationScreenRouter";
@@ -49,6 +50,11 @@ export interface ConsultationFlowDraft {
   isReselectingHandling: boolean;
 }
 
+export interface ConsultationSaveState {
+  isSubmitting: boolean;
+  errorCode: ConsultationErrorCode | null;
+}
+
 export interface ConsultationFlowActions {
   onBackToNotice: () => void;
   onReturnHomeAfterStateLoss: () => void;
@@ -78,6 +84,7 @@ interface ConsultationFlowProps {
   limits: ConsultationFlowLimits;
   actions: ConsultationFlowActions;
   resultLoadingScreen: ReactNode;
+  saveState: ConsultationSaveState;
 }
 
 export function ConsultationFlow({
@@ -86,13 +93,14 @@ export function ConsultationFlow({
   limits,
   actions,
   resultLoadingScreen,
+  saveState,
 }: ConsultationFlowProps) {
   const isSubmitting = isConsultationPending(state);
+  const isSaveSubmitting = isSubmitting || saveState.isSubmitting;
   const selectedEmotion = state.emotionCategory ?? draft.selectedEmotion;
-  const errorMessage =
-    state.status === null
-      ? null
-      : getConsultationErrorMessage(state.errorCode);
+  const errorMessage = getConsultationErrorMessage(
+    saveState.errorCode ?? (state.status === null ? null : state.errorCode),
+  );
   const unavailableScreen = (
     <ConsultationUnavailableStep
       onReturnHome={actions.onReturnHomeAfterStateLoss}
@@ -212,7 +220,7 @@ export function ConsultationFlow({
         handling={state.handling}
         reason={draft.saveReason}
         reasonMaxLength={limits.saveReason}
-        isSubmitting={isSubmitting}
+        isSubmitting={isSaveSubmitting}
         onReasonChange={actions.onSaveReasonChange}
         onBack={actions.onReturnToHandlingSelection}
         onSave={actions.onSave}
