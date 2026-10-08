@@ -15,6 +15,7 @@ import type {
   EventDialogueRequest,
   EventSummaryConfirmRequest,
   GuidedDialogueRequest,
+  HandlingType,
   StartConsultationRequest,
   UpdateConsultationResultRequest,
 } from "../model/contracts";
@@ -55,6 +56,7 @@ export interface ConsultationSessionController {
   updateAndApproveResult: (
     changes: UpdateConsultationResultRequest,
   ) => Promise<boolean>;
+  chooseHandling: (handling: HandlingType) => Promise<boolean>;
   cancelPendingRequest: () => void;
   clearError: () => void;
   reset: () => void;
@@ -606,6 +608,14 @@ export function useConsultationSessionController(
     ],
   );
 
+  const chooseHandling = useCallback(
+    (handling: HandlingType) =>
+      runViewOperation("choose_handling", (consultationId, signal) =>
+        api.chooseHandling(consultationId, { handling }, { signal }),
+      ),
+    [api, runViewOperation],
+  );
+
   const cancelPendingRequest = useCallback(() => {
     activeRequestRef.current?.controller.abort();
   }, []);
@@ -629,6 +639,7 @@ export function useConsultationSessionController(
     submitEmotion,
     submitGuidedDialogue,
     updateAndApproveResult,
+    chooseHandling,
     cancelPendingRequest,
     clearError,
     reset,
