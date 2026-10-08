@@ -19,7 +19,6 @@ interface EventSummaryStepProps {
   isSubmitting: boolean;
   onProceed: (request: EventSummaryConfirmRequest) => void;
   onAskMore: () => void;
-  onBack: () => void;
   onCancel: () => void;
 }
 
@@ -32,7 +31,6 @@ export function EventSummaryStep({
   isSubmitting,
   onProceed,
   onAskMore,
-  onBack,
   onCancel,
 }: EventSummaryStepProps) {
   const [draft, setDraft] = useState<EventDetails>(eventDetails);
@@ -101,17 +99,7 @@ export function EventSummaryStep({
     <main className={styles.page}>
       <section className={styles.panel} aria-labelledby="event-summary-title">
         <header className={styles.header}>
-          <button
-            className={styles.headerButton}
-            type="button"
-            aria-label="前の画面に戻る"
-            disabled={isSubmitting}
-            onClick={onBack}
-          >
-            <span className={styles.backIcon} aria-hidden="true">
-              ‹
-            </span>
-          </button>
+          <span className={styles.headerSpacer} aria-hidden="true" />
           <p className={styles.headerTitle}>出来事を確認する</p>
           <button
             className={styles.cancelButton}

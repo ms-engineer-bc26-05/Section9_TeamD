@@ -16,7 +16,6 @@ interface EventDialogueStepProps {
   isSubmitting: boolean;
   onAnswer: (answer: string) => void;
   onCorrect: (correction: string) => void;
-  onBack: () => void;
   onCancel: () => void;
 }
 
@@ -30,7 +29,6 @@ export function EventDialogueStep({
   isSubmitting,
   onAnswer,
   onCorrect,
-  onBack,
   onCancel,
 }: EventDialogueStepProps) {
   const [inputMode, setInputMode] = useState<InputMode>("answer");
@@ -98,17 +96,7 @@ export function EventDialogueStep({
     <main className={styles.page}>
       <section className={styles.panel} aria-labelledby="event-dialogue-title">
         <header className={styles.header}>
-          <button
-            className={styles.headerButton}
-            type="button"
-            aria-label="前の画面に戻る"
-            disabled={isSubmitting}
-            onClick={onBack}
-          >
-            <span className={styles.backIcon} aria-hidden="true">
-              ‹
-            </span>
-          </button>
+          <span className={styles.headerSpacer} aria-hidden="true" />
           <h1 id="event-dialogue-title" className={styles.headerTitle}>
             気持ちを整理する
           </h1>

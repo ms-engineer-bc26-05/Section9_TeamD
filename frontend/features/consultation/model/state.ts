@@ -2,6 +2,7 @@ import type {
   ConsultationResult,
   ConsultationStatus,
   ConsultationView,
+  EmotionCategory,
   EventDetails,
   GuidedTopic,
   HandlingType,
@@ -38,6 +39,7 @@ export interface ConsultationState {
   aiUnderstanding: string | null;
   aiQuestion: string | null;
   aiResponse: string | null;
+  emotionCategory: EmotionCategory | null;
   currentTopic: GuidedTopic | null;
   eventDetails: EventDetails | null;
   result: ConsultationResult | null;
@@ -58,6 +60,7 @@ export const initialConsultationState: ConsultationState = {
   aiUnderstanding: null,
   aiQuestion: null,
   aiResponse: null,
+  emotionCategory: null,
   currentTopic: null,
   eventDetails: null,
   result: null,
@@ -100,6 +103,7 @@ function stateFromView(
     aiUnderstanding: view.ai_understanding ?? null,
     aiQuestion: view.ai_question ?? null,
     aiResponse: view.ai_response ?? null,
+    emotionCategory: view.emotion_category ?? state.emotionCategory,
     currentTopic: view.current_topic ?? null,
     eventDetails: view.event_details ?? null,
     result: state.result,
