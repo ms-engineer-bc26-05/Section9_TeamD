@@ -438,12 +438,11 @@ export function useConsultationSessionController(
 
         switch (decision) {
           case "fetch_result": {
-            safeDispatch({ type: "view_received", view: currentView });
-            safeDispatch({ type: "request_started", operation: "fetch_result" });
             const currentResult = await api.getResult(consultationId, { signal });
-            safeDispatch({ type: "result_received", result: currentResult });
 
             if (areResultChangesApplied(changes, currentResult)) {
+              safeDispatch({ type: "view_received", view: currentView });
+              safeDispatch({ type: "result_received", result: currentResult });
               return "continue_approval";
             }
 
