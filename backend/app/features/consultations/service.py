@@ -17,6 +17,9 @@
 安全案内（I-03B。Q-09・Q-28）：
 - 利用者の自由入力をAIへ送る4つの処理（開始・出来事の対話・感情・本音〜望み）では、
   AIを呼ぶ前にキーワードで判定し、該当すればAIを呼ばずに安全案内へ切り替える
+- AIを呼ばない直接編集も判定する：要約の直接編集（proceed）はその時点で、整理結果の編集
+  （PATCH /result）は承認（result/approve）の時点で、本人が編集した項目だけを判定する。
+  AIが作った文章は、AIの判定がかかっているため対象にしない（誤検知を増やさないため）
 - AIが安全案内を示した場合（kind="safety" または risk_detected=true）も切り替える
 - 安全案内へ切り替えたら相談内容を消去し、サーバーの固定文言だけを返す
 
@@ -272,6 +275,12 @@ class ConsultationService:
             _require_status(state, ConsultationStatus.EVENT_SUMMARY_READY)
 
             if action == "proceed":
+                if event_details is not None and contains_crisis_keyword(
+                    event_details.what_happened, event_details.what_bothered_me
+                ):
+                    _apply_safety(state)
+                    state.touch()
+                    return state
                 if event_details is not None:
                     # 本人が直接編集した要約を採用する
                     state.event_details = EventDetailsDraft(**event_details.model_dump())
@@ -440,7 +449,10 @@ class ConsultationService:
             _require_status(state, ConsultationStatus.RESULT_READY)
             if state.approved:
                 raise ConsultationStateConflict
-            state.result = state.result.model_copy(update=changes.model_dump(exclude_unset=True))
+            edited = changes.model_dump(exclude_unset=True)
+            state.result = state.result.model_copy(update=edited)
+            # 承認時のキーワード判定のため、本人が編集した項目を記録する
+            state.edited_result_fields |= set(edited)
             state.touch()
             return state
 
@@ -449,6 +461,14 @@ class ConsultationService:
             _require_status(state, ConsultationStatus.RESULT_READY)
             if state.approved:
                 raise ConsultationStateConflict
+            # 本人が編集した項目だけを判定する。該当したら承認せず安全案内へ切り替える
+            edited_values = [
+                getattr(state.result, name) for name in sorted(state.edited_result_fields)
+            ]
+            if contains_crisis_keyword(*edited_values):
+                _apply_safety(state)
+                state.touch()
+                return state
             try:
                 approvable = ApprovableResult(**state.result.model_dump())
             except ValueError:

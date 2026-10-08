@@ -273,7 +273,7 @@ def test_ai_safety_sign_returns_fixed_guidance(client, ai, store, user_id, ai_ou
     [
         # kind も risk_detected も読み取れない
         {"next_action": None, "ai_question": None, "result": None, "safety": None},
-        {"kind": "normal", "safety": {"risk_detected": "true"}},
+        {"kind": "normal", "safety": {"risk_detected": "yes"}},
     ],
 )
 def test_unreadable_output_returns_502_without_changing_state(client, ai, store, user_id, ai_output):
@@ -327,3 +327,173 @@ def test_operations_in_safety_guidance_are_conflict(
     assert response.status_code == 200
     assert response.json()["status"] == "safety_guidance"
     assert response.json()["safety_guidance"]["safety_message"] == SAFETY_MESSAGE
+
+
+# --- 決定したキーワード一覧での照合（Issue #50 B） ---------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # 安全側として反応を許容する（否定・引用・一般的な説明）
+        "死にたいわけではない",
+        "友人から死にたいと相談された",
+        "自殺対策の記事を読んだ",
+        "小説の遺書の場面",
+        # 表記揺れ
+        "ｼﾆﾀｲ",
+        "死 に たい",
+        "死、に、たい",
+        "タヒにたい",
+        "ﾘｽﾄｶｯﾄ",
+        # 活用・具体化した語
+        "一緒に死のうと言われた",
+        "薬を大量に飲んだ",
+        "命を絶とうとした",
+    ],
+)
+def test_agreed_keywords_match(text):
+    assert contains_crisis_keyword(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "タヒチに行きたい",
+        "恥ずかしくて消えたい",
+        "死ぬほど疲れた",
+        "消えるボールペン",
+        "締め切りに追われて死んでる",
+        "この関係を終わりにしたい",
+        "心中お察しします",
+        "一緒に死ぬほど笑った",
+        "薬を大量に処方された",
+        "首をつかまれた",
+    ],
+)
+def test_agreed_keywords_do_not_match_common_expressions(text):
+    assert not contains_crisis_keyword(text)
+
+
+def test_safety_message_is_fixed_text():
+    assert "相談窓口" in SAFETY_MESSAGE
+    # 電話番号・URLは画面側で管理するため、APIの文言には含めない
+    assert "http" not in SAFETY_MESSAGE
+    assert not any(ch.isdigit() for ch in SAFETY_MESSAGE)
+
+
+# --- 直接編集の判定（Issue #50 A） ------------------------------------------------
+
+
+def test_keyword_in_edited_summary_on_proceed_returns_safety(
+    client, ai, store, user_id, fake_keywords
+):
+    state = make_state(store, user_id, ConsultationStatus.EVENT_SUMMARY_READY)
+
+    response = client.post(
+        f"{BASE}/{state.consultation_id}/event-summary/confirm",
+        json={
+            "action": "proceed",
+            "event_details": {
+                "what_happened": f"架空の出来事 {FAKE_KEYWORD}",
+                "what_bothered_me": "架空の気がかり",
+            },
+        },
+    )
+
+    assert_switched_to_safety(response, state)
+    assert ai.calls == []
+
+
+def test_proceed_without_edit_is_not_judged(client, ai, store, user_id, fake_keywords):
+    # 編集せずに進む場合は、AIが作った要約を判定しない
+    state = make_state(store, user_id, ConsultationStatus.EVENT_SUMMARY_READY)
+    state.event_details = EventDetailsDraft(
+        what_happened=f"架空の出来事 {FAKE_KEYWORD}", what_bothered_me="架空の気がかり"
+    )
+
+    response = client.post(
+        f"{BASE}/{state.consultation_id}/event-summary/confirm", json={"action": "proceed"}
+    )
+
+    assert response.json() == {"status": "emotion_selection"}
+
+
+def _result_ready_state(store, user_id, **overrides):
+    from app.features.consultations.schemas import ConsultationResultDraft
+
+    result = {
+        "event_summary": "架空の出来事",
+        "emotion": "架空の感情",
+        "true_feeling": "架空の本音",
+        "background": "",
+        "wish": "架空の望み",
+        **overrides,
+    }
+    return make_state(
+        store, user_id, ConsultationStatus.RESULT_READY, result=ConsultationResultDraft(**result)
+    )
+
+
+def test_keyword_in_edited_result_on_approve_returns_safety(
+    client, ai, store, user_id, fake_keywords
+):
+    state = _result_ready_state(store, user_id)
+    cid = state.consultation_id
+
+    response = client.patch(f"{BASE}/{cid}/result", json={"wish": f"架空の望み {FAKE_KEYWORD}"})
+    assert response.status_code == 200  # 編集の時点では判定しない
+
+    response = client.post(f"{BASE}/{cid}/result/approve")
+
+    assert_switched_to_safety(response, state)
+    # 承認されず、編集内容も含めて整理結果が消去される
+    assert state.approved is False
+    assert state.approved_at is None
+    assert state.result is None
+    assert state.approved_result is None
+    assert state.edited_result_fields == set()
+    assert ai.calls == []
+
+
+async def test_approve_switched_to_safety_cannot_be_saved(store, ai, user_id, fake_keywords):
+    # 承認で安全案内に切り替わった相談は、I-05へ承認済み結果を渡さない（メモを保存できない）
+    from app.features.consultations.exceptions import ConsultationStateConflict
+    from app.features.consultations.public import get_approved_result
+    from app.features.consultations.schemas import ConsultationResultInput
+    from app.features.consultations.service import ConsultationService
+
+    state = _result_ready_state(store, user_id)
+    service = ConsultationService(store, ai)
+    await service.update_result(
+        user_id, state.consultation_id, ConsultationResultInput(true_feeling=FAKE_KEYWORD)
+    )
+    await service.approve_result(user_id, state.consultation_id)
+
+    with pytest.raises(ConsultationStateConflict):
+        await get_approved_result(user_id, state.consultation_id, store=store)
+    with pytest.raises(ConsultationStateConflict):
+        await service.choose_handling(user_id, state.consultation_id, "hold")
+
+
+def test_unedited_ai_result_is_not_judged_on_approve(client, store, user_id, fake_keywords):
+    # AIが作った項目は判定しない（本人が編集した項目だけを判定する）
+    state = _result_ready_state(store, user_id, true_feeling=f"架空の本音 {FAKE_KEYWORD}")
+    cid = state.consultation_id
+    client.patch(f"{BASE}/{cid}/result", json={"wish": "架空の編集した望み"})
+
+    response = client.post(f"{BASE}/{cid}/result/approve")
+
+    assert response.json() == {"status": "handling_selection", "approved": True}
+
+
+def test_edited_back_to_safe_text_is_approved(client, store, user_id, fake_keywords):
+    # 判定は承認時点の値で行う
+    state = _result_ready_state(store, user_id)
+    cid = state.consultation_id
+    client.patch(f"{BASE}/{cid}/result", json={"wish": f"架空の望み {FAKE_KEYWORD}"})
+    client.patch(f"{BASE}/{cid}/result", json={"wish": "架空の書き直した望み"})
+
+    response = client.post(f"{BASE}/{cid}/result/approve")
+
+    assert response.json() == {"status": "handling_selection", "approved": True}

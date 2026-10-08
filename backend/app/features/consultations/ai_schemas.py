@@ -193,14 +193,18 @@ class SafetyOutput:
 def reads_as_safety(content: dict[str, Any]) -> bool:
     """AIの出力から、安全案内を示す印を読み取れるか（Q-28）。
 
-    - kind が "safety"
-    - または safety.risk_detected が true（kind が "normal" でも安全側に倒す）
-    値は型まで一致する場合だけ読み取れたとみなす（"true" などの文字列は読み取れない扱い）。
+    1. kind が "safety" なら、risk_detected の値にかかわらず読み取れたとみなす
+    2. safety.risk_detected が真偽値の true、または大文字・小文字を区別せず "true" と
+       完全に一致する文字列なら、kind が "normal" でも読み取れたとみなす（安全側に倒す）
+    それ以外（1・"yes"・前後に空白のある文字列など）は読み取れない扱いとする。
     """
     if content.get("kind") == AIOutputKind.SAFETY.value:
         return True
     safety = content.get("safety")
-    return isinstance(safety, dict) and safety.get("risk_detected") is True
+    if not isinstance(safety, dict):
+        return False
+    risk = safety.get("risk_detected")
+    return risk is True or (isinstance(risk, str) and risk.lower() == "true")
 
 
 def parse_ai_output(model: type[OutputT], content: dict[str, Any]) -> OutputT | SafetyOutput:

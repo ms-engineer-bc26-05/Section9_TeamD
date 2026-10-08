@@ -81,7 +81,9 @@ def test_first_question_safety():
         {"kind": "other", "ai_question": "架空", "safety": None},
         # risk_detected が true と読み取れない safety（Q-28：安全案内として扱わない）
         {"kind": "normal", "ai_question": "架空", "safety": {**SAFETY, "risk_detected": False}},
-        {"kind": "normal", "ai_question": "架空", "safety": {**SAFETY, "risk_detected": "true"}},
+        {"kind": "normal", "ai_question": "架空", "safety": {**SAFETY, "risk_detected": 1}},
+        {"kind": "normal", "ai_question": "架空", "safety": {**SAFETY, "risk_detected": "yes"}},
+        {"kind": "normal", "ai_question": "架空", "safety": {**SAFETY, "risk_detected": " true"}},
         {"kind": "normal", "ai_question": "架空"},  # 項目の欠落
         {"kind": "normal", "ai_question": "架空", "safety": None, "extra": 1},
         {"kind": "normal", "ai_question": "あ" * 201, "safety": None},
@@ -177,6 +179,12 @@ def test_invalid_error_does_not_contain_ai_output():
         ),
         # kind が normal でも、risk_detected が true と読み取れれば安全側に倒す
         (FirstQuestionAIOutput, {"kind": "normal", "ai_question": "架空", "safety": SAFETY}),
+        # 文字列の "true" は、大文字・小文字を区別せず真とみなす（C）
+        (FirstQuestionAIOutput, {"kind": "normal", "safety": {"risk_detected": "true"}}),
+        (FirstQuestionAIOutput, {"kind": "normal", "safety": {"risk_detected": "True"}}),
+        (FirstQuestionAIOutput, {"kind": "normal", "safety": {"risk_detected": "TRUE"}}),
+        # kind が safety なら、risk_detected が false でも安全案内
+        (FirstQuestionAIOutput, {"kind": "safety", "safety": {**SAFETY, "risk_detected": False}}),
         (GuidedDialogueAIOutput, {"kind": "other", "safety": {"risk_detected": True}}),
     ],
 )

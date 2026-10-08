@@ -64,6 +64,8 @@ class ConsultationState:
 
     # 整理結果・承認・扱い方（画面7〜9）
     result: ConsultationResultDraft | None = field(default=None, repr=False)
+    # 本人が PATCH /result で編集した項目の名前。承認時のキーワード判定に使う（I-03B）
+    edited_result_fields: set[str] = field(default_factory=set)
     approved_result: ApprovableResult | None = field(default=None, repr=False)
     approved_at: datetime | None = None  # 値があれば承認済み
     handling: HandlingType | None = None
@@ -87,6 +89,7 @@ class ConsultationState:
         self.emotion = None
         self.result = None
         self.approved_result = None
+        self.edited_result_fields.clear()
 
     def touch(self) -> None:
         """更新に成功したときに最終操作時刻を更新する（GETでは呼ばない）"""

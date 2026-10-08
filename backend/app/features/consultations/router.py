@@ -259,6 +259,9 @@ async def approve_result(
 ) -> ConsultationView:
     """整理結果の承認（6.4.3）"""
     state = await service.approve_result(user_id, consultation_id)
+    if state.status is ConsultationStatus.SAFETY_GUIDANCE:
+        # 本人が編集した内容から危機的な内容を検知した場合（承認しない）
+        return _view(state)
     return ConsultationView(status=state.status, approved=state.approved)
 
 
