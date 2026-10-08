@@ -19,7 +19,8 @@ export type ConsultationOperation =
   | "fetch_result"
   | "update_result"
   | "approve_result"
-  | "choose_handling";
+  | "choose_handling"
+  | "discard";
 
 export type ConsultationErrorCode =
   | KnownConsultationErrorCode
