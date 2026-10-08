@@ -11,6 +11,14 @@ interface SelectionOption<T extends string> {
   description?: string;
 }
 
+export interface SafetySupportContact {
+  name: string;
+  description: string;
+  phoneNumber?: string;
+  websiteUrl: string;
+  sourceUrl: string;
+}
+
 export const THEME_OPTIONS = [
   {
     value: "communication",
@@ -66,3 +74,37 @@ export const GUIDED_TOPIC_LABELS: Record<GuidedTopic, string> = {
   background: "背景",
   wish: "望み",
 };
+
+// 2026年10月6日に、各項目のsourceUrlに記載した公式ページで確認。
+// 窓口情報は変わる可能性があるため、STAGE公開前に再確認する。
+export const SAFETY_SUPPORT_CONTACTS = [
+  {
+    name: "#いのちSOS",
+    description: "無料・24時間365日",
+    phoneNumber: "0120-061-338",
+    websiteUrl: "https://www.lifelink.or.jp/inochisos/",
+    sourceUrl: "https://www.mhlw.go.jp/mamorouyokokoro/soudan/tel/",
+  },
+  {
+    name: "よりそいホットライン",
+    description: "無料・24時間",
+    phoneNumber: "0120-279-338",
+    websiteUrl: "https://www.since2011.net/yorisoi/",
+    sourceUrl: "https://www.mhlw.go.jp/mamorouyokokoro/soudan/tel/",
+  },
+  {
+    name: "あなたのいばしょ",
+    description: "無料・匿名チャット・24時間365日",
+    websiteUrl: "https://talkme.jp/",
+    sourceUrl: "https://www.mhlw.go.jp/mamorouyokokoro/soudan/sns/",
+  },
+  {
+    name: "DV相談＋",
+    description: "パートナーなどからの暴力に関する相談・電話は無料、24時間受付",
+    phoneNumber: "0120-279-889",
+    websiteUrl: "https://soudanplus.jp/",
+    sourceUrl: "https://soudanplus.jp/",
+  },
+] as const satisfies readonly SafetySupportContact[];
+
+export const SAFETY_CONTACTS_VERIFIED_ON = "2026年10月6日";

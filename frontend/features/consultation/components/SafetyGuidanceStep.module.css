@@ -1,0 +1,187 @@
+.page {
+  min-height: 100svh;
+  padding: 32px 26px 52px;
+  color: #493e38;
+  background: #f7f3ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif;
+}
+
+.panel {
+  width: min(100%, 390px);
+  margin: 0 auto;
+}
+
+.eyebrow {
+  display: inline-flex;
+  padding: 6px 14px;
+  margin: 0;
+  color: #7c382f;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #f2ddd6;
+  border-radius: 999px;
+}
+
+.title {
+  margin: 22px 0 0;
+  font-size: 1.5rem;
+  line-height: 1.5;
+}
+
+.guidanceMessage {
+  padding: 20px;
+  margin: 24px 0 0;
+  line-height: 1.85;
+  white-space: pre-line;
+  background: #fffdfc;
+  border: 1px solid #d8d0c8;
+  border-radius: 18px;
+}
+
+.emergencyCard {
+  padding: 20px;
+  margin-top: 22px;
+  background: #f7e4df;
+  border: 1px solid #d98978;
+  border-radius: 18px;
+}
+
+.sectionTitle,
+.sectionText,
+.contactName,
+.contactDescription,
+.verifiedText,
+.loadingMessage {
+  margin: 0;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.sectionText {
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.emergencyLinks,
+.contactActions {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.emergencyLinks {
+  grid-template-columns: 1fr 1fr;
+}
+
+.emergencyLink,
+.contactLink,
+.secondaryLink {
+  display: grid;
+  min-height: 48px;
+  padding: 10px 12px;
+  color: #493e38;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 12px;
+  place-items: center;
+}
+
+.emergencyLink,
+.contactLink {
+  background: #ffffff;
+  border: 1.5px solid #c96f60;
+}
+
+.secondaryLink {
+  background: transparent;
+  border: 1.5px solid #a69b93;
+}
+
+.emergencyLink:focus-visible,
+.contactLink:focus-visible,
+.secondaryLink:focus-visible,
+.finishButton:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: 3px;
+}
+
+.contactsSection {
+  margin-top: 34px;
+}
+
+.contactList {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+  margin: 16px 0 0;
+  list-style: none;
+}
+
+.contactCard {
+  padding: 18px;
+  background: #e3e7d8;
+  border-radius: 16px;
+}
+
+.contactName {
+  font-size: 0.9375rem;
+}
+
+.contactDescription {
+  margin-top: 6px;
+  color: #6e635d;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.verifiedText {
+  margin-top: 18px;
+  color: #81766f;
+  font-size: 0.6875rem;
+  line-height: 1.6;
+}
+
+.finishButton {
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 20px;
+  margin-top: 36px;
+  color: #ffffff;
+  background: #d98978;
+  border: 2px solid #d98978;
+  border-radius: 16px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.finishButton:hover:not(:disabled) {
+  background: #c96f60;
+  border-color: #c96f60;
+}
+
+.finishButton:disabled {
+  color: #81766f;
+  cursor: not-allowed;
+  background: #e5ded7;
+  border-color: #e5ded7;
+}
+
+.loadingMessage {
+  margin-top: 12px;
+  color: #81766f;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+@media (max-width: 360px) {
+  .emergencyLinks {
+    grid-template-columns: 1fr;
+  }
+}
