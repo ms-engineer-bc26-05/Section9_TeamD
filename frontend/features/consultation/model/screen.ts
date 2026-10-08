@@ -2,6 +2,7 @@ import type { ConsultationState } from "./state";
 
 export type ConsultationScreen =
   | "start"
+  | "state_unavailable"
   | "event_dialogue"
   | "event_summary_ready"
   | "emotion_selection"
@@ -12,8 +13,12 @@ export type ConsultationScreen =
   | "save_confirmation";
 
 export function resolveConsultationScreen(
-  state: Pick<ConsultationState, "status" | "result">,
+  state: Pick<ConsultationState, "status" | "result" | "errorCode">,
 ): ConsultationScreen {
+  if (state.errorCode === "CONSULTATION_NOT_FOUND") {
+    return "state_unavailable";
+  }
+
   if (state.status === null) {
     return "start";
   }

@@ -19,6 +19,7 @@ import {
 } from "../model/state";
 import { ConsultationScreenRouter } from "./ConsultationScreenRouter";
 import { ConsultationStartFlow } from "./ConsultationStartFlow";
+import { ConsultationUnavailableStep } from "./ConsultationUnavailableStep";
 import { EmotionInputFlow } from "./EmotionInputFlow";
 import { EventDialogueStep } from "./EventDialogueStep";
 import { EventSummaryStep } from "./EventSummaryStep";
@@ -47,6 +48,7 @@ export interface ConsultationFlowDraft {
 
 export interface ConsultationFlowActions {
   onBackToNotice: () => void;
+  onReturnHomeAfterStateLoss: () => void;
   onCancel: () => void;
   onStartConsultation: (request: StartConsultationRequest) => void;
   onEventAnswer: (answer: string) => void;
@@ -71,7 +73,6 @@ interface ConsultationFlowProps {
   limits: ConsultationFlowLimits;
   actions: ConsultationFlowActions;
   resultLoadingScreen: ReactNode;
-  unavailableScreen: ReactNode;
 }
 
 export function ConsultationFlow({
@@ -80,10 +81,14 @@ export function ConsultationFlow({
   limits,
   actions,
   resultLoadingScreen,
-  unavailableScreen,
 }: ConsultationFlowProps) {
   const isSubmitting = isConsultationPending(state);
   const selectedEmotion = state.emotionCategory ?? draft.selectedEmotion;
+  const unavailableScreen = (
+    <ConsultationUnavailableStep
+      onReturnHome={actions.onReturnHomeAfterStateLoss}
+    />
+  );
 
   const handlingSelectionScreen = (
     <HandlingSelectionStep
@@ -105,6 +110,7 @@ export function ConsultationFlow({
         onStartConsultation={actions.onStartConsultation}
       />
     ),
+    state_unavailable: unavailableScreen,
     event_dialogue:
       state.aiQuestion !== null ? (
         <EventDialogueStep
