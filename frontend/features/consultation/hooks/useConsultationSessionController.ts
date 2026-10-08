@@ -11,8 +11,17 @@ import type { ConsultationApi } from "../api/consultationApi";
 import { toConsultationApiFailure } from "../api/consultationApiError";
 import type {
   ConsultationView,
+  EmotionRequest,
+  EventDialogueRequest,
+  EventSummaryConfirmRequest,
+  GuidedDialogueRequest,
   StartConsultationRequest,
 } from "../model/contracts";
+import {
+  createPostRecoverySnapshot,
+  decidePostRecovery,
+  type PostRecoverySnapshot,
+} from "../model/recovery";
 import {
   consultationReducer,
   initialConsultationState,
@@ -29,6 +38,14 @@ export interface ConsultationSessionController {
   startConsultation: (request: StartConsultationRequest) => Promise<boolean>;
   restoreConsultation: (consultationId: string) => Promise<boolean>;
   discardConsultation: () => Promise<boolean>;
+  submitEventDialogue: (request: EventDialogueRequest) => Promise<boolean>;
+  confirmEventSummary: (
+    request: EventSummaryConfirmRequest,
+  ) => Promise<boolean>;
+  submitEmotion: (request: EmotionRequest) => Promise<boolean>;
+  submitGuidedDialogue: (
+    request: GuidedDialogueRequest,
+  ) => Promise<boolean>;
   cancelPendingRequest: () => void;
   clearError: () => void;
   reset: () => void;
@@ -223,6 +240,181 @@ export function useConsultationSessionController(
     state.consultationId,
   ]);
 
+  const runViewOperation = useCallback(
+    async (
+      operation: ConsultationOperation,
+      request: (
+        consultationId: string,
+        signal: AbortSignal,
+      ) => Promise<ConsultationView>,
+    ): Promise<boolean> => {
+      if (state.consultationId === null) {
+        safeDispatch({ type: "session_lost" });
+        return false;
+      }
+
+      const consultationId = state.consultationId;
+      const activeRequest = beginRequest(operation);
+      if (activeRequest === null) {
+        return false;
+      }
+
+      try {
+        const view = await request(
+          consultationId,
+          activeRequest.controller.signal,
+        );
+        await receiveView(
+          view,
+          consultationId,
+          activeRequest.controller.signal,
+        );
+        return true;
+      } catch (error: unknown) {
+        handleFailure(error, true);
+        return false;
+      } finally {
+        finishRequest(activeRequest);
+      }
+    },
+    [
+      beginRequest,
+      finishRequest,
+      handleFailure,
+      receiveView,
+      safeDispatch,
+      state.consultationId,
+    ],
+  );
+
+  const recoverPostResponse = useCallback(
+    async (
+      consultationId: string,
+      before: PostRecoverySnapshot,
+      signal: AbortSignal,
+    ): Promise<boolean> => {
+      try {
+        const current = await api.get(consultationId, { signal });
+        const decision = decidePostRecovery(before, current);
+
+        switch (decision) {
+          case "advanced":
+          case "safety_guidance":
+            await receiveView(current, consultationId, signal);
+            return true;
+          case "retry":
+            safeDispatch({ type: "request_failed", code: "NETWORK_ERROR" });
+            return false;
+          case "state_conflict":
+            safeDispatch({
+              type: "request_failed",
+              code: "CONSULTATION_STATE_CONFLICT",
+            });
+            return false;
+        }
+      } catch (error: unknown) {
+        handleFailure(error, true);
+        return false;
+      }
+    },
+    [api, handleFailure, receiveView, safeDispatch],
+  );
+
+  const runRecoverablePost = useCallback(
+    async (
+      operation: ConsultationOperation,
+      request: (
+        consultationId: string,
+        signal: AbortSignal,
+      ) => Promise<ConsultationView>,
+    ): Promise<boolean> => {
+      if (state.consultationId === null) {
+        safeDispatch({ type: "session_lost" });
+        return false;
+      }
+
+      const consultationId = state.consultationId;
+      const before = createPostRecoverySnapshot(state);
+      const activeRequest = beginRequest(operation);
+      if (activeRequest === null) {
+        return false;
+      }
+
+      try {
+        const view = await request(
+          consultationId,
+          activeRequest.controller.signal,
+        );
+        await receiveView(
+          view,
+          consultationId,
+          activeRequest.controller.signal,
+        );
+        return true;
+      } catch (error: unknown) {
+        const failure = toConsultationApiFailure(error);
+
+        if (
+          before !== null &&
+          failure.type === "failed" &&
+          failure.code === "NETWORK_ERROR"
+        ) {
+          return recoverPostResponse(
+            consultationId,
+            before,
+            activeRequest.controller.signal,
+          );
+        }
+
+        handleFailure(error, true);
+        return false;
+      } finally {
+        finishRequest(activeRequest);
+      }
+    },
+    [
+      beginRequest,
+      finishRequest,
+      handleFailure,
+      receiveView,
+      recoverPostResponse,
+      safeDispatch,
+      state,
+    ],
+  );
+
+  const submitEventDialogue = useCallback(
+    (request: EventDialogueRequest) =>
+      runViewOperation("event_dialogue", (consultationId, signal) =>
+        api.answerEvent(consultationId, request, { signal }),
+      ),
+    [api, runViewOperation],
+  );
+
+  const confirmEventSummary = useCallback(
+    (request: EventSummaryConfirmRequest) =>
+      runViewOperation("confirm_event_summary", (consultationId, signal) =>
+        api.confirmEventSummary(consultationId, request, { signal }),
+      ),
+    [api, runViewOperation],
+  );
+
+  const submitEmotion = useCallback(
+    (request: EmotionRequest) =>
+      runRecoverablePost("submit_emotion", (consultationId, signal) =>
+        api.submitEmotion(consultationId, request, { signal }),
+      ),
+    [api, runRecoverablePost],
+  );
+
+  const submitGuidedDialogue = useCallback(
+    (request: GuidedDialogueRequest) =>
+      runRecoverablePost("guided_dialogue", (consultationId, signal) =>
+        api.answerGuidedDialogue(consultationId, request, { signal }),
+      ),
+    [api, runRecoverablePost],
+  );
+
   const cancelPendingRequest = useCallback(() => {
     activeRequestRef.current?.controller.abort();
   }, []);
@@ -241,6 +433,10 @@ export function useConsultationSessionController(
     startConsultation,
     restoreConsultation,
     discardConsultation,
+    submitEventDialogue,
+    confirmEventSummary,
+    submitEmotion,
+    submitGuidedDialogue,
     cancelPendingRequest,
     clearError,
     reset,
