@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import type { ChangeEvent } from "react";
 
 import { HANDLING_OPTIONS } from "../model/constants";
 import type { HandlingType } from "../model/contracts";
@@ -25,12 +25,6 @@ export function HandlingSelectionStep({
   onSelect,
   onCancel,
 }: HandlingSelectionStepProps) {
-  const [selection, setSelection] = useState<HandlingType | null>(selectedHandling);
-
-  useEffect(() => {
-    setSelection(selectedHandling);
-  }, [selectedHandling]);
-
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     if (isSubmitting) {
       return;
@@ -38,7 +32,6 @@ export function HandlingSelectionStep({
 
     const nextHandling = event.target.value as HandlingType;
 
-    setSelection(nextHandling);
     onSelect(nextHandling);
   }
 
@@ -74,7 +67,7 @@ export function HandlingSelectionStep({
           {HANDLING_OPTIONS.map((option, index) => (
             <label
               className={`${styles.optionLabel} ${
-                selection === option.value ? styles.selectedOption : ""
+                selectedHandling === option.value ? styles.selectedOption : ""
               }`}
               key={option.value}
             >
@@ -83,7 +76,7 @@ export function HandlingSelectionStep({
                 type="radio"
                 name="consultation-handling"
                 value={option.value}
-                checked={selection === option.value}
+                checked={selectedHandling === option.value}
                 onChange={handleChange}
               />
               <span
