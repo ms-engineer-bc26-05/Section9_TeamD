@@ -16,10 +16,14 @@ import type {
   EventSummaryConfirmRequest,
   GuidedDialogueRequest,
   StartConsultationRequest,
+  UpdateConsultationResultRequest,
 } from "../model/contracts";
 import {
+  areResultChangesApplied,
   createPostRecoverySnapshot,
+  decideApprovalRecovery,
   decidePostRecovery,
+  decideResultUpdateRecovery,
   type PostRecoverySnapshot,
 } from "../model/recovery";
 import {
@@ -33,6 +37,8 @@ interface ActiveRequest {
   controller: AbortController;
 }
 
+type ResultUpdateOutcome = "continue_approval" | "completed" | "failed";
+
 export interface ConsultationSessionController {
   state: ReturnType<typeof consultationReducer>;
   startConsultation: (request: StartConsultationRequest) => Promise<boolean>;
@@ -45,6 +51,9 @@ export interface ConsultationSessionController {
   submitEmotion: (request: EmotionRequest) => Promise<boolean>;
   submitGuidedDialogue: (
     request: GuidedDialogueRequest,
+  ) => Promise<boolean>;
+  updateAndApproveResult: (
+    changes: UpdateConsultationResultRequest,
   ) => Promise<boolean>;
   cancelPendingRequest: () => void;
   clearError: () => void;
@@ -415,6 +424,188 @@ export function useConsultationSessionController(
     [api, runRecoverablePost],
   );
 
+  const recoverResultUpdate = useCallback(
+    async (
+      consultationId: string,
+      changes: UpdateConsultationResultRequest,
+      signal: AbortSignal,
+    ): Promise<ResultUpdateOutcome> => {
+      try {
+        const currentView = await api.get(consultationId, { signal });
+        const decision = decideResultUpdateRecovery(currentView.status);
+
+        switch (decision) {
+          case "fetch_result": {
+            safeDispatch({ type: "view_received", view: currentView });
+            safeDispatch({ type: "request_started", operation: "fetch_result" });
+            const currentResult = await api.getResult(consultationId, { signal });
+            safeDispatch({ type: "result_received", result: currentResult });
+
+            if (areResultChangesApplied(changes, currentResult)) {
+              return "continue_approval";
+            }
+
+            safeDispatch({ type: "request_failed", code: "NETWORK_ERROR" });
+            return "failed";
+          }
+          case "advanced":
+          case "safety_guidance":
+            await receiveView(currentView, consultationId, signal);
+            return "completed";
+          case "state_conflict":
+            safeDispatch({
+              type: "request_failed",
+              code: "CONSULTATION_STATE_CONFLICT",
+            });
+            return "failed";
+        }
+      } catch (error: unknown) {
+        handleFailure(error, true);
+        return "failed";
+      }
+    },
+    [api, handleFailure, receiveView, safeDispatch],
+  );
+
+  const updateResultBeforeApproval = useCallback(
+    async (
+      consultationId: string,
+      changes: UpdateConsultationResultRequest,
+      signal: AbortSignal,
+    ): Promise<ResultUpdateOutcome> => {
+      try {
+        const result = await api.updateResult(consultationId, changes, {
+          signal,
+        });
+        safeDispatch({ type: "result_received", result });
+        return "continue_approval";
+      } catch (error: unknown) {
+        const failure = toConsultationApiFailure(error);
+
+        if (
+          failure.type === "failed" &&
+          failure.code === "NETWORK_ERROR"
+        ) {
+          return recoverResultUpdate(consultationId, changes, signal);
+        }
+
+        handleFailure(error, true);
+        return "failed";
+      }
+    },
+    [api, handleFailure, recoverResultUpdate, safeDispatch],
+  );
+
+  const recoverApproval = useCallback(
+    async (
+      consultationId: string,
+      signal: AbortSignal,
+    ): Promise<boolean> => {
+      try {
+        const currentView = await api.get(consultationId, { signal });
+        const decision = decideApprovalRecovery(currentView.status);
+
+        switch (decision) {
+          case "approved":
+          case "safety_guidance":
+            await receiveView(currentView, consultationId, signal);
+            return true;
+          case "retry":
+            safeDispatch({ type: "request_failed", code: "NETWORK_ERROR" });
+            return false;
+          case "state_conflict":
+            safeDispatch({
+              type: "request_failed",
+              code: "CONSULTATION_STATE_CONFLICT",
+            });
+            return false;
+        }
+      } catch (error: unknown) {
+        handleFailure(error, true);
+        return false;
+      }
+    },
+    [api, handleFailure, receiveView, safeDispatch],
+  );
+
+  const updateAndApproveResult = useCallback(
+    async (changes: UpdateConsultationResultRequest): Promise<boolean> => {
+      if (state.consultationId === null) {
+        safeDispatch({ type: "session_lost" });
+        return false;
+      }
+
+      const consultationId = state.consultationId;
+      const hasChanges = Object.keys(changes).length > 0;
+      const activeRequest = beginRequest(
+        hasChanges ? "update_result" : "approve_result",
+      );
+      if (activeRequest === null) {
+        return false;
+      }
+
+      try {
+        if (hasChanges) {
+          const updateOutcome = await updateResultBeforeApproval(
+            consultationId,
+            changes,
+            activeRequest.controller.signal,
+          );
+
+          if (updateOutcome === "completed") {
+            return true;
+          }
+
+          if (updateOutcome === "failed") {
+            return false;
+          }
+        }
+
+        safeDispatch({ type: "request_started", operation: "approve_result" });
+
+        try {
+          const view = await api.approveResult(consultationId, {
+            signal: activeRequest.controller.signal,
+          });
+          await receiveView(
+            view,
+            consultationId,
+            activeRequest.controller.signal,
+          );
+          return true;
+        } catch (error: unknown) {
+          const failure = toConsultationApiFailure(error);
+
+          if (
+            failure.type === "failed" &&
+            failure.code === "NETWORK_ERROR"
+          ) {
+            return recoverApproval(
+              consultationId,
+              activeRequest.controller.signal,
+            );
+          }
+
+          handleFailure(error, true);
+          return false;
+        }
+      } finally {
+        finishRequest(activeRequest);
+      }
+    },
+    [
+      api,
+      beginRequest,
+      finishRequest,
+      handleFailure,
+      receiveView,
+      recoverApproval,
+      safeDispatch,
+      state.consultationId,
+      updateResultBeforeApproval,
+    ],
+  );
+
   const cancelPendingRequest = useCallback(() => {
     activeRequestRef.current?.controller.abort();
   }, []);
@@ -437,6 +628,7 @@ export function useConsultationSessionController(
     confirmEventSummary,
     submitEmotion,
     submitGuidedDialogue,
+    updateAndApproveResult,
     cancelPendingRequest,
     clearError,
     reset,
