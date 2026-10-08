@@ -3,6 +3,7 @@ import type { ConsultationState } from "./state";
 export type ConsultationScreen =
   | "start"
   | "state_unavailable"
+  | "usage_limit"
   | "event_dialogue"
   | "event_summary_ready"
   | "emotion_selection"
@@ -17,6 +18,10 @@ export function resolveConsultationScreen(
 ): ConsultationScreen {
   if (state.errorCode === "CONSULTATION_NOT_FOUND") {
     return "state_unavailable";
+  }
+
+  if (state.errorCode === "USAGE_LIMIT_EXCEEDED") {
+    return "usage_limit";
   }
 
   if (state.status === null) {

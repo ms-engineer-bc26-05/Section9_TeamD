@@ -21,6 +21,7 @@ import {
 import { ConsultationScreenRouter } from "./ConsultationScreenRouter";
 import { ConsultationStartFlow } from "./ConsultationStartFlow";
 import { ConsultationUnavailableStep } from "./ConsultationUnavailableStep";
+import { ConsultationUsageLimitStep } from "./ConsultationUsageLimitStep";
 import { ConsultationErrorNotice } from "./ConsultationErrorNotice";
 import { EmotionInputFlow } from "./EmotionInputFlow";
 import { EventDialogueStep } from "./EventDialogueStep";
@@ -51,6 +52,8 @@ export interface ConsultationFlowDraft {
 export interface ConsultationFlowActions {
   onBackToNotice: () => void;
   onReturnHomeAfterStateLoss: () => void;
+  onReturnHomeAfterUsageLimit: () => void;
+  onOpenPlan: () => void;
   onCancel: () => void;
   onStartConsultation: (request: StartConsultationRequest) => void;
   onEventAnswer: (answer: string) => void;
@@ -117,6 +120,12 @@ export function ConsultationFlow({
       />
     ),
     state_unavailable: unavailableScreen,
+    usage_limit: (
+      <ConsultationUsageLimitStep
+        onOpenPlan={actions.onOpenPlan}
+        onReturnHome={actions.onReturnHomeAfterUsageLimit}
+      />
+    ),
     event_dialogue:
       state.aiQuestion !== null ? (
         <EventDialogueStep
