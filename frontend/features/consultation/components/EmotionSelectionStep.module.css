@@ -17,7 +17,6 @@
   align-items: center;
 }
 
-.headerButton,
 .cancelButton {
   min-width: 44px;
   min-height: 44px;
@@ -30,15 +29,9 @@
   border-radius: 12px;
 }
 
-.headerButton {
-  display: grid;
-  margin-left: -8px;
-  place-items: center;
-}
-
-.backIcon {
-  font-size: 1.75rem;
-  line-height: 1;
+.headerSpacer {
+  width: 44px;
+  height: 44px;
 }
 
 .headerTitle {
@@ -54,12 +47,10 @@
   font-size: 0.6875rem;
 }
 
-.headerButton:hover,
 .cancelButton:hover {
   background: #ede6df;
 }
 
-.headerButton:focus-visible,
 .cancelButton:focus-visible,
 .primaryButton:focus-visible {
   outline: 3px solid #493e38;

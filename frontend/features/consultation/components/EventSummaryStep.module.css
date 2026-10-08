@@ -216,6 +216,16 @@
   line-height: 1.7;
 }
 
+.transitionNotice {
+  padding: 12px 14px;
+  margin: 24px 0 0;
+  color: #6f625b;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  background: #f3e8dd;
+  border-radius: 12px;
+}
+
 .primaryButton,
 .secondaryButton {
   width: 100%;
@@ -228,7 +238,7 @@
 }
 
 .primaryButton {
-  margin-top: 40px;
+  margin-top: 16px;
   color: #ffffff;
   background: #d98978;
   border: 2px solid #d98978;

@@ -10,7 +10,6 @@ interface EmotionSelectionStepProps {
   selectedEmotion: EmotionCategory | null;
   onEmotionChange: (emotion: EmotionCategory) => void;
   onNext: (emotion: EmotionCategory) => void;
-  onBack: () => void;
   onCancel: () => void;
 }
 
@@ -18,7 +17,6 @@ export function EmotionSelectionStep({
   selectedEmotion,
   onEmotionChange,
   onNext,
-  onBack,
   onCancel,
 }: EmotionSelectionStepProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -35,16 +33,7 @@ export function EmotionSelectionStep({
     <main className={styles.page}>
       <section className={styles.panel} aria-labelledby="emotion-selection-title">
         <header className={styles.header}>
-          <button
-            className={styles.headerButton}
-            type="button"
-            aria-label="出来事の確認に戻る"
-            onClick={onBack}
-          >
-            <span className={styles.backIcon} aria-hidden="true">
-              ‹
-            </span>
-          </button>
+          <span className={styles.headerSpacer} aria-hidden="true" />
           <p className={styles.headerTitle}>気持ちを整理する</p>
           <button className={styles.cancelButton} type="button" onClick={onCancel}>
             中断

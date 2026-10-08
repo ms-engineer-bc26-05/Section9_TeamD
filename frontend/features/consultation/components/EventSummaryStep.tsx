@@ -195,7 +195,16 @@ export function EventSummaryStep({
             </p>
           ) : null}
 
-          <button className={styles.primaryButton} type="submit" disabled={isSubmitting}>
+          <p id="event-summary-transition-notice" className={styles.transitionNotice}>
+            次へ進むと、この画面には戻れません。整理結果は最後の確認画面でも編集できます。
+          </p>
+
+          <button
+            className={styles.primaryButton}
+            type="submit"
+            aria-describedby="event-summary-transition-notice"
+            disabled={isSubmitting}
+          >
             {isSubmitting ? "処理中…" : "この内容で次へ"}
           </button>
 
