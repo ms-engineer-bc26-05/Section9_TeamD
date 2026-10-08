@@ -57,6 +57,7 @@ export interface ConsultationSessionController {
     changes: UpdateConsultationResultRequest,
   ) => Promise<boolean>;
   chooseHandling: (handling: HandlingType) => Promise<boolean>;
+  fetchResult: () => Promise<boolean>;
   cancelPendingRequest: () => void;
   clearError: () => void;
   reset: () => void;
@@ -615,6 +616,38 @@ export function useConsultationSessionController(
     [api, runViewOperation],
   );
 
+  const fetchResult = useCallback(async (): Promise<boolean> => {
+    if (state.consultationId === null) {
+      safeDispatch({ type: "session_lost" });
+      return false;
+    }
+
+    const activeRequest = beginRequest("fetch_result");
+    if (activeRequest === null) {
+      return false;
+    }
+
+    try {
+      const result = await api.getResult(state.consultationId, {
+        signal: activeRequest.controller.signal,
+      });
+      safeDispatch({ type: "result_received", result });
+      return true;
+    } catch (error: unknown) {
+      handleFailure(error, true);
+      return false;
+    } finally {
+      finishRequest(activeRequest);
+    }
+  }, [
+    api,
+    beginRequest,
+    finishRequest,
+    handleFailure,
+    safeDispatch,
+    state.consultationId,
+  ]);
+
   const cancelPendingRequest = useCallback(() => {
     activeRequestRef.current?.controller.abort();
   }, []);
@@ -639,6 +672,7 @@ export function useConsultationSessionController(
     submitGuidedDialogue,
     updateAndApproveResult,
     chooseHandling,
+    fetchResult,
     cancelPendingRequest,
     clearError,
     reset,

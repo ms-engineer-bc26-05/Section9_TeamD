@@ -4,7 +4,6 @@ import {
   useCallback,
   useEffect,
   useState,
-  type ReactNode,
 } from "react";
 
 import type { ConsultationApi } from "../api/consultationApi";
@@ -34,7 +33,6 @@ const IDLE_SAVE_STATE: ConsultationSaveState = {
 interface ConsultationFlowContainerProps {
   api: ConsultationApi;
   limits: ConsultationFlowLimits;
-  resultLoadingScreen: ReactNode;
   saveState?: ConsultationSaveState;
   onBackToNotice: () => void;
   onReturnHome: () => void;
@@ -49,7 +47,6 @@ interface ConsultationFlowContainerProps {
 export function ConsultationFlowContainer({
   api,
   limits,
-  resultLoadingScreen,
   saveState = IDLE_SAVE_STATE,
   onBackToNotice,
   onReturnHome,
@@ -169,7 +166,6 @@ export function ConsultationFlowContainer({
         isReselectingHandling,
       }}
       limits={limits}
-      resultLoadingScreen={resultLoadingScreen}
       saveState={saveState}
       actions={{
         onBackToNotice: handleBackToNotice,
@@ -194,6 +190,7 @@ export function ConsultationFlowContainer({
         onSubmitGuidedAnswer: (request) => void handleGuidedSubmit(request),
         onApproveResult: (changes) =>
           void controller.updateAndApproveResult(changes),
+        onRetryResult: () => void controller.fetchResult(),
         onChooseHandling: (handling) => void handleChooseHandling(handling),
         onSaveReasonChange: setSaveReason,
         onReturnToHandlingSelection: () => setIsReselectingHandling(true),

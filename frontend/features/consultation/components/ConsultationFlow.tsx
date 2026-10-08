@@ -24,6 +24,7 @@ import { ConsultationStartFlow } from "./ConsultationStartFlow";
 import { ConsultationUnavailableStep } from "./ConsultationUnavailableStep";
 import { ConsultationUsageLimitStep } from "./ConsultationUsageLimitStep";
 import { ConsultationErrorNotice } from "./ConsultationErrorNotice";
+import { ConsultationResultLoadingStep } from "./ConsultationResultLoadingStep";
 import { EmotionInputFlow } from "./EmotionInputFlow";
 import { EventDialogueStep } from "./EventDialogueStep";
 import { EventSummaryStep } from "./EventSummaryStep";
@@ -70,6 +71,7 @@ export interface ConsultationFlowActions {
   onGuidedAnswerChange: (answer: string) => void;
   onSubmitGuidedAnswer: (request: GuidedDialogueRequest) => void;
   onApproveResult: (changes: UpdateConsultationResultRequest) => void;
+  onRetryResult: () => void;
   onChooseHandling: (handling: HandlingType) => void;
   onSaveReasonChange: (reason: string) => void;
   onReturnToHandlingSelection: () => void;
@@ -83,7 +85,6 @@ interface ConsultationFlowProps {
   draft: ConsultationFlowDraft;
   limits: ConsultationFlowLimits;
   actions: ConsultationFlowActions;
-  resultLoadingScreen: ReactNode;
   saveState: ConsultationSaveState;
 }
 
@@ -92,7 +93,6 @@ export function ConsultationFlow({
   draft,
   limits,
   actions,
-  resultLoadingScreen,
   saveState,
 }: ConsultationFlowProps) {
   const isSubmitting = isConsultationPending(state);
@@ -112,6 +112,14 @@ export function ConsultationFlow({
       selectedHandling={state.handling}
       isSubmitting={isSubmitting}
       onSelect={actions.onChooseHandling}
+      onCancel={actions.onCancel}
+    />
+  );
+  const resultLoadingScreen = (
+    <ConsultationResultLoadingStep
+      isLoading={state.pendingOperation === "fetch_result"}
+      hasError={state.errorCode !== null}
+      onRetry={actions.onRetryResult}
       onCancel={actions.onCancel}
     />
   );
