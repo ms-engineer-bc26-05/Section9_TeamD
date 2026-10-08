@@ -6,7 +6,8 @@ import { useAuth } from "@/components/AuthProvider";
 
 export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { user, loading, error } = useAuth();
+  const { user, loading, error, profileStatus, profileErrorKind, retryProfile } =
+    useAuth();
 
   useEffect(() => {
     if (!loading && !error && !user) {
@@ -28,6 +29,25 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
 
   if (!user) {
     return null; // /login への遷移中は何も表示しない
+  }
+
+  if (profileStatus === "error") {
+    return (
+      <div role="alert">
+        <p>
+          {profileErrorKind === "network"
+            ? "通信できませんでした。接続を確認してもう一度お試しください。"
+            : "現在サービスを利用できません。時間をおいてもう一度お試しください。"}
+        </p>
+        <button type="button" onClick={retryProfile}>
+          再試行
+        </button>
+      </div>
+    );
+  }
+
+  if (profileStatus !== "ready") {
+    return <p role="status">読み込み中です…</p>;
   }
 
   return <>{children}</>;

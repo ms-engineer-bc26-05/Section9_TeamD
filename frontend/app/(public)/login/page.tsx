@@ -8,12 +8,14 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { toAuthErrorMessage } from "@/lib/authErrors";
+import { useAuth } from "@/components/AuthProvider";
 
 // 相談窓口の案内先は未確定のため仮置き(確定したら差し替える)
 const SUPPORT_URL = "#";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { signInNotice } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -72,6 +74,12 @@ export default function LoginPage() {
           />
         </label>
 
+        {signInNotice === "account_deleting" && (
+          <p role="alert">退会処理中のため利用できません。</p>
+         )}
+        {signInNotice === "session_expired" && (
+          <p role="alert">安全のため、もう一度ログインしてください。</p>
+         )}
         {errorMessage && <p role="alert">{errorMessage}</p>}
 
         <button type="submit" disabled={submitting}>
