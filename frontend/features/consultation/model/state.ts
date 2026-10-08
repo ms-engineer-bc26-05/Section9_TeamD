@@ -80,6 +80,15 @@ function stateFromView(
   state: ConsultationState,
   view: ConsultationView,
 ): ConsultationState {
+  if (view.status === "safety_guidance") {
+    return {
+      ...initialConsultationState,
+      consultationId: view.consultation_id ?? state.consultationId,
+      status: "safety_guidance",
+      safetyGuidance: view.safety_guidance ?? null,
+    };
+  }
+
   return {
     consultationId: view.consultation_id ?? state.consultationId,
     status: view.status,

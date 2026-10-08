@@ -2,7 +2,10 @@
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
-import type { EventDetails } from "../model/contracts";
+import type {
+  EventDetails,
+  EventSummaryConfirmRequest,
+} from "../model/contracts";
 import styles from "./EventSummaryStep.module.css";
 
 type EventDetailField = keyof EventDetails;
@@ -14,7 +17,7 @@ interface EventSummaryStepProps {
   correctionLimitReached: boolean;
   fieldMaxLength: number;
   isSubmitting: boolean;
-  onProceed: (eventDetails: EventDetails) => void;
+  onProceed: (request: EventSummaryConfirmRequest) => void;
   onAskMore: () => void;
   onBack: () => void;
   onCancel: () => void;
@@ -71,7 +74,16 @@ export function EventSummaryStep({
     }
 
     setEmptyFields([]);
-    onProceed(draft);
+
+    const wasEdited =
+      draft.what_happened !== eventDetails.what_happened ||
+      draft.what_bothered_me !== eventDetails.what_bothered_me;
+
+    onProceed(
+      wasEdited
+        ? { action: "proceed", event_details: draft }
+        : { action: "proceed" },
+    );
   }
 
   function handleAskMore() {
