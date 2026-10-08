@@ -30,6 +30,19 @@ export function getConsultationErrorMessage(
     case "UNAUTHORIZED":
       return "ログイン状態を確認できませんでした。ホームに戻って、もう一度ログインしてください。";
 
+    case "ACCOUNT_DELETING":
+      return "退会処理中のため、この機能は利用できません。";
+
+    case "USAGE_LIMIT_EXCEEDED":
+      return "現在のプランで利用できる相談回数に達しました。";
+
+    case "MEMO_LIMIT_EXCEEDED":
+      return "保存できる整理メモの上限に達しました。保存せず終了することもできます。";
+
+    case "AUTH_UNAVAILABLE":
+    case "DB_UNAVAILABLE":
+      return "サービスに接続できませんでした。時間をおいて、もう一度お試しください。";
+
     case "NETWORK_ERROR":
       return "通信できませんでした。接続を確認して、もう一度お試しください。";
 

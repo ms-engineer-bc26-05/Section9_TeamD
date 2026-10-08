@@ -133,6 +133,11 @@ export interface HandlingRequest {
 
 export type KnownConsultationErrorCode =
   | "UNAUTHORIZED"
+  | "ACCOUNT_DELETING"
+  | "AUTH_UNAVAILABLE"
+  | "DB_UNAVAILABLE"
+  | "USAGE_LIMIT_EXCEEDED"
+  | "MEMO_LIMIT_EXCEEDED"
   | "CONSULTATION_NOT_FOUND"
   | "CONSULTATION_BUSY"
   | "CONSULTATION_STATE_CONFLICT"

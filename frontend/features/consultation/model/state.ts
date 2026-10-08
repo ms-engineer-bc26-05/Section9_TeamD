@@ -76,6 +76,7 @@ export type ConsultationAction =
   | { type: "view_received"; view: ConsultationView }
   | { type: "result_received"; result: ConsultationResult }
   | { type: "request_failed"; code: ConsultationErrorCode }
+  | { type: "request_cancelled" }
   | { type: "session_lost" }
   | { type: "clear_error" }
   | { type: "reset" };
@@ -144,6 +145,13 @@ export function consultationReducer(
         ...state,
         pendingOperation: null,
         errorCode: action.code,
+      };
+
+    case "request_cancelled":
+      return {
+        ...state,
+        pendingOperation: null,
+        errorCode: null,
       };
 
     case "session_lost":
