@@ -7,6 +7,12 @@ from app.features.users.models import User
 
 from sqlalchemy.dialects.postgresql import insert
 
+from uuid import UUID
+
+from app.core.exceptions import (
+    AccountDeletingError,
+    AuthenticationRequiredError,
+)
 
 async def get_user_by_firebase_uid(
     session: AsyncSession,
@@ -47,3 +53,27 @@ async def get_or_create_user(
         raise RuntimeError("User unavailable after registration conflict")
 
     return existing_user, False
+
+
+async def mark_notice_seen(
+    session: AsyncSession,
+    user_id: UUID,
+) -> User:
+    """本人の注意確認状態を更新する。保存の確定は呼び出し元で行う。"""
+    statement = (
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+    )
+    result = await session.execute(statement)
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise AuthenticationRequiredError("Authentication required")
+    if user.status == "deleting":
+        raise AccountDeletingError("Account is being deleted")
+    if user.status != "active":
+        raise RuntimeError("Unexpected account status")
+
+    user.has_seen_notice = True
+    return user

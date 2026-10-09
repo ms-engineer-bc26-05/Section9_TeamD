@@ -14,6 +14,13 @@ from sqlalchemy import select
 
 from sqlalchemy.dialects import postgresql
 
+from app.features.users.service import mark_notice_seen
+
+from app.core.exceptions import (
+    AccountDeletingError,
+    AuthenticationRequiredError,
+)
+
 
 @pytest.mark.parametrize("found", [True, False])
 async def test_get_user_by_firebase_uid(found):
@@ -182,3 +189,98 @@ async def test_get_or_create_user_uses_conflict_guard_and_locked_lookup():
 
     assert str(compiled_select) == str(compiled_expected)
     assert compiled_select.params == compiled_expected.params
+
+
+@pytest.mark.parametrize("has_seen_notice", [False, True])
+async def test_mark_notice_seen_updates_active_user(has_seen_notice):
+    user_id = uuid4()
+    user = User(
+        id=user_id,
+        firebase_uid="dummy-firebase-uid",
+        status="active",
+        has_seen_notice=has_seen_notice,
+    )
+
+    result = Mock()
+    result.scalar_one_or_none.return_value = user
+    session = Mock()
+    session.execute = AsyncMock(return_value=result)
+
+    received = await mark_notice_seen(session, user_id)
+
+    assert received is user
+    assert user.has_seen_notice is True
+    session.execute.assert_awaited_once()
+    result.scalar_one_or_none.assert_called_once_with()
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+    session.close.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_error"),
+    [
+        (None, AuthenticationRequiredError),
+        ("deleting", AccountDeletingError),
+        ("unexpected", RuntimeError),
+    ],
+)
+async def test_mark_notice_seen_rejects_unavailable_user(
+    status, expected_error
+):
+    user_id = uuid4()
+    user = (
+        User(
+            id=user_id,
+            firebase_uid="dummy-firebase-uid",
+            status=status,
+            has_seen_notice=False,
+        )
+        if status is not None
+        else None
+    )
+
+    result = Mock()
+    result.scalar_one_or_none.return_value = user
+    session = Mock()
+    session.execute = AsyncMock(return_value=result)
+
+    with pytest.raises(expected_error):
+        await mark_notice_seen(session, user_id)
+
+    if user is not None:
+        assert user.has_seen_notice is False
+
+    session.execute.assert_awaited_once()
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+    session.close.assert_not_called()
+
+
+async def test_mark_notice_seen_filters_by_user_id_and_locks():
+    user_id = uuid4()
+    user = User(
+        id=user_id,
+        firebase_uid="dummy-firebase-uid",
+        status="active",
+        has_seen_notice=False,
+    )
+    result = Mock()
+    result.scalar_one_or_none.return_value = user
+    session = Mock()
+    session.execute = AsyncMock(return_value=result)
+
+    await mark_notice_seen(session, user_id)
+
+    statement = session.execute.await_args.args[0]
+    expected = (
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+    )
+    dialect = postgresql.dialect()
+    actual_sql = statement.compile(dialect=dialect)
+    expected_sql = expected.compile(dialect=dialect)
+
+    assert str(actual_sql) == str(expected_sql)
+    assert actual_sql.params == expected_sql.params
