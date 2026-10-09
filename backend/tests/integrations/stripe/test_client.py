@@ -9,6 +9,8 @@ import pytest
 from app.integrations.stripe.client import (
     StripeCheckoutClient,
     StripeConfigError,
+    StripeIdempotencyInProgress,
+    StripeIdempotencyMismatch,
     StripeRequestFailed,
     StripeSessionNotFound,
     StripeUnavailable,
@@ -133,13 +135,64 @@ async def test_create_is_not_retried_by_sdk():
     "response",
     [
         error_response(400, "invalid_request_error", "parameter_invalid"),
-        error_response(400, "idempotency_error"),
         error_response(401, "invalid_request_error"),
     ],
 )
 async def test_create_request_error_is_not_retryable(response):
     with pytest.raises(StripeRequestFailed):
         await create(make_client(lambda request: response))
+
+
+async def test_create_same_key_in_progress():
+    # 同じidempotency keyの最初のリクエストを、Stripeがまだ処理している
+    response = error_response(409, "invalid_request_error", "idempotency_key_in_use")
+    with pytest.raises(StripeIdempotencyInProgress):
+        await create(make_client(lambda request: response))
+
+
+async def test_create_same_key_with_different_params():
+    response = error_response(400, "idempotency_error")
+    with pytest.raises(StripeIdempotencyMismatch):
+        await create(make_client(lambda request: response))
+
+
+# --- Price取得 -----------------------------------------------------------------
+
+
+async def test_retrieve_price_returns_amount_and_currency():
+    sent = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent["method"] = request.method
+        sent["path"] = request.url.path
+        return httpx.Response(
+            200,
+            json={
+                "id": "price_dummy",
+                "object": "price",
+                "active": True,
+                "type": "one_time",
+                "unit_amount": 300,
+                "currency": "jpy",
+            },
+        )
+
+    price = await make_client(handler).retrieve_price("price_dummy")
+
+    assert sent == {"method": "GET", "path": "/v1/prices/price_dummy"}
+    assert (price.active, price.type, price.unit_amount, price.currency) == (
+        True,
+        "one_time",
+        300,
+        "jpy",
+    )
+
+
+async def test_retrieve_missing_price_is_not_retryable():
+    response = error_response(404, "invalid_request_error", "resource_missing")
+    # Priceが見つからないのは設定の誤り。Session用の例外（StripeSessionNotFound）にはしない
+    with pytest.raises(StripeRequestFailed):
+        await make_client(lambda request: response).retrieve_price("price_dummy")
 
 
 # --- Session取得 ---------------------------------------------------------------

@@ -47,8 +47,22 @@ class StripeSessionNotFound(StripeClientError):
     """指定したSession IDのCheckout Sessionが存在しない"""
 
 
+class StripeIdempotencyInProgress(StripeClientError):
+    """同じidempotency keyのリクエストを、Stripeがまだ処理している（HTTP 409）。
+
+    少し待って同じidempotency keyで再試行すれば、最初のリクエストの結果が返る。
+    """
+
+
+class StripeIdempotencyMismatch(StripeClientError):
+    """同じidempotency keyで、前回と異なる内容を送った（Price IDの変更など）。
+
+    このidempotency keyでは、再試行しても成功しない。
+    """
+
+
 class StripeRequestFailed(StripeClientError):
-    """上記以外の失敗（認証・パラメータ不正・idempotency keyの使い回しなど）。再試行しても直らない"""
+    """上記以外の失敗（認証・パラメータ不正など）。再試行しても直らない"""
 
 
 @dataclass(frozen=True)
@@ -63,6 +77,17 @@ class CheckoutSession:
     currency: str | None
     client_reference_id: str | None = field(repr=False)
     metadata: dict[str, str] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
+class StripePrice:
+    """Priceのうち、金額・通貨の確認に使う項目だけを取り出したもの"""
+
+    id: str
+    active: bool
+    type: str | None  # one_time / recurring
+    unit_amount: int | None
+    currency: str | None
 
 
 class StripeCheckoutClient:
@@ -127,6 +152,22 @@ class StripeCheckoutClient:
             raise _convert_error(exc, "retrieve") from None
         return _to_checkout_session(session)
 
+    async def retrieve_price(self, price_id: str) -> StripePrice:
+        """Priceを取得する（金額・通貨はStripe Priceを正とする。#59）"""
+        self._check_test_key()
+        try:
+            price = await self._client.v1.prices.retrieve_async(price_id)
+        except stripe.StripeError as exc:
+            raise _convert_error(exc, "retrieve_price") from None
+        data = price.to_dict()
+        return StripePrice(
+            id=data["id"],
+            active=bool(data.get("active")),
+            type=data.get("type"),
+            unit_amount=data.get("unit_amount"),
+            currency=data.get("currency"),
+        )
+
 
 def _convert_error(exc: stripe.StripeError, operation: str) -> StripeClientError:
     """SDKの例外を変換する。SDKのメッセージにはリクエストの値が含まれることがあるため、
@@ -142,7 +183,15 @@ def _convert_error(exc: stripe.StripeError, operation: str) -> StripeClientError
         isinstance(exc, stripe.APIError) and (exc.http_status or 500) >= 500
     ):
         return StripeUnavailable("Stripeの呼び出しに失敗しました")
-    if isinstance(exc, stripe.InvalidRequestError) and exc.code == "resource_missing":
+    if exc.http_status == 409:
+        return StripeIdempotencyInProgress("同じidempotency keyのリクエストを処理中です")
+    if isinstance(exc, stripe.IdempotencyError):
+        return StripeIdempotencyMismatch("idempotency keyの内容が前回と異なります")
+    if (
+        operation == "retrieve"
+        and isinstance(exc, stripe.InvalidRequestError)
+        and exc.code == "resource_missing"
+    ):
         return StripeSessionNotFound("Checkout Sessionが見つかりません")
     return StripeRequestFailed("Stripeの呼び出しに失敗しました")
 
