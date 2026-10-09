@@ -19,6 +19,21 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # 利用回数制限（Issue #57）の結合テストを実物のRedisで実行する
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      REDIS_URL: redis://localhost:6379/0
+      # Redisに接続できない場合、結合テストをスキップせず失敗にする
+      REQUIRE_REDIS_TESTS: "true"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
