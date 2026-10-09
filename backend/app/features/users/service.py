@@ -12,7 +12,11 @@ from uuid import UUID
 from app.core.exceptions import (
     AccountDeletingError,
     AuthenticationRequiredError,
+    DatabaseUnavailableError,
 )
+
+from app.core.database_errors import is_database_connection_error
+from app.features.users.schemas import UserResponse
 
 async def get_user_by_firebase_uid(
     session: AsyncSession,
@@ -77,3 +81,25 @@ async def mark_notice_seen(
 
     user.has_seen_notice = True
     return user
+
+
+async def update_user_notice(
+    session: AsyncSession,
+    user_id: UUID,
+) -> UserResponse:
+    """注意確認状態を更新し、保存が確定してから結果を返す。"""
+    try:
+        async with session.begin():
+            user = await mark_notice_seen(session, user_id)
+            response = UserResponse(
+                user_id=user.id,
+                has_seen_notice=user.has_seen_notice,
+            )
+    except Exception as error:
+        if is_database_connection_error(error):
+            raise DatabaseUnavailableError(
+                "Database connection unavailable"
+            ) from None
+        raise
+
+    return response

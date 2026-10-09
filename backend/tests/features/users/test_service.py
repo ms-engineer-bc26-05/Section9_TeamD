@@ -6,10 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.features.users.models import User
-from app.features.users.service import (
-    get_or_create_user,
-    get_user_by_firebase_uid,
-)
+
 from sqlalchemy import select
 
 from sqlalchemy.dialects import postgresql
@@ -19,7 +16,15 @@ from app.features.users.service import mark_notice_seen
 from app.core.exceptions import (
     AccountDeletingError,
     AuthenticationRequiredError,
+    DatabaseUnavailableError,
 )
+
+from app.features.users.service import (
+    get_or_create_user,
+    get_user_by_firebase_uid,
+    update_user_notice,
+)
+from sqlalchemy.exc import OperationalError
 
 
 @pytest.mark.parametrize("found", [True, False])
@@ -284,3 +289,91 @@ async def test_mark_notice_seen_filters_by_user_id_and_locks():
 
     assert str(actual_sql) == str(expected_sql)
     assert actual_sql.params == expected_sql.params
+
+
+async def test_update_user_notice_returns_response_after_transaction():
+    user_id = uuid4()
+    user = User(
+        id=user_id,
+        firebase_uid="dummy-firebase-uid",
+        status="active",
+        has_seen_notice=False,
+    )
+    result = Mock()
+    result.scalar_one_or_none.return_value = user
+
+    transaction = AsyncMock()
+    transaction.__aexit__.return_value = False
+    session = Mock()
+    session.begin.return_value = transaction
+    session.execute = AsyncMock(return_value=result)
+
+    response = await update_user_notice(session, user_id)
+
+    assert response.user_id == user_id
+    assert response.has_seen_notice is True
+    session.begin.assert_called_once_with()
+    transaction.__aenter__.assert_awaited_once()
+    transaction.__aexit__.assert_awaited_once_with(None, None, None)
+    session.execute.assert_awaited_once()
+    session.close.assert_not_called()
+
+
+async def test_update_user_notice_commit_failure_does_not_return_success():
+    user_id = uuid4()
+    user = User(
+        id=user_id,
+        firebase_uid="dummy-firebase-uid",
+        status="active",
+        has_seen_notice=False,
+    )
+    result = Mock()
+    result.scalar_one_or_none.return_value = user
+
+    marker = "DUMMY_DB_ERROR_MARKER"
+    error = OperationalError(
+        "COMMIT",
+        {},
+        ConnectionRefusedError(marker),
+    )
+    transaction = AsyncMock()
+    transaction.__aexit__.side_effect = error
+    session = Mock()
+    session.begin.return_value = transaction
+    session.execute = AsyncMock(return_value=result)
+
+    with pytest.raises(DatabaseUnavailableError) as caught:
+        await update_user_notice(session, user_id)
+
+    assert str(caught.value) == "Database connection unavailable"
+    assert marker not in str(caught.value)
+    assert caught.value.__suppress_context__ is True
+    session.begin.assert_called_once_with()
+    transaction.__aenter__.assert_awaited_once()
+    transaction.__aexit__.assert_awaited_once_with(None, None, None)
+    session.execute.assert_awaited_once()
+    session.close.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [AuthenticationRequiredError, AccountDeletingError, RuntimeError],
+)
+async def test_update_user_notice_preserves_other_errors(error_type):
+    error = error_type("DUMMY_ERROR")
+    transaction = AsyncMock()
+    transaction.__aexit__.return_value = False
+    session = Mock()
+    session.begin.return_value = transaction
+    session.execute = AsyncMock(side_effect=error)
+
+    with pytest.raises(error_type) as caught:
+        await update_user_notice(session, uuid4())
+
+    assert caught.value is error
+    transaction.__aenter__.assert_awaited_once()
+    transaction.__aexit__.assert_awaited_once()
+    exit_args = transaction.__aexit__.await_args.args
+    assert exit_args[0] is error_type
+    assert exit_args[1] is error
+    session.close.assert_not_called()
