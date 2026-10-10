@@ -166,3 +166,133 @@ async def test_service_errors_log_only_safe_503_metadata(
     for secret in (MARKER, token, connection_url):
         assert secret not in response.text
         assert secret not in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# 想定外の例外（500）：#86
+# ---------------------------------------------------------------------------
+
+from fastapi import HTTPException  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import StreamingResponse  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.core.errors import (  # noqa: E402
+    INTERNAL_ERROR_CODE,
+    INTERNAL_ERROR_MESSAGE,
+    InternalErrorMiddleware,
+)
+
+INTERNAL_ERROR_BODY = {"error": {"code": INTERNAL_ERROR_CODE, "message": INTERNAL_ERROR_MESSAGE}}
+ORIGIN = "http://localhost:3000"
+
+
+def _make_failing_app(*, with_cors: bool = False) -> FastAPI:
+    """想定外の例外を起こす仮APIを持つアプリ（main.py と同じ順番で登録する）"""
+    app = FastAPI()
+    register_exception_handlers(app)
+    if with_cors:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[ORIGIN],
+            allow_methods=["GET", "POST", "PATCH", "DELETE"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
+
+    @app.post("/runtime-error")
+    async def runtime_error(body: dict) -> dict:
+        # 例外のメッセージに入力値が入る場合を模す
+        raise RuntimeError(f"入力値を含むメッセージ {body}")
+
+    @app.post("/validation-error")
+    async def validation_error(body: dict) -> dict:
+        # 処理の途中で Pydantic の検証に失敗する場合（ValidationError は入力値をメッセージに含む）
+        DummyInput.model_validate({"theme": "other", "detail": body["detail"]})
+        return {"ok": True}
+
+    @app.get("/not-found")
+    async def not_found() -> dict:
+        raise HTTPException(status_code=404)
+
+    @app.get("/stream-error")
+    async def stream_error():
+        async def body():
+            yield b"partial"
+            raise RuntimeError(f"送信中のエラー {MARKER}")
+
+        return StreamingResponse(body())
+
+    return app
+
+
+def test_main_app_registers_internal_error_middleware():
+    classes = [m.cls for m in main_app.user_middleware]
+    assert InternalErrorMiddleware in classes
+    # CORSMiddleware が外側（リストの前）にあるため、500の応答にもCORSのヘッダーが付く
+    assert classes.index(CORSMiddleware) < classes.index(InternalErrorMiddleware)
+
+
+@pytest.mark.parametrize("path", ["/runtime-error", "/validation-error"])
+def test_unexpected_error_returns_500_in_common_format(caplog, path):
+    caplog.set_level(logging.DEBUG)
+    # raise_server_exceptions=True（既定）でも例外が出ない＝例外を投げ直していない
+    client = TestClient(_make_failing_app())
+
+    response = client.post(path, json={"detail": f"架空の相談本文 {MARKER}"})
+
+    assert response.status_code == 500
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == INTERNAL_ERROR_BODY
+    assert MARKER not in response.text
+    # ログには例外の種類と場所だけを出し、メッセージ（入力値）は出さない
+    assert MARKER not in caplog.text
+    assert "unhandled error" in caplog.text
+
+
+def test_log_contains_error_type_and_location(caplog):
+    caplog.set_level(logging.DEBUG)
+    TestClient(_make_failing_app()).post("/runtime-error", json={"detail": "架空"})
+
+    records = [r for r in caplog.records if r.name == "app.core.errors"]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert "RuntimeError" in message
+    assert "in runtime_error" in message  # 起きた関数の名前
+    assert "POST /runtime-error" in message
+    assert "架空" not in message
+
+
+def test_internal_error_response_has_cors_headers():
+    # 画面（ブラウザ）が500の本文を読めるよう、CORSのヘッダーが付く
+    client = TestClient(_make_failing_app(with_cors=True))
+
+    response = client.post("/runtime-error", json={"detail": "架空"}, headers={"Origin": ORIGIN})
+
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == ORIGIN
+    assert response.json() == INTERNAL_ERROR_BODY
+
+
+def test_other_errors_keep_their_own_handling():
+    client = TestClient(_make_failing_app())
+
+    # HTTPException は、これまでどおり FastAPI の処理で返す（500にしない）
+    assert client.get("/not-found").status_code == 404
+    # リクエストの検証エラーは、これまでどおり422
+    response = client.post("/validation-error", json=[1])
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_error_after_response_started_is_not_raised(caplog):
+    # 応答を送り始めた後のエラーは、別の応答を送れないため打ち切る（例外は投げ直さない）
+    caplog.set_level(logging.DEBUG)
+    client = TestClient(_make_failing_app())
+
+    response = client.get("/stream-error")
+
+    assert response.status_code == 200
+    assert MARKER not in caplog.text
+    # 非同期処理でまとめられた例外からも、元の例外の種類と場所を取り出してログに出す
+    assert "RuntimeError" in caplog.text
+    assert "in body" in caplog.text
