@@ -124,3 +124,43 @@ async def test_concurrent_requests_to_same_consultation_only_one_succeeds():
     assert sum(r is None for r in results) == 1
     assert sum(isinstance(r, ConsultationBusy) for r in results) == 1
     assert state.question_count == 1
+
+
+@pytest.mark.asyncio
+async def test_exception_inside_lock_restores_state():
+    # テスト設計書 ST-19：状態を書き換えた後に例外が起きた場合は、ロック取得時の状態へ戻す
+    store = ConsultationStore()
+    state = make_state(uuid4())
+    state.messages.append(DialogueTurn(role="user", content="架空の相談本文"))
+    state.ai_question = "架空の質問"
+    store.add(state)
+    before_updated_at = state.updated_at
+
+    with pytest.raises(RuntimeError):
+        async with store.locked(state.user_id, state.consultation_id) as s:
+            s.question_count += 1
+            s.ai_question = "架空の次の質問"
+            s.messages.append(DialogueTurn(role="user", content="架空の回答"))
+            s.status = ConsultationStatus.EVENT_SUMMARY_READY
+            s.touch()
+            raise RuntimeError("想定外のエラー")
+
+    assert state.question_count == 0
+    assert state.ai_question == "架空の質問"
+    assert [t.content for t in state.messages] == ["架空の相談本文"]
+    assert state.status is ConsultationStatus.EVENT_DIALOGUE
+    assert state.updated_at == before_updated_at
+    # ロックは解放されている
+    assert not state.lock.locked()
+
+
+@pytest.mark.asyncio
+async def test_successful_update_is_kept():
+    store = ConsultationStore()
+    state = make_state(uuid4())
+    store.add(state)
+
+    async with store.locked(state.user_id, state.consultation_id) as s:
+        s.question_count += 1
+
+    assert state.question_count == 1
