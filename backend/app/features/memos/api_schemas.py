@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.features.memos.service import MemoHandling
+from app.features.memos.payload import MemoHandling
 
 # 文字数上限（暫定。Issue #52で合意）
 REASON_MAX_LENGTH = 500

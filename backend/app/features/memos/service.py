@@ -20,11 +20,9 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
 from uuid import UUID, uuid4
 
 from cryptography.fernet import Fernet
-from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.features.consultations.public import (
     ApprovedConsultation,
@@ -32,10 +30,14 @@ from app.features.consultations.public import (
     discard_consultation,
     get_approved_result,
 )
-from app.features.memos.crypto import (
-    MemoEncryptionError,
-    decrypt_payload,
-    encrypt_payload,
+from app.features.memos.crypto import encrypt_payload
+from app.features.memos.payload import (
+    ENCRYPTION_VERSION,
+    KEY_VERSION,
+    PAYLOAD_VERSION,
+    MemoHandling,
+    MemoPayload,
+    decrypt_memo,
 )
 from app.features.memos.repository import (
     DuplicateMemo,
@@ -46,32 +48,8 @@ from app.features.memos.repository import (
 
 logger = logging.getLogger(__name__)
 
-# 暗号化の方式・鍵・復号後のデータ構造の版（DB設計 approved_memos）
-ENCRYPTION_VERSION = "fernet-v1"
-# MVPでは鍵のローテーションを行わないため固定。本番鍵管理は対象外（Issue #52）
-KEY_VERSION = "v1"
-PAYLOAD_VERSION = 1
-
 GetApproved = Callable[[UUID, UUID], Awaitable[ApprovedConsultation]]
 Discard = Callable[[UUID, UUID], Awaitable[None]]
-
-# 扱い方（API設計書4.4）。保存する内容とAPIのレスポンスで同じ型を使う
-MemoHandling = Literal["tell", "hold", "not_tell"]
-
-
-class MemoPayload(BaseModel):
-    """暗号化して保存する内容（payload_version=1）。復号後もこの形で検証する"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    event_summary: str
-    emotion: str
-    true_feeling: str
-    background: str
-    wish: str
-    handling: MemoHandling
-    reason: str | None
-
 
 @dataclass(frozen=True)
 class SavedMemo:
@@ -181,19 +159,7 @@ class MemoSaveService:
         )
 
     def _to_saved(self, stored: StoredMemo, user_id: UUID) -> SavedMemo:
-        if stored.payload_version != PAYLOAD_VERSION:
-            raise MemoEncryptionError("Memo payload version is not supported")
-        # 別のユーザー・別のメモの行へ移された暗号文は、ここで復号・照合に失敗する
-        data = decrypt_payload(
-            stored.encrypted_payload,
-            user_id=user_id,
-            memo_id=stored.id,
-            cipher=self._cipher,
-        )
-        try:
-            payload = MemoPayload.model_validate(data)
-        except ValidationError:
-            raise MemoEncryptionError("Memo payload is invalid") from None
+        payload = decrypt_memo(stored, user_id, self._cipher)
         return SavedMemo(
             memo_id=stored.id,
             created_at=stored.created_at,
