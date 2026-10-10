@@ -6,5 +6,5 @@ HTTPのステータス・エラーコードへの変換は http_errors.py で行
 """
 
 
-class MemoRepositoryUnavailable(Exception):
-    """DBの実装がまだない（I-01のORM・マイグレーション基盤の後に追加する）"""
+class MemoDatabaseError(Exception):
+    """接続障害以外のDBの失敗（APIでは500）。元の例外のメッセージは持たない"""

@@ -25,7 +25,7 @@ from app.core.exceptions import (
 )
 from app.features.consultations.public import ConsultationRoute
 from app.features.memos.crypto import MemoEncryptionError
-from app.features.memos.exceptions import MemoRepositoryUnavailable
+from app.features.memos.exceptions import MemoDatabaseError
 from app.features.memos.repository import UserNotActive, UserNotFound
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
     UserNotActive: (403, "ACCOUNT_DELETING", "退会処理中のため利用できません。"),
     # 鍵の未設定・復号失敗・照合失敗。原因を区別して返さない
     MemoEncryptionError: _SAVE_FAILED,
-    MemoRepositoryUnavailable: _SAVE_FAILED,
+    MemoDatabaseError: _SAVE_FAILED,
 }
 
 

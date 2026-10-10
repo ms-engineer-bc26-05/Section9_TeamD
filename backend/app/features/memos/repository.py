@@ -1,7 +1,7 @@
 """承認済み整理メモ（approved_memos）を保存・検索する入口。
 
-DBの実装（SQLAlchemy）はI-01のORM・マイグレーション基盤が届いてから追加する。
-それまではServiceとテストをこのProtocolに対して書き、テストではメモリ上の実装を使う。
+DBの実装は db_repository.py（SQLAlchemy）。ServiceとテストはこのProtocolに対して書き、
+テストではメモリ上の実装を使う。
 
 保存の流れ（DB設計「保存処理」・API設計6.5.2）：
   1. トランザクションの外で find_by_consultation により保存済みを確認する
@@ -9,7 +9,7 @@ DBの実装（SQLAlchemy）はI-01のORM・マイグレーション基盤が届�
      → find_by_consultation（再検索）→ insert
   3. insert または commit が DuplicateMemo を送出した場合は、既存のメモを取得して返す
 
-DBの実装で確認すること：
+DBの実装で守ること：
   - トランザクションの外の find_by_consultation と transaction() が同じ AsyncSession を使う場合、
     検索で自動的に始まったトランザクションと session.begin() が衝突しない構成にする
   - 一意制約違反（IntegrityError）は flush・commit のどちらでも DuplicateMemo へ変換する

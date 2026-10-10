@@ -2,8 +2,7 @@
 
 - Routerの登録（main.py）は結合Issue（I-06）で行う
 - 認証は I-01 の get_current_user を使う。401・403・503 は共通のエラーハンドラで返す
-- DBの実装は I-01 のORM・マイグレーション基盤の後に追加する。それまでは
-  get_memo_repository が例外を送出し、テストでは dependency_overrides で差し替える
+- DBは I-01 のセッション基盤を使う。テストでは dependency_overrides でメモリ上の実装へ差し替える
 - エラーの本文・ログに、本文・鍵・暗号文を含めない
 """
 
@@ -13,11 +12,12 @@ from uuid import UUID
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, Response, status
 
-from app.features.memos.api_schemas import SavedMemoView, SaveMemoRequest
-from app.features.memos.crypto import create_fernet
+from app.core.database import get_session_factory
 from app.features.auth.dependencies import get_current_user
 from app.features.auth.schemas import CurrentUser
-from app.features.memos.exceptions import MemoRepositoryUnavailable
+from app.features.memos.api_schemas import SavedMemoView, SaveMemoRequest
+from app.features.memos.crypto import create_fernet
+from app.features.memos.db_repository import SqlAlchemyMemoRepository
 from app.features.memos.http_errors import MemoRoute
 from app.features.memos.repository import MemoRepository
 from app.features.memos.service import MemoSaveService
@@ -42,7 +42,7 @@ async def get_current_user_id(current_user: CurrentUser = Depends(get_current_us
 
 
 def get_memo_repository() -> MemoRepository:
-    raise MemoRepositoryUnavailable
+    return SqlAlchemyMemoRepository(get_session_factory())
 
 
 def get_memo_cipher() -> Fernet:
