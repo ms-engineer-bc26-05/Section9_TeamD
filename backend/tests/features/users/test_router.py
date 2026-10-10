@@ -22,6 +22,11 @@ from app.features.auth.schemas import CurrentUser
 
 from app.features.auth import dependencies as auth_dependencies
 
+from firebase_admin import exceptions as firebase_exceptions
+
+from app.features.auth import service as auth_service
+from app.integrations.firebase import client as firebase_client
+
 @pytest.mark.parametrize(
     ("created", "expected_status"),
     [(True, 201), (False, 200)],
@@ -360,3 +365,52 @@ async def test_update_notice_returns_safe_error(
     update.assert_awaited_once_with(session, user_id)
     if status == 401:
         assert response.headers["www-authenticate"] == "Bearer"
+
+
+async def test_register_permission_denied_returns_503(monkeypatch, caplog):
+    marker = "DUMMY_PERMISSION_ERROR"
+    firebase_app = Mock()
+    verify = Mock(
+        side_effect=firebase_exceptions.PermissionDeniedError(marker)
+    )
+    factory = Mock(side_effect=AssertionError("DB must not be called"))
+
+    monkeypatch.setattr(
+        firebase_client, "get_firebase_app",
+        Mock(return_value=firebase_app),
+    )
+    monkeypatch.setattr(firebase_client.auth, "verify_id_token", verify)
+    monkeypatch.setattr(auth_service, "get_session_factory", factory)
+
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.include_router(users_router.router, prefix="/api/v1")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/users/me",
+            headers={"Authorization": "Bearer dummy-token"},
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {
+            "code": "AUTH_UNAVAILABLE",
+            "message": (
+                "認証サービスを利用できません。"
+                "時間をおいて再度お試しください。"
+            ),
+        }
+    }
+    assert "www-authenticate" not in response.headers
+    assert marker not in response.text
+    assert marker not in caplog.text
+    assert "dummy-token" not in response.text
+    assert "dummy-token" not in caplog.text
+    verify.assert_called_once_with(
+        "dummy-token", app=firebase_app, check_revoked=True
+    )
+    factory.assert_not_called()

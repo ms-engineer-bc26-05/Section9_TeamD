@@ -6,6 +6,8 @@ import pytest
 
 from app.integrations.firebase import client
 
+from firebase_admin import exceptions as firebase_exceptions
+
 
 @pytest.fixture(autouse=True)
 def firebase_mocks(monkeypatch):
@@ -76,6 +78,7 @@ def test_invalid_token_errors_hide_details(firebase_mocks, error, caplog):
     "error",
     [
         client.auth.CertificateFetchError("DUMMY_SECRET_MARKER", None),
+        firebase_exceptions.PermissionDeniedError("DUMMY_SECRET_MARKER"),
         ConnectionError("DUMMY_SECRET_MARKER"),
         RuntimeError("DUMMY_SECRET_MARKER"),
     ],
