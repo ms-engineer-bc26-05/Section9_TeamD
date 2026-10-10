@@ -72,6 +72,7 @@ export interface ConsultationFlowActions {
   onSubmitGuidedAnswer: (request: GuidedDialogueRequest) => void;
   onApproveResult: (changes: UpdateConsultationResultRequest) => void;
   onRetryResult: () => void;
+  onCheckCurrentState: () => void;
   onChooseHandling: (handling: HandlingType) => void;
   onSaveReasonChange: (reason: string) => void;
   onReturnToHandlingSelection: () => void;
@@ -101,6 +102,9 @@ export function ConsultationFlow({
   const errorMessage = getConsultationErrorMessage(
     saveState.errorCode ?? (state.status === null ? null : state.errorCode),
   );
+  const displayedErrorMessage = state.recoveryRequired
+    ? "処理状況を確認できませんでした。元の操作を再送せず、現在の状態を確認してください。"
+    : errorMessage;
   const unavailableScreen = (
     <ConsultationUnavailableStep
       onReturnHome={actions.onReturnHomeAfterStateLoss}
@@ -240,7 +244,16 @@ export function ConsultationFlow({
   } satisfies Record<ConsultationScreen, ReactNode>;
 
   return (
-    <ConsultationErrorNotice message={errorMessage}>
+    <ConsultationErrorNotice
+      message={displayedErrorMessage}
+      actionLabel={
+        state.recoveryRequired ? "現在の状態を確認する" : undefined
+      }
+      actionDisabled={state.pendingOperation === "fetch_state"}
+      onAction={
+        state.recoveryRequired ? actions.onCheckCurrentState : undefined
+      }
+    >
       <ConsultationScreenRouter
         state={state}
         screens={screens}

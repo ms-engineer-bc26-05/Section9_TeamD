@@ -18,3 +18,25 @@
   border: 1px solid #d98978;
   border-radius: 12px;
 }
+
+.notice p {
+  margin: 0;
+}
+
+.actionButton {
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 10px;
+  color: #6f352d;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: #fffaf7;
+  border: 1px solid #b85d4f;
+  border-radius: 8px;
+}
+
+.actionButton:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}

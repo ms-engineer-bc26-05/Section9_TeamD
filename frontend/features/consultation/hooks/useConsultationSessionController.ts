@@ -40,10 +40,80 @@ interface ActiveRequest {
 
 type ResultUpdateOutcome = "continue_approval" | "completed" | "failed";
 
+type RecoveryReadResult<T> =
+  | { type: "received"; value: T }
+  | { type: "busy" }
+  | { type: "aborted" }
+  | { type: "failed"; error: unknown };
+
+const RECOVERY_POLL_INTERVAL_MS = 1_000;
+const RECOVERY_POLL_TIMEOUT_MS = 35_000;
+
+function waitForRecoveryRetry(
+  delayMs: number,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (signal.aborted) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      resolve(true);
+    }, delayMs);
+
+    function handleAbort() {
+      clearTimeout(timeoutId);
+      resolve(false);
+    }
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
+async function readWhenAvailable<T>(
+  read: () => Promise<T>,
+  signal: AbortSignal,
+): Promise<RecoveryReadResult<T>> {
+  const deadline = Date.now() + RECOVERY_POLL_TIMEOUT_MS;
+
+  while (!signal.aborted) {
+    try {
+      return { type: "received", value: await read() };
+    } catch (error: unknown) {
+      const failure = toConsultationApiFailure(error);
+
+      if (failure.type === "aborted") {
+        return { type: "aborted" };
+      }
+
+      if (failure.code !== "CONSULTATION_BUSY") {
+        return { type: "failed", error };
+      }
+
+      if (Date.now() >= deadline) {
+        return { type: "busy" };
+      }
+
+      const shouldContinue = await waitForRecoveryRetry(
+        RECOVERY_POLL_INTERVAL_MS,
+        signal,
+      );
+      if (!shouldContinue) {
+        return { type: "aborted" };
+      }
+    }
+  }
+
+  return { type: "aborted" };
+}
+
 export interface ConsultationSessionController {
   state: ReturnType<typeof consultationReducer>;
   startConsultation: (request: StartConsultationRequest) => Promise<boolean>;
   restoreConsultation: (consultationId: string) => Promise<boolean>;
+  checkCurrentState: () => Promise<boolean>;
   discardConsultation: () => Promise<boolean>;
   submitEventDialogue: (request: EventDialogueRequest) => Promise<boolean>;
   confirmEventSummary: (
@@ -155,6 +225,38 @@ export function useConsultationSessionController(
     [safeDispatch],
   );
 
+  const handleRecoveryReadProblem = useCallback(
+    (outcome: Exclude<RecoveryReadResult<unknown>, { type: "received" }>) => {
+      if (outcome.type === "aborted") {
+        safeDispatch({ type: "request_cancelled" });
+        return;
+      }
+
+      if (outcome.type === "busy") {
+        safeDispatch({
+          type: "recovery_required",
+          code: "CONSULTATION_BUSY",
+        });
+        return;
+      }
+
+      const failure = toConsultationApiFailure(outcome.error);
+      if (
+        failure.type === "failed" &&
+        failure.code === "CONSULTATION_NOT_FOUND"
+      ) {
+        safeDispatch({ type: "session_lost" });
+        return;
+      }
+
+      safeDispatch({
+        type: "recovery_required",
+        code: failure.type === "failed" ? failure.code : "NETWORK_ERROR",
+      });
+    },
+    [safeDispatch],
+  );
+
   const startConsultation = useCallback(
     async (request: StartConsultationRequest): Promise<boolean> => {
       const activeRequest = beginRequest("start");
@@ -173,7 +275,7 @@ export function useConsultationSessionController(
         );
         return true;
       } catch (error: unknown) {
-        handleFailure(error, false);
+        handleFailure(error, true);
         return false;
       } finally {
         finishRequest(activeRequest);
@@ -208,6 +310,78 @@ export function useConsultationSessionController(
       }
     },
     [api, beginRequest, finishRequest, handleFailure, receiveView, safeDispatch],
+  );
+
+  const checkCurrentState = useCallback(async (): Promise<boolean> => {
+    if (state.consultationId === null) {
+      safeDispatch({ type: "session_lost" });
+      return false;
+    }
+
+    const consultationId = state.consultationId;
+    const activeRequest = beginRequest("fetch_state");
+    if (activeRequest === null) {
+      return false;
+    }
+
+    try {
+      const outcome = await readWhenAvailable(
+        () =>
+          api.get(consultationId, {
+            signal: activeRequest.controller.signal,
+          }),
+        activeRequest.controller.signal,
+      );
+
+      if (outcome.type !== "received") {
+        handleRecoveryReadProblem(outcome);
+        return false;
+      }
+
+      await receiveView(
+        outcome.value,
+        consultationId,
+        activeRequest.controller.signal,
+      );
+      return true;
+    } catch (error: unknown) {
+      handleRecoveryReadProblem({ type: "failed", error });
+      return false;
+    } finally {
+      finishRequest(activeRequest);
+    }
+  }, [
+    api,
+    beginRequest,
+    finishRequest,
+    handleRecoveryReadProblem,
+    receiveView,
+    safeDispatch,
+    state.consultationId,
+  ]);
+
+  const resyncAfterConflict = useCallback(
+    async (
+      consultationId: string,
+      signal: AbortSignal,
+    ): Promise<void> => {
+      const outcome = await readWhenAvailable(
+        () => api.get(consultationId, { signal }),
+        signal,
+      );
+
+      if (outcome.type !== "received") {
+        handleRecoveryReadProblem(outcome);
+        return;
+      }
+
+      try {
+        await receiveView(outcome.value, consultationId, signal);
+      } catch (error: unknown) {
+        handleRecoveryReadProblem({ type: "failed", error });
+      }
+    },
+    [api, handleRecoveryReadProblem, receiveView],
   );
 
   const discardConsultation = useCallback(async (): Promise<boolean> => {
@@ -283,6 +457,19 @@ export function useConsultationSessionController(
         );
         return true;
       } catch (error: unknown) {
+        const failure = toConsultationApiFailure(error);
+        if (
+          failure.type === "failed" &&
+          (failure.code === "CONSULTATION_BUSY" ||
+            failure.code === "CONSULTATION_STATE_CONFLICT")
+        ) {
+          await resyncAfterConflict(
+            consultationId,
+            activeRequest.controller.signal,
+          );
+          return false;
+        }
+
         handleFailure(error, true);
         return false;
       } finally {
@@ -294,6 +481,7 @@ export function useConsultationSessionController(
       finishRequest,
       handleFailure,
       receiveView,
+      resyncAfterConflict,
       safeDispatch,
       state.consultationId,
     ],
@@ -305,14 +493,23 @@ export function useConsultationSessionController(
       before: PostRecoverySnapshot,
       signal: AbortSignal,
     ): Promise<boolean> => {
+      const outcome = await readWhenAvailable(
+        () => api.get(consultationId, { signal }),
+        signal,
+      );
+
+      if (outcome.type !== "received") {
+        handleRecoveryReadProblem(outcome);
+        return false;
+      }
+
       try {
-        const current = await api.get(consultationId, { signal });
-        const decision = decidePostRecovery(before, current);
+        const decision = decidePostRecovery(before, outcome.value);
 
         switch (decision) {
           case "advanced":
           case "safety_guidance":
-            await receiveView(current, consultationId, signal);
+            await receiveView(outcome.value, consultationId, signal);
             return true;
           case "retry":
             safeDispatch({ type: "request_failed", code: "NETWORK_ERROR" });
@@ -325,11 +522,11 @@ export function useConsultationSessionController(
             return false;
         }
       } catch (error: unknown) {
-        handleFailure(error, true);
+        handleRecoveryReadProblem({ type: "failed", error });
         return false;
       }
     },
-    [api, handleFailure, receiveView, safeDispatch],
+    [api, handleRecoveryReadProblem, receiveView, safeDispatch],
   );
 
   const runRecoverablePost = useCallback(
@@ -378,6 +575,18 @@ export function useConsultationSessionController(
           );
         }
 
+        if (
+          failure.type === "failed" &&
+          (failure.code === "CONSULTATION_BUSY" ||
+            failure.code === "CONSULTATION_STATE_CONFLICT")
+        ) {
+          await resyncAfterConflict(
+            consultationId,
+            activeRequest.controller.signal,
+          );
+          return false;
+        }
+
         handleFailure(error, true);
         return false;
       } finally {
@@ -390,6 +599,7 @@ export function useConsultationSessionController(
       handleFailure,
       receiveView,
       recoverPostResponse,
+      resyncAfterConflict,
       safeDispatch,
       state,
     ],
@@ -433,13 +643,33 @@ export function useConsultationSessionController(
       changes: UpdateConsultationResultRequest,
       signal: AbortSignal,
     ): Promise<ResultUpdateOutcome> => {
+      const viewOutcome = await readWhenAvailable(
+        () => api.get(consultationId, { signal }),
+        signal,
+      );
+
+      if (viewOutcome.type !== "received") {
+        handleRecoveryReadProblem(viewOutcome);
+        return "failed";
+      }
+
       try {
-        const currentView = await api.get(consultationId, { signal });
+        const currentView = viewOutcome.value;
         const decision = decideResultUpdateRecovery(currentView.status);
 
         switch (decision) {
           case "fetch_result": {
-            const currentResult = await api.getResult(consultationId, { signal });
+            const resultOutcome = await readWhenAvailable(
+              () => api.getResult(consultationId, { signal }),
+              signal,
+            );
+
+            if (resultOutcome.type !== "received") {
+              handleRecoveryReadProblem(resultOutcome);
+              return "failed";
+            }
+
+            const currentResult = resultOutcome.value;
 
             if (areResultChangesApplied(changes, currentResult)) {
               safeDispatch({ type: "view_received", view: currentView });
@@ -462,11 +692,11 @@ export function useConsultationSessionController(
             return "failed";
         }
       } catch (error: unknown) {
-        handleFailure(error, true);
+        handleRecoveryReadProblem({ type: "failed", error });
         return "failed";
       }
     },
-    [api, handleFailure, receiveView, safeDispatch],
+    [api, handleRecoveryReadProblem, receiveView, safeDispatch],
   );
 
   const updateResultBeforeApproval = useCallback(
@@ -491,11 +721,26 @@ export function useConsultationSessionController(
           return recoverResultUpdate(consultationId, changes, signal);
         }
 
+        if (
+          failure.type === "failed" &&
+          (failure.code === "CONSULTATION_BUSY" ||
+            failure.code === "CONSULTATION_STATE_CONFLICT")
+        ) {
+          await resyncAfterConflict(consultationId, signal);
+          return "failed";
+        }
+
         handleFailure(error, true);
         return "failed";
       }
     },
-    [api, handleFailure, recoverResultUpdate, safeDispatch],
+    [
+      api,
+      handleFailure,
+      recoverResultUpdate,
+      resyncAfterConflict,
+      safeDispatch,
+    ],
   );
 
   const recoverApproval = useCallback(
@@ -503,8 +748,18 @@ export function useConsultationSessionController(
       consultationId: string,
       signal: AbortSignal,
     ): Promise<boolean> => {
+      const outcome = await readWhenAvailable(
+        () => api.get(consultationId, { signal }),
+        signal,
+      );
+
+      if (outcome.type !== "received") {
+        handleRecoveryReadProblem(outcome);
+        return false;
+      }
+
       try {
-        const currentView = await api.get(consultationId, { signal });
+        const currentView = outcome.value;
         const decision = decideApprovalRecovery(currentView.status);
 
         switch (decision) {
@@ -523,11 +778,11 @@ export function useConsultationSessionController(
             return false;
         }
       } catch (error: unknown) {
-        handleFailure(error, true);
+        handleRecoveryReadProblem({ type: "failed", error });
         return false;
       }
     },
-    [api, handleFailure, receiveView, safeDispatch],
+    [api, handleRecoveryReadProblem, receiveView, safeDispatch],
   );
 
   const updateAndApproveResult = useCallback(
@@ -588,6 +843,18 @@ export function useConsultationSessionController(
             );
           }
 
+          if (
+            failure.type === "failed" &&
+            (failure.code === "CONSULTATION_BUSY" ||
+              failure.code === "CONSULTATION_STATE_CONFLICT")
+          ) {
+            await resyncAfterConflict(
+              consultationId,
+              activeRequest.controller.signal,
+            );
+            return false;
+          }
+
           handleFailure(error, true);
           return false;
         }
@@ -602,6 +869,7 @@ export function useConsultationSessionController(
       handleFailure,
       receiveView,
       recoverApproval,
+      resyncAfterConflict,
       safeDispatch,
       state.consultationId,
       updateResultBeforeApproval,
@@ -634,6 +902,19 @@ export function useConsultationSessionController(
       safeDispatch({ type: "result_received", result });
       return true;
     } catch (error: unknown) {
+      const failure = toConsultationApiFailure(error);
+      if (
+        failure.type === "failed" &&
+        (failure.code === "CONSULTATION_BUSY" ||
+          failure.code === "CONSULTATION_STATE_CONFLICT")
+      ) {
+        await resyncAfterConflict(
+          state.consultationId,
+          activeRequest.controller.signal,
+        );
+        return false;
+      }
+
       handleFailure(error, true);
       return false;
     } finally {
@@ -644,6 +925,7 @@ export function useConsultationSessionController(
     beginRequest,
     finishRequest,
     handleFailure,
+    resyncAfterConflict,
     safeDispatch,
     state.consultationId,
   ]);
@@ -665,6 +947,7 @@ export function useConsultationSessionController(
     state,
     startConsultation,
     restoreConsultation,
+    checkCurrentState,
     discardConsultation,
     submitEventDialogue,
     confirmEventSummary,

@@ -47,6 +47,7 @@ export interface ConsultationState {
   approved: boolean;
   safetyGuidance: SafetyGuidance | null;
   pendingOperation: ConsultationOperation | null;
+  recoveryRequired: boolean;
   errorCode: ConsultationErrorCode | null;
 }
 
@@ -68,6 +69,7 @@ export const initialConsultationState: ConsultationState = {
   approved: false,
   safetyGuidance: null,
   pendingOperation: null,
+  recoveryRequired: false,
   errorCode: null,
 };
 
@@ -76,6 +78,7 @@ export type ConsultationAction =
   | { type: "view_received"; view: ConsultationView }
   | { type: "result_received"; result: ConsultationResult }
   | { type: "request_failed"; code: ConsultationErrorCode }
+  | { type: "recovery_required"; code: ConsultationErrorCode }
   | { type: "request_cancelled" }
   | { type: "session_lost" }
   | { type: "clear_error" }
@@ -112,6 +115,7 @@ function stateFromView(
     approved: view.approved ?? state.approved,
     safetyGuidance: view.safety_guidance ?? null,
     pendingOperation: null,
+    recoveryRequired: false,
     errorCode: null,
   };
 }
@@ -125,7 +129,7 @@ export function consultationReducer(
       return {
         ...state,
         pendingOperation: action.operation,
-        errorCode: null,
+        errorCode: state.recoveryRequired ? state.errorCode : null,
       };
 
     case "view_received":
@@ -137,6 +141,7 @@ export function consultationReducer(
         result: action.result,
         approved: action.result.approved,
         pendingOperation: null,
+        recoveryRequired: false,
         errorCode: null,
       };
 
@@ -144,6 +149,15 @@ export function consultationReducer(
       return {
         ...state,
         pendingOperation: null,
+        recoveryRequired: false,
+        errorCode: action.code,
+      };
+
+    case "recovery_required":
+      return {
+        ...state,
+        pendingOperation: null,
+        recoveryRequired: true,
         errorCode: action.code,
       };
 
@@ -151,7 +165,7 @@ export function consultationReducer(
       return {
         ...state,
         pendingOperation: null,
-        errorCode: null,
+        errorCode: state.recoveryRequired ? state.errorCode : null,
       };
 
     case "session_lost":
@@ -161,6 +175,10 @@ export function consultationReducer(
       };
 
     case "clear_error":
+      if (state.recoveryRequired) {
+        return state;
+      }
+
       return {
         ...state,
         errorCode: null,
@@ -172,5 +190,5 @@ export function consultationReducer(
 }
 
 export function isConsultationPending(state: ConsultationState): boolean {
-  return state.pendingOperation !== null;
+  return state.pendingOperation !== null || state.recoveryRequired;
 }

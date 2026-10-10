@@ -191,6 +191,7 @@ export function ConsultationFlowContainer({
         onApproveResult: (changes) =>
           void controller.updateAndApproveResult(changes),
         onRetryResult: () => void controller.fetchResult(),
+        onCheckCurrentState: () => void controller.checkCurrentState(),
         onChooseHandling: (handling) => void handleChooseHandling(handling),
         onSaveReasonChange: setSaveReason,
         onReturnToHandlingSelection: () => setIsReselectingHandling(true),
