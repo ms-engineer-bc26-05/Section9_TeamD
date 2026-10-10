@@ -259,6 +259,7 @@ async def probe(case, token):
     )
     lookup = AsyncMock(return_value=(user, True))
     outcome = {
+        "sdk": "NOT_REACHED",
         "permission_denied": False,
         "user_disabled": False,
         "uid": None,
@@ -269,11 +270,29 @@ async def probe(case, token):
         try:
             decoded = original_verify(*args, **kwargs)
         except firebase_exceptions.PermissionDeniedError:
+            outcome["sdk"] = "PERMISSION_DENIED"
             outcome["permission_denied"] = True
             raise
         except firebase_client.auth.UserDisabledError:
+            outcome["sdk"] = "USER_DISABLED"
             outcome["user_disabled"] = True
             raise
+        except Exception as error:
+            # Only fixed categories are printable; never interpolate exception data.
+            outcome["sdk"] = "OTHER_ERROR"
+            for error_type, label in (
+                (firebase_client.auth.CertificateFetchError, "CERTIFICATE_FETCH_ERROR"),
+                (firebase_client.auth.ExpiredIdTokenError, "TOKEN_EXPIRED"),
+                (firebase_client.auth.RevokedIdTokenError, "TOKEN_REVOKED"),
+                (firebase_client.auth.InvalidIdTokenError, "TOKEN_INVALID"),
+                (firebase_client.auth.UserNotFoundError, "USER_NOT_FOUND"),
+                (ValueError, "INVALID_ARGUMENT"),
+            ):
+                if isinstance(error, error_type):
+                    outcome["sdk"] = label
+                    break
+            raise
+        outcome["sdk"] = "VERIFIED"
         if isinstance(decoded, dict):
             outcome["uid"] = decoded.get("uid")
         return decoded
@@ -306,6 +325,7 @@ async def probe(case, token):
                 )
 
         if verify.call_count != 1 or verify.call_args.kwargs.get("check_revoked") is not True:
+            print("DIAGNOSTIC: VERIFY_CALL_CONTRACT_FAILED")
             return False
         if case == "allowed":
             valid = (
@@ -368,7 +388,16 @@ async def probe(case, token):
         )
         secret_values = (token, outcome["uid"], os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
         body_safe = all(not value or value not in response.text for value in secret_values)
-        return valid and log_safe and body_safe
+        success = valid and log_safe and body_safe
+        if not success:
+            print("DIAGNOSTIC SDK: " + outcome["sdk"])
+            status = str(response.status_code) if response.status_code in (201, 401, 403, 500, 503) else "OTHER"
+            print("DIAGNOSTIC HTTP: " + status)
+            db_called = bool(get_factory.call_count or factory.call_count or lookup.call_count)
+            print("DIAGNOSTIC DB: " + ("CALLED" if db_called else "NOT_CALLED"))
+            for label, passed in (("CASE", valid), ("LOG", log_safe), ("BODY", body_safe)):
+                print("DIAGNOSTIC " + label + ": " + ("PASS" if passed else "FAIL"))
+        return success
     finally:
         logs.records.clear()
         root.handlers, root.level = old_handlers, old_level
@@ -395,7 +424,16 @@ async def self_test():
         with patch.object(firebase_client, "get_firebase_app", return_value=Mock()), patch.object(
             firebase_client.auth, "verify_id_token", sdk
         ):
-            if await probe(case, "dummy-token") is not expected:
+            output = io.StringIO()
+            with redirect_stdout(output):
+                actual = await probe(case, "dummy-token")
+            if actual is not expected:
+                return False
+            if any(secret in output.getvalue() for secret in ("dummy-token", "dummy-firebase-uid", "DUMMY_PRIVATE_ERROR")):
+                return False
+            if expected and output.getvalue():
+                return False
+            if not expected and "DIAGNOSTIC" not in output.getvalue():
                 return False
     def unsafe_sdk(*args, **kwargs):
         logging.getLogger("probe.self_test").warning("DUMMY_PRIVATE_ERROR")
@@ -404,7 +442,10 @@ async def self_test():
     with patch.object(firebase_client, "get_firebase_app", return_value=Mock()), patch.object(
         firebase_client.auth, "verify_id_token", side_effect=unsafe_sdk
     ):
-        if await probe("allowed", "dummy-token"):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            actual = await probe("allowed", "dummy-token")
+        if actual or "DIAGNOSTIC LOG: FAIL" not in output.getvalue() or "DUMMY_PRIVATE_ERROR" in output.getvalue():
             return False
     return True
 
