@@ -27,3 +27,11 @@ class UsageStoreUnavailable(Exception):
     相談開始の判定ではフェイルオープンにするため外へ出さない。
     退会時のキー削除（F-06）では、再実行できるよう呼び出し元へ伝える。
     """
+
+
+class AccountDeleting(Exception):
+    """退会処理中のユーザー（APIでは403・ACCOUNT_DELETING。#47で決定済み）"""
+
+
+class UserStatusUnavailable(Exception):
+    """DB障害などでユーザーの状態を確認できない（APIではエラー。相談開始を許可しない）"""

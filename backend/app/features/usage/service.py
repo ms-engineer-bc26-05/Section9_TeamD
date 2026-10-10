@@ -1,29 +1,21 @@
 """利用回数とプランの判定（Issue #57）。
 
-相談開始API（consultations）への組み込みは、I-03B（#50）のマージ後に行う。組み込みの流れ：
-
-    reservation = await usage.reserve_consultation(user_id)   # 上限超過なら UsageLimitExceeded
-    try:
-        state = await service.start(...)                       # AI呼び出し
-    except Exception:
-        await usage.refund(reservation)                        # 開始時のAI失敗・500は戻す（質問③）
-        raise
-    if 開始時の安全案内:
-        await usage.refund(reservation)                        # 開始時の安全案内も戻す（質問③）
-
-退会と同時に開始された場合の扱い（質問⑨・もえさん確認中）は、組み込み時に追加する。
+相談開始APIへの組み込みは consultation_gate.py で行う。
 """
 
+import logging
 from uuid import UUID
 
 from fastapi import Depends
 
-from app.features.usage.exceptions import UsageLimitExceeded
+from app.features.usage.exceptions import UsageLimitExceeded, UsageStoreUnavailable
 from app.features.usage.limiter import Reservation, UsageLimiter, get_usage_limiter
 from app.features.usage.memos import MemoCounter, get_memo_counter
 from app.features.usage.plans import PlanResolver, get_plan_resolver
 from app.features.usage.schemas import UsageView
 from app.features.usage.settings import UsageSettings, get_usage_settings
+
+logger = logging.getLogger(__name__)
 
 
 class UsageService:
@@ -56,6 +48,17 @@ class UsageService:
     async def refund(self, reservation: Reservation) -> bool:
         """そのリクエストが加算した1回分を戻す（質問③）"""
         return await self._limiter.refund(reservation)
+
+    async def discard_user_usage_quietly(self, user_id: UUID) -> None:
+        """そのユーザーのキーを丸ごと削除する（退会処理中・不在と分かった場合。質問⑨）。
+
+        加算できたか分からない回も含めて消すため、1回分を戻すのではなく丸ごと削除する。
+        Redis障害で削除できなかった場合は記録だけ残す（相談開始の拒否は続ける）。
+        """
+        try:
+            await self._limiter.delete_user_usage(user_id)
+        except UsageStoreUnavailable:
+            logger.warning("usage key delete skipped")
 
     async def get_usage(self, user_id: UUID) -> UsageView:
         plan = await self._plans.resolve(user_id)

@@ -1,11 +1,14 @@
 """テスト用の偽物（Redis・DBへは接続しない）。"""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from uuid import UUID
 
-from app.features.usage.exceptions import PlanUnavailable
+from app.features.usage.exceptions import PlanUnavailable, UserStatusUnavailable
 from app.features.usage.limiter import Reservation, UsageCounter
 from app.features.usage.settings import PlanCode, load_usage_settings
+from app.features.usage.users import UserStatus
 
 
 def make_settings(**env: str):
@@ -50,6 +53,7 @@ class FakeLimiter:
         self.fail = fail  # True ならRedis障害を模す
         self.reserve_calls: list[int | None] = []
         self.refund_calls: list[Reservation] = []
+        self.delete_calls = 0
 
     async def reserve(self, user_id: UUID, limit: int | None) -> Reservation:
         self.reserve_calls.append(limit)
@@ -63,10 +67,45 @@ class FakeLimiter:
         )
 
     async def refund(self, reservation: Reservation) -> bool:
+        """本物と同じく、加算した予約だけを1回だけ戻す"""
         self.refund_calls.append(reservation)
+        if not reservation.counted or reservation.refunded:
+            return False
+        reservation.refunded = True
+        self.count -= 1
         return True
+
+    async def delete_user_usage(self, user_id: UUID) -> None:
+        self.delete_calls += 1
+        self.count = 0
 
     async def get_counter(self, user_id: UUID) -> UsageCounter | None:
         if self.fail:
             return None
         return UsageCounter(count=self.count, resets_at=self.resets_at)
+
+
+class FakeUserStatusChecker:
+    def __init__(self, status: UserStatus | None = UserStatus.ACTIVE) -> None:
+        # None ならDB障害を模す
+        self.status = status
+        self.calls = 0
+
+    async def get_status(self, user_id: UUID) -> UserStatus:
+        self.calls += 1
+        if self.status is None:
+            raise UserStatusUnavailable
+        return self.status
+
+
+class _NoopTicket:
+    async def refund(self) -> None:
+        return None
+
+
+class AllowAllStartGate:
+    """相談機能のテスト用。利用回数を判定せず、常に相談開始を許可する"""
+
+    @asynccontextmanager
+    async def consultation_start(self, user_id: UUID) -> AsyncIterator[_NoopTicket]:
+        yield _NoopTicket()

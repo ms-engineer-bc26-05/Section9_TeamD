@@ -14,10 +14,12 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from app.features.usage.exceptions import (
+    AccountDeleting,
     MemoCountUnavailable,
     NotAuthenticated,
     PlanUnavailable,
     UsageLimitExceeded,
+    UserStatusUnavailable,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,8 +38,11 @@ _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
         "USAGE_LIMIT_EXCEEDED",
         "現在のプランで利用できる回数に達しました。",
     ),
+    # 退会処理中（#47で決定済みのコード・文言）
+    AccountDeleting: (403, "ACCOUNT_DELETING", "退会処理中のため利用できません。"),
     PlanUnavailable: _UNAVAILABLE,
     MemoCountUnavailable: _UNAVAILABLE,
+    UserStatusUnavailable: _UNAVAILABLE,
 }
 
 
