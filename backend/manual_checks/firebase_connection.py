@@ -43,7 +43,11 @@ async def probe(case, token):
         has_seen_notice=False,
     )
     lookup = AsyncMock(return_value=(user, True))
-    outcome = {"permission_denied": False, "uid": None}
+    outcome = {
+        "permission_denied": False,
+        "user_disabled": False,
+        "uid": None,
+    }
     original_verify = firebase_client.auth.verify_id_token
 
     def observe_verify(*args, **kwargs):
@@ -51,6 +55,9 @@ async def probe(case, token):
             decoded = original_verify(*args, **kwargs)
         except firebase_exceptions.PermissionDeniedError:
             outcome["permission_denied"] = True
+            raise
+        except firebase_client.auth.UserDisabledError:
+            outcome["user_disabled"] = True
             raise
         if isinstance(decoded, dict):
             outcome["uid"] = decoded.get("uid")
@@ -100,7 +107,7 @@ async def probe(case, token):
                 and session.begin.return_value.__aexit__.call_args.args[0] is None
                 and context.__aexit__.await_count == 1
             )
-        else:
+        elif case == "denied":
             valid = (
                 outcome["permission_denied"]
                 and response.status_code == 503
@@ -116,10 +123,28 @@ async def probe(case, token):
                 and lookup.call_count == 0
             )
 
+        elif case == "disabled":
+            valid = (
+                outcome["user_disabled"]
+                and response.status_code == 401
+                and response.json() == {
+                    "error": {
+                        "code": "UNAUTHORIZED",
+                        "message": "ログインしてください。",
+                    }
+                }
+                and response.headers.get("www-authenticate") == "Bearer"
+                and factory.call_count == 0
+                and get_factory.call_count == 0
+                and lookup.call_count == 0
+            )
+        else:
+            return False
         allowed_messages = {
             'HTTP Request: POST http://probe.invalid/api/v1/users/me "HTTP/1.1 201 Created"',
             'HTTP Request: POST http://probe.invalid/api/v1/users/me "HTTP/1.1 503 Service Unavailable"',
             "AUTH_UNAVAILABLE AuthServiceUnavailableError",
+            'HTTP Request: POST http://probe.invalid/api/v1/users/me "HTTP/1.1 401 Unauthorized"',
         }
         log_safe = all(
             record.getMessage() in allowed_messages
@@ -136,6 +161,11 @@ async def probe(case, token):
 
 async def self_test():
     scenarios = [
+        ("disabled", firebase_client.auth.UserDisabledError("DUMMY_PRIVATE_ERROR"), True),
+        ("disabled", firebase_client.auth.InvalidIdTokenError("DUMMY_PRIVATE_ERROR"), False),
+        ("disabled", firebase_exceptions.PermissionDeniedError("DUMMY_PRIVATE_ERROR"), False),
+        ("disabled", firebase_exceptions.UnavailableError("DUMMY_PRIVATE_ERROR"), False),
+        ("disabled", {"uid": "dummy-firebase-uid"}, False),
         ("allowed", {"uid": "dummy-firebase-uid"}, True),
         ("denied", firebase_exceptions.PermissionDeniedError("DUMMY_PRIVATE_ERROR"), True),
         ("denied", firebase_exceptions.UnavailableError("DUMMY_PRIVATE_ERROR"), False),
@@ -166,7 +196,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--self-test", action="store_true")
-    modes.add_argument("--case", choices=("allowed", "denied"))
+    modes.add_argument("--case", choices=("allowed", "denied", "disabled"))
     parser.add_argument("--approved", action="store_true", help="Confirm the documented live plan is approved")
     args = parser.parse_args()
     if args.self_test:
