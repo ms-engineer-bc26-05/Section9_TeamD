@@ -14,7 +14,7 @@ const NEXT_PATH = "/home";
 
 export default function NoticePage() {
   const router = useRouter();
-  const { profile, setHasSeenNotice } = useAuth();
+  const { profile, setHasSeenNotice, handleAuthFailure } = useAuth();
   const [showDetail, setShowDetail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -34,6 +34,8 @@ export default function NoticePage() {
       }
       router.push(NEXT_PATH);
     } catch (e) {
+      // 退会処理中・セッション切れならログアウト済み(ログイン画面へ戻る)
+      if (await handleAuthFailure(e)) return;
       setErrorMessage(
         e instanceof ApiError && e.kind === "network"
           ? "通信できませんでした。接続を確認してもう一度お試しください。"

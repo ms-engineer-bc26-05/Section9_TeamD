@@ -32,6 +32,8 @@ type AuthState = {
   signInNotice: SignInNotice;
   retryProfile: () => void;
   setHasSeenNotice: (value: boolean) => void; // PATCH成功後に呼ぶ
+  // 退会処理中・セッション切れならログアウトして true を返す(それ以外は false)
+  handleAuthFailure: (e: unknown) => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthState>({
@@ -44,6 +46,7 @@ const AuthContext = createContext<AuthState>({
   signInNotice: null,
   retryProfile: () => {},
   setHasSeenNotice: () => {},
+  handleAuthFailure: async () => false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -76,6 +79,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
+  const handleAuthFailure = useCallback(async (e: unknown) => {
+    // 退会処理中: 通知を出してログアウトする
+    if (
+      e instanceof ApiError &&
+      e.kind === "forbidden" &&
+      e.code === "ACCOUNT_DELETING"
+    ) {
+      setSignInNotice("account_deleting");
+      await signOut(getFirebaseAuth());
+      return true;
+    }
+    // 再試行後も401: ログインし直してもらう
+    if (e instanceof ApiError && e.kind === "unauthenticated") {
+      setSignInNotice("session_expired");
+      await signOut(getFirebaseAuth());
+      return true;
+    }
+    return false;
+  }, []);
+
   // 2. ログイン中のユーザーを、内部ユーザーと紐付ける
   const uid = user?.uid ?? null;
   useEffect(() => {
@@ -100,23 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(async (e: unknown) => {
         if (e instanceof ApiError && e.kind === "aborted") return;
 
-        // 退会処理中: 通知を出してログアウトする
-        if (
-          e instanceof ApiError &&
-          e.kind === "forbidden" &&
-          e.code === "ACCOUNT_DELETING"
-        ) {
-          setSignInNotice("account_deleting");
-          await signOut(getFirebaseAuth());
-          return;
-        }
-
-        // 再試行後も401: ログインし直してもらう
-        if (e instanceof ApiError && e.kind === "unauthenticated") {
-          setSignInNotice("session_expired");
-          await signOut(getFirebaseAuth());
-          return;
-        }
+        if (await handleAuthFailure(e)) return;
 
         // 通信失敗・サーバー障害(503含む)は、ログアウトせず再試行できる状態にする
         setProfileErrorKind(
@@ -126,13 +133,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
     return () => controller.abort();
-  }, [uid, retryCount]);
+  }, [uid, retryCount, handleAuthFailure]);
 
   const retryProfile = useCallback(() => setRetryCount((n) => n + 1), []);
 
   const setHasSeenNotice = useCallback((value: boolean) => {
     setProfile((p) => (p ? { ...p, has_seen_notice: value } : p));
   }, []);
+
 
   return (
     <AuthContext.Provider
@@ -146,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInNotice,
         retryProfile,
         setHasSeenNotice,
+        handleAuthFailure,
       }}
     >
       {children}
