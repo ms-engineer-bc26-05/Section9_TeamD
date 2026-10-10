@@ -9,6 +9,7 @@ import {
 import { getFirebaseAuth } from "@/lib/firebase";
 import { toAuthErrorMessage } from "@/lib/authErrors";
 import { useAuth } from "@/components/AuthProvider";
+import styles from "./login.module.css";
 
 // 相談窓口の案内先は未確定のため仮置き(確定したら差し替える)
 const SUPPORT_URL = "#";
@@ -50,23 +51,26 @@ export default function LoginPage() {
   };
 
   return (
-    <main>
-      <h1>ぽろり。</h1>
-      <p>モヤモヤをやさしく整理するアプリです。</p>
+    <main className={styles.page}>
+      <h1 className={styles.brand}>ぽろり。</h1>
+      <h2 className={styles.title}>おかえりなさい</h2>
+      <p className={styles.lead}>安心して気持ちを整理する場所</p>
 
-      <form onSubmit={onSubmit} noValidate>
-        <label>
+      <form className={styles.form} onSubmit={onSubmit} noValidate>
+        <label className={styles.field}>
           メールアドレス
           <input
+            className={styles.input}
             type="email"
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </label>
-        <label>
+        <label className={styles.field}>
           パスワード
           <input
+            className={styles.input}
             type="password"
             autoComplete="current-password"
             value={password}
@@ -75,26 +79,41 @@ export default function LoginPage() {
         </label>
 
         {signInNotice === "account_deleting" && (
-          <p role="alert">退会処理中のため利用できません。</p>
-         )}
+          <p className={styles.notice} role="alert">
+            退会処理中のため利用できません。
+          </p>
+        )}
         {signInNotice === "session_expired" && (
-          <p role="alert">安全のため、もう一度ログインしてください。</p>
-         )}
-        {errorMessage && <p role="alert">{errorMessage}</p>}
+          <p className={styles.notice} role="alert">
+            安全のため、もう一度ログインしてください。
+          </p>
+        )}
+        {errorMessage && (
+          <p className={styles.notice} role="alert">
+            {errorMessage}
+          </p>
+        )}
 
-        <button type="submit" disabled={submitting}>
+        <button
+          className={styles.primaryButton}
+          type="submit"
+          disabled={submitting}
+        >
           ログイン
         </button>
         <button
+          className={styles.secondaryButton}
           type="button"
           disabled={submitting}
           onClick={() => void submit("signup")}
         >
-          新規登録
+          はじめて使う方はこちら
         </button>
       </form>
 
-      <a href={SUPPORT_URL}>つらさが強いときの相談窓口</a>
+      <a className={styles.support} href={SUPPORT_URL}>
+        つらさが強いときの相談窓口
+      </a>
     </main>
   );
 }
