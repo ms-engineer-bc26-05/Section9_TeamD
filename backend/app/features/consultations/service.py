@@ -5,10 +5,38 @@
   （失敗した場合は、訂正回数なども含めて状態を変えない）
 - AIの出力は表示用の文字列・整理結果の一次案としてだけ使い、権限判定やDB操作には使わない
 
-I-03Aでは正常系を実装する。次はI-03Bで実装する：
-- 質問回数・訂正回数・往復回数の上限に達したときの強制遷移と409
-- 安全案内の固定文言・危機の判定方法
-- TTL・DELETE・ユーザー単位の破棄
+回数の上限（I-03B）：
+- 出来事の回答は QUESTION_LIMIT 回、訂正は CORRECTION_LIMIT 回まで。上限に達する回は、
+  AIへ「要約する」と指定し、要約（event_summary_ready）へ進める。AIが従わない場合は502
+- 上限を超える操作は、AIを呼ぶ前に409（CONSULTATION_STATE_CONFLICT）
+- 本音・背景・望みは3往復（GUIDED_TOPIC_ORDER）で整理完了（Q-33）
+- 上限の確認・AI呼び出し・回数の更新はロックの中で行うため、同時リクエストでも上限を超えない
+- 成功したAI呼び出しは1回の相談で最大12回
+  （開始1・出来事の回答と訂正あわせて最大4・追加質問最大3・感情1・本音・背景・望み3）
+
+安全案内（I-03B。Q-09・Q-28）：
+- 利用者の自由入力をAIへ送る4つの処理（開始・出来事の対話・感情・本音〜望み）では、
+  AIを呼ぶ前にキーワードで判定し、該当すればAIを呼ばずに安全案内へ切り替える
+- AIを呼ばない直接編集も判定する：要約の直接編集（proceed）はその時点で、整理結果の編集
+  （PATCH /result）は承認（result/approve）の時点で、本人が編集した項目だけを判定する。
+  AIが作った文章は、AIの判定がかかっているため対象にしない（誤検知を増やさないため）
+- AIが安全案内を示した場合（kind="safety" または risk_detected=true）も切り替える
+- 安全案内へ切り替えたら相談内容を消去し、サーバーの固定文言だけを返す
+
+破棄（I-03B）：
+- 新しい相談を始めたら、同じユーザーの既存の相談を破棄する（1ユーザー1件）。
+  破棄するのは新しい相談の開始に成功した後（失敗した場合は既存の相談を残す）
+- 同じユーザーの開始処理中に2つ目の開始が届いたら409（CONSULTATION_BUSY）
+- 開始処理中に退会でユーザー単位の破棄が呼ばれたら、AIの応答後も登録せず404
+- DELETE /consultations/{id} はロックを取らずに破棄し、何度呼んでも安全（冪等）
+- AIの応答待ちの間に破棄された相談には書き込まず、404とする（復活させない）。
+  その後AIが失敗した場合も、相談が残っていなければ502ではなく404とする
+
+状態の取得（GET。I-03BのPRレビューで追加）：
+- 同じ相談の更新を処理中（ロック中）は、GETも409（CONSULTATION_BUSY）とする。
+  処理中に更新前の状態を返すと、画面が「回答は届かなかった」と判断して送り直し、
+  処理が終わった後に古い回答が次の項目へ記録されてしまうため
+- 処理中はAIの応答待ちを含むが、AIの呼び出しにはタイムアウト（既定30秒）があるため、ずっとは続かない
 """
 
 from typing import Literal
@@ -24,7 +52,12 @@ from app.features.consultations.ai_schemas import (
     AIOutputKind,
     parse_ai_output,
 )
+from app.features.consultations.safety import (
+    contains_crisis_keyword,
+    fixed_safety_guidance,
+)
 from app.features.consultations.exceptions import (
+    ConsultationBusy,
     ConsultationNotFound,
     ConsultationStateConflict,
     GuidedSkipNotAllowed,
@@ -41,20 +74,15 @@ from app.features.consultations.schemas import (
     EventDetailsInput,
     GuidedTopic,
     HandlingType,
-    SafetyGuidance,
-    SafetyGuidanceDraft,
     ThemeCategory,
 )
 from app.features.consultations.state import ConsultationState, utc_now
 from app.features.consultations.store import ConsultationStore
-from app.integrations.openrouter.client import OpenRouterClient
+from app.integrations.openrouter.client import AIClientError, OpenRouterClient
 
-# 上限値（設計書6.3.1・6.3.2）。上限到達時の強制遷移と409はI-03Bで実装する
+# 上限値（設計書6.3.1・6.3.2）
 QUESTION_LIMIT = 3
 CORRECTION_LIMIT = 2
-
-# 安全案内の仮の固定文言。I-03B（Q-09）で、確認済みの相談窓口の案内に差し替える
-SAFETY_MESSAGE_PLACEHOLDER = "（仮）安全案内の文言はI-03Bで確定します。"
 
 # 整理結果を返せる状態
 RESULT_STATUSES = {
@@ -81,18 +109,10 @@ def current_guided_topic(state: ConsultationState) -> GuidedTopic | None:
     return GUIDED_TOPIC_ORDER[state.guided_turn_count]
 
 
-def _normalize_safety(draft: SafetyGuidanceDraft | None) -> SafetyGuidance:
-    # AIの生成文（draft.safety_message）は使わず、固定文言へ差し替える（設計書4.5）
-    return SafetyGuidance(
-        risk_detected=True,
-        safety_message=SAFETY_MESSAGE_PLACEHOLDER,
-        continued_normal_structuring=False,
-    )
-
-
-def _apply_safety(state: ConsultationState, draft: SafetyGuidanceDraft | None) -> None:
+def _apply_safety(state: ConsultationState) -> None:
+    """安全案内へ切り替える。相談内容を消去し、AIの生成文は使わず固定文言を入れる（設計書4.5）"""
     state.clear_content()
-    state.safety_guidance = _normalize_safety(draft)
+    state.safety_guidance = fixed_safety_guidance()
     state.status = ConsultationStatus.SAFETY_GUIDANCE
 
 
@@ -106,15 +126,31 @@ class ConsultationService:
         self._store = store
         self._ai = ai_client
 
-    async def _call_ai(self, definition, state, stage, history, **progress):
+    async def _call_ai(self, definition, state, stage, history, *, still_active=None, **progress):
+        """AIを呼び出して出力を検証する。
+
+        AIの呼び出し・検証に失敗した場合でも、応答待ちの間に相談が破棄されていたら、
+        502ではなく404（ConsultationNotFound）とする（Issue #50⑧）。
+        still_active には、相談がまだ有効かを返す関数を渡す（省略時は登録の有無で判定）。
+        """
         model, schema, schema_name = definition
         messages = prompts.build_messages(stage, state.theme, history, **progress)
-        result = await self._ai.complete_json(messages, schema, schema_name)
-        return parse_ai_output(model, result.content)
+        try:
+            result = await self._ai.complete_json(messages, schema, schema_name)
+            return parse_ai_output(model, result.content)
+        except (AIClientError, AIOutputInvalid):
+            active = still_active() if still_active is not None else self._is_registered(state)
+            if not active:
+                raise ConsultationNotFound from None
+            raise
+
+    def _is_registered(self, state: ConsultationState) -> bool:
+        return self._store.exists(state.user_id, state.consultation_id)
 
     def _ensure_still_exists(self, state: ConsultationState) -> None:
-        # AIの応答待ちの間に破棄された相談へは書き込まない（DELETEとの競合の網羅はI-03B）
-        if not self._store.exists(state.user_id, state.consultation_id):
+        # AIの応答待ちの間に破棄された相談（DELETE・新しい相談による置き換え・ユーザー単位の
+        # 破棄・保持時間の経過）へは書き込まない
+        if not self._is_registered(state):
             raise ConsultationNotFound
 
     # ------------------------------------------------------------------
@@ -122,27 +158,55 @@ class ConsultationService:
     # ------------------------------------------------------------------
 
     async def start(self, user_id: UUID, theme: ThemeCategory, detail: str) -> ConsultationState:
-        state = ConsultationState(
-            consultation_id=uuid4(),
-            user_id=user_id,
-            theme=theme,
-            status=ConsultationStatus.EVENT_DIALOGUE,
-        )
-        history = [prompts.user_turn(detail)]
-        output = await self._call_ai(FIRST_QUESTION, state, PromptStage.FIRST_QUESTION, history)
+        with self._store.reserve_start(user_id) as reservation:
+            state = ConsultationState(
+                consultation_id=uuid4(),
+                user_id=user_id,
+                theme=theme,
+                status=ConsultationStatus.EVENT_DIALOGUE,
+            )
+            if contains_crisis_keyword(detail):
+                # AIを呼ばずに安全案内へ切り替える（Q-09）
+                _apply_safety(state)
+                state.touch()
+                reservation.commit(state)
+                return state
 
-        if output.kind is AIOutputKind.SAFETY:
-            _apply_safety(state, output.safety)
-        else:
-            state.messages = [*history, prompts.assistant_turn(output.ai_question)]
-            state.ai_question = output.ai_question
-        # AIの呼び出しが成功してから登録する（失敗時に空の相談を残さない）
-        self._store.add(state)
-        return state
+            history = [prompts.user_turn(detail)]
+            output = await self._call_ai(
+                FIRST_QUESTION,
+                state,
+                PromptStage.FIRST_QUESTION,
+                history,
+                still_active=lambda: reservation.active,
+            )
+
+            if output.kind is AIOutputKind.SAFETY:
+                _apply_safety(state)
+            else:
+                state.messages = [*history, prompts.assistant_turn(output.ai_question)]
+                state.ai_question = output.ai_question
+            # AIの呼び出しが成功してから登録する（失敗時に空の相談を残さず、既存の相談も残す）。
+            # 応答待ちの間に退会で予約が取り消されていた場合は、登録せず404とする。
+            # 保持時間（TTL）は、AIの待ち時間を含めず、登録に成功した時点から数える
+            state.touch()
+            reservation.commit(state)
+            return state
 
     def get(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
         # GETでは最終操作時刻を更新しない（設計書7章）
-        return self._store.get(user_id, consultation_id)
+        return self._get_for_read(user_id, consultation_id)
+
+    def _get_for_read(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
+        """読み取り用に一時状態を取得する。更新を処理中（ロック中）なら409（CONSULTATION_BUSY）"""
+        state = self._store.get(user_id, consultation_id)
+        if state.lock.locked():
+            raise ConsultationBusy
+        return state
+
+    def discard(self, user_id: UUID, consultation_id: UUID) -> None:
+        """相談を中断・終了する（6.5.3）。本人の相談がない場合も何もせず終わる（冪等）"""
+        self._store.discard(user_id, consultation_id)
 
     # ------------------------------------------------------------------
     # 出来事の対話・訂正（6.3.1）
@@ -157,27 +221,46 @@ class ConsultationService:
     ) -> ConsultationState:
         async with self._store.locked(user_id, consultation_id) as state:
             _require_status(state, ConsultationStatus.EVENT_DIALOGUE)
+            if contains_crisis_keyword(text):
+                _apply_safety(state)
+                state.touch()
+                return state
 
-            new_turn = prompts.user_turn(text)
+            # 上限を超える操作は、AIを呼ぶ前に拒否する（通常は状態が先に進んでいるため起こらない）
             if action == "answer":
+                if state.question_count >= QUESTION_LIMIT:
+                    raise ConsultationStateConflict
                 stage = PromptStage.EVENT_ANSWER
                 answer_count = state.question_count + 1
+                # この回答で上限に達する場合は、要約へ進める
+                must_summarize = answer_count >= QUESTION_LIMIT
             else:
+                if correction_limit_reached(state):
+                    raise ConsultationStateConflict
                 stage = PromptStage.EVENT_CORRECTION
                 answer_count = state.question_count
+                # この訂正で上限に達する場合は、訂正を反映した要約へ進める（設計書6.3.1）
+                must_summarize = state.correction_count + 1 >= CORRECTION_LIMIT
+
+            new_turn = prompts.user_turn(text)
             output = await self._call_ai(
                 EVENT_DIALOGUE,
                 state,
                 stage,
                 [*state.messages, new_turn],
                 answer_count=answer_count,
+                event_must_summarize=must_summarize,
             )
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
-                _apply_safety(state, output.safety)
+                _apply_safety(state)
                 state.touch()
                 return state
+
+            if must_summarize and output.next_action != "summarize":
+                # 上限に達したのに要約が返らない場合は、AIの出力不正として回数を増やさない
+                raise AIOutputInvalid("指定と異なる進め方が返されました")
 
             # AIの呼び出しが成功した時点で回数を確定する
             if action == "answer":
@@ -225,6 +308,12 @@ class ConsultationService:
             _require_status(state, ConsultationStatus.EVENT_SUMMARY_READY)
 
             if action == "proceed":
+                if event_details is not None and contains_crisis_keyword(
+                    event_details.what_happened, event_details.what_bothered_me
+                ):
+                    _apply_safety(state)
+                    state.touch()
+                    return state
                 if event_details is not None:
                     # 本人が直接編集した要約を採用する
                     state.event_details = EventDetailsDraft(**event_details.model_dump())
@@ -245,7 +334,7 @@ class ConsultationService:
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
-                _apply_safety(state, output.safety)
+                _apply_safety(state)
             elif output.next_action != "ask":
                 # 追加の質問を求めたのに質問が返らない場合は、AIの出力不正として扱う
                 raise AIOutputInvalid("追加の質問がありません")
@@ -267,6 +356,10 @@ class ConsultationService:
         """感情を受け付ける。戻り値の2つ目は受け止めの一言（ai_response）"""
         async with self._store.locked(user_id, consultation_id) as state:
             _require_status(state, ConsultationStatus.EMOTION_SELECTION)
+            if contains_crisis_keyword(emotion.detail):
+                _apply_safety(state)
+                state.touch()
+                return state, None
 
             new_turn = prompts.emotion_turn(emotion)
             output = await self._call_ai(
@@ -280,7 +373,7 @@ class ConsultationService:
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
-                _apply_safety(state, output.safety)
+                _apply_safety(state)
                 state.touch()
                 return state, None
 
@@ -314,6 +407,10 @@ class ConsultationService:
         """
         async with self._store.locked(user_id, consultation_id) as state:
             _require_status(state, ConsultationStatus.GUIDED_DIALOGUE)
+            if contains_crisis_keyword(answer):
+                _apply_safety(state)
+                state.touch()
+                return state
             topic = current_guided_topic(state)
             if topic is None:
                 raise ConsultationStateConflict
@@ -339,7 +436,7 @@ class ConsultationService:
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
-                _apply_safety(state, output.safety)
+                _apply_safety(state)
                 state.touch()
                 return state
 
@@ -370,7 +467,7 @@ class ConsultationService:
     # ------------------------------------------------------------------
 
     def get_result(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
-        state = self._store.get(user_id, consultation_id)
+        state = self._get_for_read(user_id, consultation_id)
         if state.status in RESULT_STATUSES:
             return state
         if state.status is ConsultationStatus.SAFETY_GUIDANCE:
@@ -385,7 +482,10 @@ class ConsultationService:
             _require_status(state, ConsultationStatus.RESULT_READY)
             if state.approved:
                 raise ConsultationStateConflict
-            state.result = state.result.model_copy(update=changes.model_dump(exclude_unset=True))
+            edited = changes.model_dump(exclude_unset=True)
+            state.result = state.result.model_copy(update=edited)
+            # 承認時のキーワード判定のため、本人が編集した項目を記録する
+            state.edited_result_fields |= set(edited)
             state.touch()
             return state
 
@@ -394,6 +494,14 @@ class ConsultationService:
             _require_status(state, ConsultationStatus.RESULT_READY)
             if state.approved:
                 raise ConsultationStateConflict
+            # 本人が編集した項目だけを判定する。該当したら承認せず安全案内へ切り替える
+            edited_values = [
+                getattr(state.result, name) for name in sorted(state.edited_result_fields)
+            ]
+            if contains_crisis_keyword(*edited_values):
+                _apply_safety(state)
+                state.touch()
+                return state
             try:
                 approvable = ApprovableResult(**state.result.model_dump())
             except ValueError:
