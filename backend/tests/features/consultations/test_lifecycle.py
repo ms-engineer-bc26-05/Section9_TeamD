@@ -161,6 +161,132 @@ def test_internal_error_in_guided_dialogue_does_not_advance_state(
     assert MARKER not in caplog.text
 
 
+def _st19_state(store, user_id, status):
+    """ST-19の前提の一時状態を、テスト設計書3.4に従って直接用意する"""
+    from app.features.consultations.schemas import (
+        ApprovableResult,
+        ConsultationResultDraft,
+        EventDetailsDraft,
+    )
+
+    result = {
+        "event_summary": "架空の出来事",
+        "emotion": "架空の感情",
+        "true_feeling": "架空の本音",
+        "background": "",
+        "wish": "架空の望み",
+    }
+    state = ConsultationState(
+        consultation_id=uuid4(),
+        user_id=user_id,
+        theme=ThemeCategory.COMMUNICATION,
+        status=status,
+        question_count=1,
+    )
+    state.messages.append(DialogueTurn(role="user", content="架空の相談本文"))
+    state.event_details = EventDetailsDraft(
+        what_happened="架空の出来事", what_bothered_me="架空の気がかり"
+    )
+    if status in (ConsultationStatus.RESULT_READY, ConsultationStatus.HANDLING_SELECTION):
+        state.result = ConsultationResultDraft(**result)
+    if status is ConsultationStatus.HANDLING_SELECTION:
+        state.approved_result = ApprovableResult(**result)
+        state.approved_at = datetime(2026, 10, 1, tzinfo=UTC)
+    store.add(state)
+    return state
+
+
+def _st19_fields(state):
+    """巻き戻しの確認に使う項目（相談内容を含むため、テストの中だけで比べる）"""
+    return (
+        state.status,
+        state.question_count,
+        state.correction_count,
+        state.ai_question,
+        state.ai_understanding,
+        state.event_details,
+        state.emotion,
+        state.guided_turn_count,
+        state.result,
+        state.edited_result_fields.copy(),
+        state.approved_result,
+        state.approved_at,
+        state.handling,
+        len(state.messages),
+        state.updated_at,
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "method", "path", "payload", "ai_output"),
+    [
+        (
+            ConsultationStatus.EMOTION_SELECTION,
+            "post",
+            "/emotion",
+            {"category": "sad", "detail": f"架空の具体化 {MARKER}_emotion"},
+            fakes.emotion_output(),
+        ),
+        (
+            ConsultationStatus.EVENT_SUMMARY_READY,
+            "post",
+            "/event-summary/confirm",
+            {
+                "action": "proceed",
+                "event_details": {
+                    "what_happened": f"架空の編集 {MARKER}_summary",
+                    "what_bothered_me": "架空の気がかり",
+                },
+            },
+            None,
+        ),
+        (
+            ConsultationStatus.EVENT_SUMMARY_READY,
+            "post",
+            "/event-summary/confirm",
+            {"action": "ask_more"},
+            fakes.event_ask(question=f"{MARKER}_aiquestion"),
+        ),
+        (
+            ConsultationStatus.RESULT_READY,
+            "patch",
+            "/result",
+            {"wish": f"架空の編集した望み {MARKER}_wish"},
+            None,
+        ),
+        (ConsultationStatus.RESULT_READY, "post", "/result/approve", None, None),
+        (ConsultationStatus.HANDLING_SELECTION, "post", "/handling", {"handling": "tell"}, None),
+    ],
+)
+def test_internal_error_in_other_updates_does_not_advance_state(
+    client, ai, store, user_id, monkeypatch, caplog, status, method, path, payload, ai_output
+):
+    # ST-19をほかの更新系APIにも広げる（PRレビュー：るなさん）
+    caplog.set_level(logging.DEBUG)
+    state = _st19_state(store, user_id, status)
+    if ai_output is not None:
+        ai.push(ai_output)
+    before = _st19_fields(state)
+    before_view = client.get(f"{BASE}/{state.consultation_id}").json()
+
+    _fail_after_update(monkeypatch)
+    kwargs = {"json": payload} if payload is not None else {}
+    response = getattr(client, method)(f"{BASE}/{state.consultation_id}{path}", **kwargs)
+
+    assert response.status_code == 500
+    assert MARKER not in response.text
+    assert MARKER not in caplog.text
+    assert _st19_fields(state) == before
+    assert client.get(f"{BASE}/{state.consultation_id}").json() == before_view
+
+    # 同じ操作を送り直せる
+    monkeypatch.undo()
+    if ai_output is not None:
+        ai.push(ai_output)
+    response = getattr(client, method)(f"{BASE}/{state.consultation_id}{path}", **kwargs)
+    assert response.status_code == 200
+
+
 # --- 保持時間（TTL）：最後に更新が成功してから30分 ---------------------------------
 
 
@@ -378,7 +504,8 @@ def test_delete_discards_own_consultation_in_any_status(
     assert response.content == b""
     assert client.get(f"{BASE}/{state.consultation_id}").status_code == 404
     # 相談内容が残らない（NP-07・NP-08）
-    assert MARKER not in repr(store._states)
+    # 一時状態が残っていない（repr は相談内容を表示しないため、登録の有無で確認する）
+    assert state.consultation_id not in store._states
     assert MARKER not in caplog.text
 
 
@@ -575,7 +702,8 @@ async def test_user_discard_while_starting_does_not_register(store, ai, user_id,
     await discard_user_consultations(user_id, store=store)
     ai.wait_event.set()
 
-    with pytest.raises(ConsultationNotFound if failure is None else AIClientError):
+    # AIが成功しても失敗しても、破棄された開始は404（502にしない）
+    with pytest.raises(ConsultationNotFound):
         await starting
     assert [s for s in store._states.values() if s.user_id == user_id] == []
     assert old.consultation_id not in store._states
@@ -657,7 +785,8 @@ DISCARDS = [_discard_by_delete, _discard_by_new_consultation, _discard_by_user]
 
 @pytest.mark.parametrize("discard", DISCARDS)
 async def test_discarded_state_is_not_revived_when_ai_fails(store, ai, user_id, discard):
-    # ⑧：AIの応答待ち中に破棄され、その後AIが失敗（502）しても、巻き戻しで復活しない
+    # ⑧：AIの応答待ち中に破棄され、その後AIが失敗しても、巻き戻しで復活しない。
+    # 応答は502ではなく404（PRレビュー：もえさん）
     state = make_state(store, user_id)
     service = ConsultationService(store, ai)
     ai.wait_event = asyncio.Event()
@@ -670,10 +799,85 @@ async def test_discarded_state_is_not_revived_when_ai_fails(store, ai, user_id, 
     await discard(store, user_id, state)
     ai.wait_event.set()
 
-    with pytest.raises(AIClientError):
+    with pytest.raises(ConsultationNotFound):
         await waiting
     assert state.consultation_id not in store._states
     assert not store.exists(user_id, state.consultation_id)
+
+
+@pytest.mark.parametrize("failure", [AIClientError("失敗"), {"kind": "normal"}])
+async def test_ai_failure_after_delete_returns_404(ai, store, user_id, failure):
+    # 応答待ち中にDELETEされ、その後AIが失敗（呼び出し失敗・出力不正）した場合のHTTP応答は404
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.include_router(router)
+    app.dependency_overrides[get_consultation_store] = lambda: store
+    app.dependency_overrides[get_ai_client] = lambda: ai
+    app.dependency_overrides[get_current_user_id] = lambda: user_id
+    state = make_state(store, user_id)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        ai.wait_event = asyncio.Event()
+        ai.push(failure)
+        waiting = asyncio.create_task(
+            client.post(
+                f"{BASE}/{state.consultation_id}/event-dialogue",
+                json={"action": "answer", "answer": f"架空の回答 {MARKER}_answer"},
+            )
+        )
+        await ai.started.wait()
+        deleted = await client.delete(f"{BASE}/{state.consultation_id}")
+        assert deleted.status_code == 204
+        ai.wait_event.set()
+        response = await waiting
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "CONSULTATION_NOT_FOUND"
+    assert MARKER not in response.text
+
+
+def test_ai_failure_without_discard_is_still_502(client, ai, store, user_id):
+    # 相談が残っている場合は、これまでどおり502
+    state = make_state(store, user_id)
+    ai.push(AIClientError("失敗"))
+
+    response = client.post(
+        f"{BASE}/{state.consultation_id}/event-dialogue",
+        json={"action": "answer", "answer": "架空の回答"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "AI_UNAVAILABLE"
+    assert state.consultation_id in store._states
+
+
+async def test_new_consultation_ttl_starts_after_ai_responds(store, ai, user_id, clock):
+    # 新しい相談の保持時間は、AIの待ち時間を含めず、登録に成功した時点から数える（PRレビュー：もえさん）
+    service = ConsultationService(store, ai)
+    ai.wait_event = asyncio.Event()
+    ai.push(fakes.first_question())
+    starting = asyncio.create_task(service.start(user_id, ThemeCategory.OTHER, "架空の相談本文"))
+    await ai.started.wait()
+    clock.advance(minutes=10)  # AIの応答に時間がかかった
+    ai.wait_event.set()
+    state = await starting
+
+    assert state.updated_at == clock.now
+    clock.advance(minutes=29, seconds=59)
+    assert store.exists(user_id, state.consultation_id)
+    clock.advance(seconds=1)
+    assert not store.exists(user_id, state.consultation_id)
+
+
+async def test_safety_start_ttl_starts_at_registration(store, ai, user_id, clock, monkeypatch):
+    from app.features.consultations import safety
+
+    monkeypatch.setattr(safety, "CRISIS_KEYWORDS", ("テストキケン",))
+    service = ConsultationService(store, ai)
+    state = await service.start(user_id, ThemeCategory.OTHER, "架空の相談本文 テストキケン")
+
+    assert state.updated_at == clock.now
 
 
 @pytest.mark.parametrize("discard", DISCARDS)
@@ -721,7 +925,7 @@ async def test_discard_user_consultations(store, user_id):
 
     assert all(s.consultation_id not in store._states for s in mine)
     assert other.consultation_id in store._states
-    assert MARKER not in repr(store._states.get(mine[0].consultation_id))
+    assert all(s.user_id != user_id for s in store._states.values())
 
     # 0件でも、何度呼んでも安全
     await discard_user_consultations(user_id, store=store)

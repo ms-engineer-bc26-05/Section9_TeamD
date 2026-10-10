@@ -497,3 +497,36 @@ def test_edited_back_to_safe_text_is_approved(client, store, user_id, fake_keywo
     response = client.post(f"{BASE}/{cid}/result/approve")
 
     assert response.json() == {"status": "handling_selection", "approved": True}
+
+
+# --- 「しにたい」「氏にたい」の除外（PRレビュー：るなさん） ------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "わたしにたいして冷たい",
+        "わたしにたいする態度",
+        "田中氏にたいして",
+        "ワタシニタイシテ",  # カタカナも表記をそろえてから判定する
+    ],
+)
+def test_shinitai_followed_by_taishite_does_not_match(text):
+    assert not contains_crisis_keyword(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "もうしにたい",
+        "しにたいって思う",
+        "ｼﾆﾀｲ",
+        "氏にたい",
+        # 1か所が除外されても、別の箇所で一致すれば反応する
+        "わたしにたいして、もうしにたい",
+        # 漢字の「死にたい」は除外しない
+        "死にたいして",
+    ],
+)
+def test_shinitai_still_matches_otherwise(text):
+    assert contains_crisis_keyword(text)

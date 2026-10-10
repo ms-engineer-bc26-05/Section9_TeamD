@@ -13,8 +13,13 @@
 
 誤検知は安全側に倒れるため許容する。既知の例：
 - 否定文・引用・一般的な説明（「死にたいわけではない」「自殺対策の記事を読んだ」）
-- 「遺書」：「小説の遺書の場面」にも一致する
-- 「しにたい」：ひらがなで書いた「わたしにたいして」（私に対して）にも一致する
+- 「遺書」：ドラマや小説の話（「小説の遺書の場面」）にも一致する
+- 「練炭」：バーベキューの話にも一致する
+- 「過剰摂取」：カフェインなどの話にも一致する
+
+ただし「しにたい」「氏にたい」は、ひらがなの「わたしにたいして」（私に対して）・
+「田中氏にたいして」のような言い回しに一致すると、相談内容を消して終了してしまう影響が
+大きいため、直後が「して」「する」の場合だけ除外する（PRレビューでの提案。漢字の「死にたい」は除外しない）。
 """
 
 import re
@@ -65,6 +70,12 @@ CRISIS_KEYWORDS: tuple[str, ...] = (
     "手首を切",
 )
 
+# 直後に続く場合は一致としない語（表記をそろえた後の形で書く）
+_EXCLUDED_FOLLOWERS: dict[str, tuple[str, ...]] = {
+    "しにたい": ("して", "する"),
+    "氏にたい": ("して", "する"),
+}
+
 # 安全案内の固定文言（APIが返す短い文）。相談窓口の一覧は画面側で表示する
 SAFETY_MESSAGE = (
     "ここまで話してくれて、ありがとうございます。\n"
@@ -100,8 +111,19 @@ def contains_crisis_keyword(*texts: str | None) -> bool:
         if not text:
             continue
         normalized = normalize(text)
-        if any(k in normalized for k in keywords):
+        if any(_contains(normalized, k) for k in keywords):
             return True
+    return False
+
+
+def _contains(text: str, keyword: str) -> bool:
+    """keyword が text に含まれるか。除外する続きの語（_EXCLUDED_FOLLOWERS）が直後にある箇所は数えない"""
+    excluded = _EXCLUDED_FOLLOWERS.get(keyword, ())
+    start = 0
+    while (index := text.find(keyword, start)) != -1:
+        if not text.startswith(excluded, index + len(keyword)):
+            return True
+        start = index + 1
     return False
 
 

@@ -29,7 +29,8 @@
 - 同じユーザーの開始処理中に2つ目の開始が届いたら409（CONSULTATION_BUSY）
 - 開始処理中に退会でユーザー単位の破棄が呼ばれたら、AIの応答後も登録せず404
 - DELETE /consultations/{id} はロックを取らずに破棄し、何度呼んでも安全（冪等）
-- AIの応答待ちの間に破棄された相談には書き込まず、404とする（復活させない）
+- AIの応答待ちの間に破棄された相談には書き込まず、404とする（復活させない）。
+  その後AIが失敗した場合も、相談が残っていなければ502ではなく404とする
 """
 
 from typing import Literal
@@ -46,7 +47,6 @@ from app.features.consultations.ai_schemas import (
     parse_ai_output,
 )
 from app.features.consultations.safety import (
-    SAFETY_MESSAGE,
     contains_crisis_keyword,
     fixed_safety_guidance,
 )
@@ -71,14 +71,11 @@ from app.features.consultations.schemas import (
 )
 from app.features.consultations.state import ConsultationState, utc_now
 from app.features.consultations.store import ConsultationStore
-from app.integrations.openrouter.client import OpenRouterClient
+from app.integrations.openrouter.client import AIClientError, OpenRouterClient
 
 # 上限値（設計書6.3.1・6.3.2）
 QUESTION_LIMIT = 3
 CORRECTION_LIMIT = 2
-
-# 安全案内の固定文言（safety.py で管理する。既存のテストのため、この名前でも参照できるようにする）
-SAFETY_MESSAGE_PLACEHOLDER = SAFETY_MESSAGE
 
 # 整理結果を返せる状態
 RESULT_STATUSES = {
@@ -122,16 +119,31 @@ class ConsultationService:
         self._store = store
         self._ai = ai_client
 
-    async def _call_ai(self, definition, state, stage, history, **progress):
+    async def _call_ai(self, definition, state, stage, history, *, still_active=None, **progress):
+        """AIを呼び出して出力を検証する。
+
+        AIの呼び出し・検証に失敗した場合でも、応答待ちの間に相談が破棄されていたら、
+        502ではなく404（ConsultationNotFound）とする（Issue #50⑧）。
+        still_active には、相談がまだ有効かを返す関数を渡す（省略時は登録の有無で判定）。
+        """
         model, schema, schema_name = definition
         messages = prompts.build_messages(stage, state.theme, history, **progress)
-        result = await self._ai.complete_json(messages, schema, schema_name)
-        return parse_ai_output(model, result.content)
+        try:
+            result = await self._ai.complete_json(messages, schema, schema_name)
+            return parse_ai_output(model, result.content)
+        except (AIClientError, AIOutputInvalid):
+            active = still_active() if still_active is not None else self._is_registered(state)
+            if not active:
+                raise ConsultationNotFound from None
+            raise
+
+    def _is_registered(self, state: ConsultationState) -> bool:
+        return self._store.exists(state.user_id, state.consultation_id)
 
     def _ensure_still_exists(self, state: ConsultationState) -> None:
         # AIの応答待ちの間に破棄された相談（DELETE・新しい相談による置き換え・ユーザー単位の
         # 破棄・保持時間の経過）へは書き込まない
-        if not self._store.exists(state.user_id, state.consultation_id):
+        if not self._is_registered(state):
             raise ConsultationNotFound
 
     # ------------------------------------------------------------------
@@ -149,12 +161,17 @@ class ConsultationService:
             if contains_crisis_keyword(detail):
                 # AIを呼ばずに安全案内へ切り替える（Q-09）
                 _apply_safety(state)
+                state.touch()
                 reservation.commit(state)
                 return state
 
             history = [prompts.user_turn(detail)]
             output = await self._call_ai(
-                FIRST_QUESTION, state, PromptStage.FIRST_QUESTION, history
+                FIRST_QUESTION,
+                state,
+                PromptStage.FIRST_QUESTION,
+                history,
+                still_active=lambda: reservation.active,
             )
 
             if output.kind is AIOutputKind.SAFETY:
@@ -163,7 +180,9 @@ class ConsultationService:
                 state.messages = [*history, prompts.assistant_turn(output.ai_question)]
                 state.ai_question = output.ai_question
             # AIの呼び出しが成功してから登録する（失敗時に空の相談を残さず、既存の相談も残す）。
-            # 応答待ちの間に退会で予約が取り消されていた場合は、登録せず404とする
+            # 応答待ちの間に退会で予約が取り消されていた場合は、登録せず404とする。
+            # 保持時間（TTL）は、AIの待ち時間を含めず、登録に成功した時点から数える
+            state.touch()
             reservation.commit(state)
             return state
 

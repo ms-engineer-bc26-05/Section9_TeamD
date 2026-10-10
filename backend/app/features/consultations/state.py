@@ -98,8 +98,12 @@ class ConsultationState:
     def snapshot(self) -> dict[str, Any]:
         """更新前の値の控えをとる（ロックは除く）。
 
-        リストは中身ごと書き換わるためコピーする。Pydanticのモデルは、更新時に
-        丸ごと差し替える（model_copy）ため、参照をそのまま控えればよい。
+        浅いコピー（copy.copy）で足りる理由：
+        - リスト（messages）・集合（edited_result_fields）は、要素の追加・削除だけを行い、
+          要素そのもの（DialogueTurn・文字列）は書き換えないため、入れ物だけをコピーすればよい
+        - Pydanticのモデルは、更新時に丸ごと差し替える（model_copy）ため、参照をそのまま控えればよい
+        - 辞書や、入れ子になったリストは持たない
+        項目を追加するときは、この前提が崩れないか確認すること（崩れる場合は深いコピーにする）。
         """
         return {
             f.name: copy.copy(getattr(self, f.name)) for f in fields(self) if f.name != "lock"
