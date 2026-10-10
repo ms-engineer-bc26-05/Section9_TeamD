@@ -3,13 +3,14 @@
 import argparse
 import asyncio
 import getpass
+import io
 import logging
 import os
 import signal
 import sys
 import time
 import warnings
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
@@ -17,6 +18,7 @@ from uuid import UUID
 from fastapi import FastAPI
 from firebase_admin import exceptions as firebase_exceptions
 from httpx import ASGITransport, AsyncClient
+import requests
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.response import HTTPResponse
 from urllib3.util.retry import Retry
@@ -29,6 +31,132 @@ from app.integrations.firebase import client as firebase_client
 
 MAX_HTTP_ATTEMPTS = 10
 MAX_PROBE_SECONDS = 60
+TEST_USER_EMAIL = "issue47-auth-check@example.com"
+
+
+def hidden_input(prompt):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        return getpass.getpass(prompt)
+
+
+def sign_in(api_key, password):
+    """Sign in once; never expose the response, password, or refresh token."""
+    previous_disable = logging.root.manager.disable
+    logging.disable(sys.maxsize)
+    try:
+        with requests.Session() as session:
+            session.trust_env = False
+            with session.post(
+                "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword",
+                params={"key": api_key},
+                json={"email": TEST_USER_EMAIL, "password": password, "returnSecureToken": True},
+                timeout=(10, 15),
+                allow_redirects=False,
+            ) as response:
+                if response.status_code != 200:
+                    raise ValueError("Sign-in failed")
+                data = response.json()
+                token = data.get("idToken")
+                lifetime = int(data.get("expiresIn", 0))
+                if not isinstance(token, str) or not token.strip() or lifetime <= 60:
+                    raise ValueError("Invalid sign-in response")
+                return token, time.monotonic() + min(lifetime, 3600) - 60
+    finally:
+        logging.disable(previous_disable)
+
+
+def guided_probe():
+    print("Dedicated test user only. Start with NO service-account roles.")
+    if input("Type READY to start denied verification: ") != "READY":
+        return False
+    api_key = hidden_input("Approved project's Web API key (hidden): ").strip()
+    password = hidden_input("Dedicated test user's password (hidden): ")
+    if not api_key or not password:
+        return False
+    token = None
+    try:
+        for case in ("denied", "allowed", "disabled"):
+            if case == "allowed":
+                print("Pause: grant ONLY firebaseauth.users.get and wait for IAM propagation.")
+            elif case == "disabled":
+                print("Pause: disable ONLY the dedicated test user in the console; keep its role.")
+            if case != "denied":
+                if input("Type READY after the manual step (anything else stops): ") != "READY":
+                    return False
+                if time.monotonic() >= deadline:
+                    print("STOP: token lifetime exceeded. Do not restart without reviewing the run count.")
+                    return False
+            with live_limits() as budget:
+                if case == "denied":
+                    token, deadline = sign_in(api_key, password)
+                    api_key = password = None
+                success = asyncio.run(probe(case, token))
+            print(f"{case}: {'PASS' if success else 'FAIL'}; HTTP attempts: {budget['attempts']}/{MAX_HTTP_ATTEMPTS}")
+            if not success:
+                return False
+        return True
+    finally:
+        token = api_key = password = None
+
+
+def guided_self_test():
+    module = sys.modules[__name__]
+    for status, data, expected in (
+        (200, {"idToken": "DUMMY_TOKEN", "expiresIn": "3600"}, True),
+        (400, {"error": "DUMMY_SECRET"}, False),
+        (302, {}, False),
+        (200, {"idToken": "", "expiresIn": "3600"}, False),
+    ):
+        response = Mock(status_code=status)
+        response.json.return_value = data
+        response_context = Mock()
+        response_context.__enter__ = Mock(return_value=response)
+        response_context.__exit__ = Mock(return_value=False)
+        session_context = Mock()
+        session = Mock()
+        session.post.return_value = response_context
+        session_context.__enter__ = Mock(return_value=session)
+        session_context.__exit__ = Mock(return_value=False)
+        previous_disable = logging.root.manager.disable
+        with patch.object(requests, "Session", return_value=session_context):
+            try:
+                token, deadline = sign_in("DUMMY_KEY", "DUMMY_PASSWORD")
+                if not expected or token != "DUMMY_TOKEN" or deadline <= time.monotonic():
+                    return False
+            except ValueError:
+                if expected:
+                    return False
+        if logging.root.manager.disable != previous_disable or session.trust_env is not False:
+            return False
+        if session.post.call_count != 1 or session.post.call_args.kwargs["allow_redirects"] is not False:
+            return False
+
+    for results, confirmations, expected in (
+        ([True, True, True], ["READY"] * 3, True),
+        ([False], ["READY"], False),
+        ([True, False], ["READY"] * 2, False),
+        ([True], ["READY", "STOP"], False),
+    ):
+        output = io.StringIO()
+        with patch("builtins.input", side_effect=confirmations), patch.object(
+            module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]
+        ), patch.object(
+            module, "sign_in", return_value=("DUMMY_TOKEN", time.monotonic() + 300)
+        ) as login, patch.object(
+            module, "probe", AsyncMock(side_effect=results)
+        ) as check, redirect_stdout(output):
+            if guided_probe() is not expected:
+                return False
+        if login.call_count != 1 or check.await_count != len(results):
+            return False
+        if [call.args[0] for call in check.await_args_list] != ["denied", "allowed", "disabled"][:len(results)]:
+            return False
+        if any(call.args[1] != "DUMMY_TOKEN" for call in check.await_args_list):
+            return False
+        if any(secret in output.getvalue() for secret in ("DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN")):
+            return False
+    return True
 
 
 class ProbeLimitReached(BaseException):
@@ -285,11 +413,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--self-test", action="store_true")
+    modes.add_argument("--guided", action="store_true")
     modes.add_argument("--case", choices=("allowed", "denied", "disabled"))
     parser.add_argument("--approved", action="store_true", help="Confirm the documented live plan is approved")
     args = parser.parse_args()
     if args.self_test:
-        success = asyncio.run(self_test())
+        success = guided_self_test() and asyncio.run(self_test())
     else:
         if not args.approved or not sys.stdin.isatty():
             print("STOP: live approval and an interactive terminal are required.")
@@ -301,16 +430,16 @@ def main():
         ):
             print("STOP: check the approved project and credential configuration.")
             return 2
-        # Fail closed instead of falling back to an echoed password prompt.
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", getpass.GetPassWarning)
-            token = getpass.getpass("Test user ID token (hidden): ").strip()
-        if not token or token == "dummy-token":
-            print("STOP: a valid test user ID token is required.")
-            return 2
-        with live_limits() as budget:
-            success = asyncio.run(probe(args.case, token))
-        print(f"HTTP attempts: {budget['attempts']}/{MAX_HTTP_ATTEMPTS}")
+        if args.guided:
+            success = guided_probe()
+        else:
+            token = hidden_input("Test user ID token (hidden): ").strip()
+            if not token or token == "dummy-token":
+                print("STOP: a valid test user ID token is required.")
+                return 2
+            with live_limits() as budget:
+                success = asyncio.run(probe(args.case, token))
+            print(f"HTTP attempts: {budget['attempts']}/{MAX_HTTP_ATTEMPTS}")
     print("PASS" if success else "FAIL: stop and review the plan; details are suppressed.")
     return 0 if success else 1
 
