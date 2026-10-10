@@ -17,6 +17,7 @@ from uuid import UUID
 
 from fastapi import FastAPI
 from firebase_admin import exceptions as firebase_exceptions
+from google.auth import exceptions as google_auth_exceptions
 from httpx import ASGITransport, AsyncClient
 import requests
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
@@ -361,6 +362,11 @@ async def probe(case, token):
                 (firebase_client.auth.RevokedIdTokenError, "TOKEN_REVOKED"),
                 (firebase_client.auth.InvalidIdTokenError, "TOKEN_INVALID"),
                 (firebase_client.auth.UserNotFoundError, "USER_NOT_FOUND"),
+                (google_auth_exceptions.RefreshError, "GOOGLE_AUTH_REFRESH_FAILED"),
+                (google_auth_exceptions.DefaultCredentialsError, "GOOGLE_AUTH_CREDENTIALS_ERROR"),
+                (google_auth_exceptions.TransportError, "GOOGLE_AUTH_TRANSPORT_FAILED"),
+                (google_auth_exceptions.GoogleAuthError, "GOOGLE_AUTH_OTHER_ERROR"),
+                (requests.exceptions.RequestException, "HTTP_TRANSPORT_FAILED"),
                 (ValueError, "INVALID_ARGUMENT"),
             ):
                 if isinstance(error, error_type):
@@ -510,6 +516,33 @@ async def self_test():
                 return False
             if not expected and "DIAGNOSTIC" not in output.getvalue():
                 return False
+    for error_type, category in (
+        (google_auth_exceptions.RefreshError, "GOOGLE_AUTH_REFRESH_FAILED"),
+        (google_auth_exceptions.DefaultCredentialsError, "GOOGLE_AUTH_CREDENTIALS_ERROR"),
+        (google_auth_exceptions.TransportError, "GOOGLE_AUTH_TRANSPORT_FAILED"),
+        (google_auth_exceptions.GoogleAuthError, "GOOGLE_AUTH_OTHER_ERROR"),
+        (requests.exceptions.ConnectionError, "HTTP_TRANSPORT_FAILED"),
+        (RuntimeError, "OTHER_ERROR"),
+    ):
+        output = io.StringIO()
+        with patch.object(firebase_client, "get_firebase_app", return_value=Mock()), patch.object(
+            firebase_client.auth, "verify_id_token", side_effect=error_type("DUMMY_PRIVATE_ERROR")
+        ), redirect_stdout(output):
+            if await probe("denied", "dummy-token"):
+                return False
+        rendered = output.getvalue()
+        if any(secret in rendered for secret in ("DUMMY_PRIVATE_ERROR", "dummy-token", "Traceback")):
+            return False
+        if any(line not in rendered.splitlines() for line in (
+            "DIAGNOSTIC SDK: " + category,
+            "DIAGNOSTIC HTTP: 503",
+            "DIAGNOSTIC DB: NOT_CALLED",
+            "DIAGNOSTIC CASE: FAIL",
+            "DIAGNOSTIC LOG: PASS",
+            "DIAGNOSTIC BODY: PASS",
+        )):
+            return False
+
     def unsafe_sdk(*args, **kwargs):
         logging.getLogger("probe.self_test").warning("DUMMY_PRIVATE_ERROR")
         return {"uid": "dummy-firebase-uid"}

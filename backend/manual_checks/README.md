@@ -105,6 +105,7 @@ docker run --rm -it --read-only --cap-drop ALL --security-opt no-new-privileges 
 - 段階実行で例外が起きた場合も、停止段階（`SIGN_IN`/`TOKEN_PROBE`/`GUARD`）とHTTP試行数を表示する。ガード開始前なら試行数は`UNKNOWN`とする。ログインの固定分類は`SIGN_IN_HTTP_REJECTED`（非200応答）、`SIGN_IN_TRANSPORT_FAILED`（通信失敗）、`SIGN_IN_RESPONSE_INVALID`（応答形式不正）。HTTP拒否だけでパスワード誤りとは断定しない。その他は`UNEXPECTED_ERROR`として本文・例外詳細を隠す。上限停止・中断でも自動再試行しない。
 - ケースのFAIL時には、固定カテゴリの`DIAGNOSTIC`でSDK結果・HTTP分類・DB呼び出し有無・ケース条件・ログ・本文検査の成否を表示する。例外メッセージ、例外名の動的出力、レスポンス本文、トークン、UIDは表示しない。`NOT_REACHED`や`OTHER_ERROR`だけでは原因を断定しない。
 - 診断表示を追加しても検証上限は変わらない。過去のFAILも累計に含め、再実行前に残り回数と必要ケースを確認する。
+- SDKのGoogle認証エラーは`GOOGLE_AUTH_REFRESH_FAILED`（認証情報更新）、`GOOGLE_AUTH_CREDENTIALS_ERROR`（認証情報の検出・検証）、`GOOGLE_AUTH_TRANSPORT_FAILED`（通信）、`GOOGLE_AUTH_OTHER_ERROR`に分類する。requestsの通信エラーは`HTTP_TRANSPORT_FAILED`とする。例外型に基づく分類であり、鍵の失効・設定ミス等の具体的原因を断定するものではない。これらは期待する権限不足とは別のため、503でもケースはFAILのままとする。
 
 - 検証終了後、もえがクラウド側で今回の鍵を削除し、ローカルのJSONも削除する。Gitの削除ではなく認証情報の無効化が必要。
 - テストユーザー・専用アカウント・カスタムロールの後始末は承認された範囲で行う。既存アカウントや他メンバーのデータを削除しない。
