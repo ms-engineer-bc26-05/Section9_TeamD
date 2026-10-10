@@ -14,10 +14,23 @@
 
 1. 専用サービスアカウント、`firebaseauth.users.get`のみのカスタムロール、鍵管理。
 2. 架空テストユーザーとIDトークンの安全な取得方法。ログイン・ユーザー作成の通信も別途計画する。
-3. アプリ操作は正常系・権限不足・ユーザー無効化の各1回、追加確認込み最大4回。SDK内通信の上限・費用条件は別途確定する。専用の架空テストユーザーの無効化操作も実施範囲に含める。
+3. アプリ操作は正常系・権限不足・ユーザー無効化の各1回、追加確認込み最大4回。1回のHTTP送信試行は最大10回、4回で最大40回。専用の架空テストユーザーの無効化操作も実施範囲に含める。
 4. 料金条件を確認できなければ開始しない。有料設定・広い権限を追加して回避しない。
 
-SDK 7.6.0の既存イメージ内ソースでは、HttpClientは接続・読み取りエラーで再試行1回、500/503で最大4回の再試行が既定。証明書取得・OAuth認証情報取得も別通信であり、アプリ4回をHTTP4回とは扱わない。このスクリプトはSDKの再試行を変更せず、HTTP総数の上限を強制しない。**総通信上限・概算上限額・タイムアウトを実施記録で整理するまでは実接続しない。** `--approved`は承認を代行する機能ではない。
+SDK 7.6.0の既存イメージ内ソースでは、HttpClientは接続・読み取りエラーで再試行1回、500/503で最大4回の再試行が既定。アプリ4回をHTTP4回とは扱わない。
+
+### 検証スクリプトの停止上限
+
+- トークンの非表示入力後、1プロセスの検証を最大60秒で停止する。入力待ちは含めない。
+- 既存イメージのrequests/urllib3経由のHTTP送信試行を、証明書取得・OAuth認証情報取得・ユーザー照会・再試行を含めて最大10回まで許可する。11回目は送信前に停止する。接続失敗の試行も数える。
+- urllib3の`HTTPConnectionPool._make_request`を検証プロセス内だけでラップする。HTTP/HTTPS共通経路を確認できない場合は開始しない。SDKの再試行設定や本番コードは変更しない。
+- 停止には通常の`Exception`とは別の例外を使用し、SDKやAPI側のエラー変換で検証成功と誤認しないようにする。停止時は固定文言だけを表示する。
+- LinuxコンテナのSIGALRMを使用する。依存ライブラリや通信方式を変更した場合は、この制限が適用されることを再確認する。
+- 最大4プロセスという累計上限は手動記録で守る。プロセスの再起動で累計をリセットしない。上限到達後の追加実行は再相談する。
+- この上限は検証スクリプトのHTTP試行数であり、DNS/TLSのパケット数や、コンソール操作・テストユーザー作成・ログインの通信は含めない。ユーザー準備・トークン取得の手順と操作回数は実行前に別途記録する。
+- 費用見込みは、Sparkプラン・メール/パスワード認証・専用の架空ユーザー1人・無料枠内で追加0円。実行前にプランと適用条件を確認し、SMS・有料プラン変更は行わない。無料枠超過や料金条件が不明な場合は停止する。
+
+**準備操作の計画・料金条件を含む実施記録をそろえるまでは実接続しない。** `--approved`は承認を代行する機能ではない。
 
 ## 通信なしの準備確認
 
@@ -32,7 +45,7 @@ docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-
   python -m manual_checks.firebase_connection --self-test
 ```
 
-期待結果は `PASS`。正常・PermissionDeniedに加え、通信障害や不正トークンを権限不足の成功と誤認しないことを模擬確認する。
+期待結果は `PASS`。正常・PermissionDenied・UserDisabledの判定、通信障害や不正トークンを成功と誤認しないこと、HTTP/HTTPSの試行上限、実際のurllib3再試行ループでの停止、時間上限と終了後の復元を通信なしで確認する。
 
 ## 承認後の設定の渡し方
 
@@ -85,3 +98,5 @@ docker run --rm -it --read-only --cap-drop ALL --security-opt no-new-privileges 
 - [Firebase Admin SDK設定](https://firebase.google.com/docs/admin/setup)
 - [Python verify_id_token](https://firebase.google.com/docs/reference/admin/python/firebase_admin.auth#firebase_admin.auth.verify_id_token)
 - [IDトークン検証](https://firebase.google.com/docs/auth/admin/verify-id-tokens)
+- [Firebase料金](https://firebase.google.com/pricing)
+- [Firebase Authenticationの制限](https://firebase.google.com/docs/auth/limits)

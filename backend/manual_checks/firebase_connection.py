@@ -5,9 +5,11 @@ import asyncio
 import getpass
 import logging
 import os
+import signal
 import sys
+import time
 import warnings
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
@@ -15,11 +17,96 @@ from uuid import UUID
 from fastapi import FastAPI
 from firebase_admin import exceptions as firebase_exceptions
 from httpx import ASGITransport, AsyncClient
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.response import HTTPResponse
+from urllib3.util.retry import Retry
 
 from app.core.errors import register_exception_handlers
 from app.features.auth import service as auth_service
 from app.features.users import router as users_router
 from app.integrations.firebase import client as firebase_client
+
+
+MAX_HTTP_ATTEMPTS = 10
+MAX_PROBE_SECONDS = 60
+
+
+class ProbeLimitReached(BaseException):
+    """Bypass SDK/application Exception handlers and stop without secret details."""
+
+
+@contextmanager
+def live_limits(max_attempts=MAX_HTTP_ATTEMPTS, seconds=MAX_PROBE_SECONDS):
+    # This private urllib3 hook counts each retry, not just Session.request calls.
+    if HTTPSConnectionPool._make_request is not HTTPConnectionPool._make_request:
+        raise ProbeLimitReached()
+    if signal.getitimer(signal.ITIMER_REAL) != (0.0, 0.0):
+        raise ProbeLimitReached()
+    original = HTTPConnectionPool._make_request
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    state = {"attempts": 0}
+
+    def stop(signum, frame):
+        raise ProbeLimitReached()
+
+    def bounded_request(pool, *args, **kwargs):
+        if state["attempts"] >= max_attempts:
+            raise ProbeLimitReached()
+        state["attempts"] += 1
+        return original(pool, *args, **kwargs)
+
+    signal.signal(signal.SIGALRM, stop)
+    try:
+        with patch.object(HTTPConnectionPool, "_make_request", bounded_request):
+            signal.setitimer(signal.ITIMER_REAL, seconds)
+            yield state
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
+def limits_self_test():
+    for pool_type in (HTTPConnectionPool, HTTPSConnectionPool):
+        transport = Mock(return_value=HTTPResponse(status=200))
+        with patch.object(HTTPConnectionPool, "_make_request", transport):
+            with live_limits(max_attempts=2) as state:
+                pool = pool_type("probe.invalid")
+                for _ in range(2):
+                    pool._make_request(None, "GET", "/")
+                try:
+                    pool._make_request(None, "GET", "/")
+                except ProbeLimitReached:
+                    pass
+                else:
+                    return False
+                if transport.call_count != 2 or state["attempts"] != 2:
+                    return False
+            if HTTPConnectionPool._make_request is not transport:
+                return False
+
+    # Exercise urllib3's real retry loop with a fake transport and no sockets.
+    transport = Mock(side_effect=lambda *a, **k: HTTPResponse(status=503, body=b""))
+    with patch.object(HTTPConnectionPool, "_make_request", transport):
+        try:
+            with live_limits(max_attempts=2):
+                with HTTPSConnectionPool("probe.invalid") as pool:
+                    pool.urlopen("GET", "/", retries=Retry(total=4, status_forcelist=[503]))
+        except ProbeLimitReached:
+            if transport.call_count != 2:
+                return False
+        else:
+            return False
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    try:
+        with live_limits(seconds=0.01):
+            time.sleep(0.1)
+    except ProbeLimitReached:
+        return (
+            signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+            and signal.getsignal(signal.SIGALRM) == previous_handler
+        )
+    return False
 
 
 class CapturedLogs(logging.Handler):
@@ -160,6 +247,8 @@ async def probe(case, token):
 
 
 async def self_test():
+    if not limits_self_test():
+        return False
     scenarios = [
         ("disabled", firebase_client.auth.UserDisabledError("DUMMY_PRIVATE_ERROR"), True),
         ("disabled", firebase_client.auth.InvalidIdTokenError("DUMMY_PRIVATE_ERROR"), False),
@@ -219,7 +308,9 @@ def main():
         if not token or token == "dummy-token":
             print("STOP: a valid test user ID token is required.")
             return 2
-        success = asyncio.run(probe(args.case, token))
+        with live_limits() as budget:
+            success = asyncio.run(probe(args.case, token))
+        print(f"HTTP attempts: {budget['attempts']}/{MAX_HTTP_ATTEMPTS}")
     print("PASS" if success else "FAIL: stop and review the plan; details are suppressed.")
     return 0 if success else 1
 
@@ -229,6 +320,9 @@ if __name__ == "__main__":
         code = main()
     except KeyboardInterrupt:
         print("STOP: cancelled.")
+        code = 2
+    except ProbeLimitReached:
+        print("STOP: probe limit reached or guard unavailable. Do not retry without review.")
         code = 2
     except Exception:
         print("FAIL: unexpected error; details are suppressed. Do not retry without review.")
