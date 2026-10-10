@@ -152,7 +152,7 @@ async def get_consultation(
     user_id: UUID = Depends(get_current_user_id),
     service: ConsultationService = Depends(get_consultation_service),
 ) -> ConsultationView:
-    """相談の状態を取得する（6.2.2）"""
+    """相談の状態を取得する（6.2.2）。同じ相談の更新を処理中は409（CONSULTATION_BUSY）"""
     return _view(service.get(user_id, consultation_id), include_id=True)
 
 
@@ -236,7 +236,7 @@ async def get_result(
     user_id: UUID = Depends(get_current_user_id),
     service: ConsultationService = Depends(get_consultation_service),
 ) -> ConsultationResultView:
-    """整理結果の取得（6.4.1）"""
+    """整理結果の取得（6.4.1）。同じ相談の更新を処理中は409（CONSULTATION_BUSY）"""
     return _result_view(service.get_result(user_id, consultation_id))
 
 

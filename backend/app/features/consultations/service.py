@@ -31,6 +31,12 @@
 - DELETE /consultations/{id} はロックを取らずに破棄し、何度呼んでも安全（冪等）
 - AIの応答待ちの間に破棄された相談には書き込まず、404とする（復活させない）。
   その後AIが失敗した場合も、相談が残っていなければ502ではなく404とする
+
+状態の取得（GET。I-03BのPRレビューで追加）：
+- 同じ相談の更新を処理中（ロック中）は、GETも409（CONSULTATION_BUSY）とする。
+  処理中に更新前の状態を返すと、画面が「回答は届かなかった」と判断して送り直し、
+  処理が終わった後に古い回答が次の項目へ記録されてしまうため
+- 処理中はAIの応答待ちを含むが、AIの呼び出しにはタイムアウト（既定30秒）があるため、ずっとは続かない
 """
 
 from typing import Literal
@@ -51,6 +57,7 @@ from app.features.consultations.safety import (
     fixed_safety_guidance,
 )
 from app.features.consultations.exceptions import (
+    ConsultationBusy,
     ConsultationNotFound,
     ConsultationStateConflict,
     GuidedSkipNotAllowed,
@@ -188,7 +195,14 @@ class ConsultationService:
 
     def get(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
         # GETでは最終操作時刻を更新しない（設計書7章）
-        return self._store.get(user_id, consultation_id)
+        return self._get_for_read(user_id, consultation_id)
+
+    def _get_for_read(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
+        """読み取り用に一時状態を取得する。更新を処理中（ロック中）なら409（CONSULTATION_BUSY）"""
+        state = self._store.get(user_id, consultation_id)
+        if state.lock.locked():
+            raise ConsultationBusy
+        return state
 
     def discard(self, user_id: UUID, consultation_id: UUID) -> None:
         """相談を中断・終了する（6.5.3）。本人の相談がない場合も何もせず終わる（冪等）"""
@@ -453,7 +467,7 @@ class ConsultationService:
     # ------------------------------------------------------------------
 
     def get_result(self, user_id: UUID, consultation_id: UUID) -> ConsultationState:
-        state = self._store.get(user_id, consultation_id)
+        state = self._get_for_read(user_id, consultation_id)
         if state.status in RESULT_STATUSES:
             return state
         if state.status is ConsultationStatus.SAFETY_GUIDANCE:

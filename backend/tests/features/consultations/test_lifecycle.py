@@ -941,3 +941,101 @@ async def test_discard_user_consultations_while_lock_is_held(store, user_id):
         # 処理中でも待たずに破棄できる
         await discard_user_consultations(user_id, store=store)
     assert state.consultation_id not in store._states
+
+
+# --- 更新の処理中のGET（PRレビュー：めぐさん） --------------------------------------
+
+
+def _async_app(store, ai, user_id):
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.include_router(router)
+    app.dependency_overrides[get_consultation_store] = lambda: store
+    app.dependency_overrides[get_ai_client] = lambda: ai
+    app.dependency_overrides[get_current_user_id] = lambda: user_id
+    return app
+
+
+def _guided_state(store, user_id):
+    """本音に回答済みで、背景を質問している状態"""
+    state = ConsultationState(
+        consultation_id=uuid4(),
+        user_id=user_id,
+        theme=ThemeCategory.COMMUNICATION,
+        status=ConsultationStatus.GUIDED_DIALOGUE,
+        guided_turn_count=1,
+    )
+    state.messages.append(DialogueTurn(role="user", content="架空の相談本文"))
+    state.ai_question = "架空の背景の質問"
+    store.add(state)
+    return state
+
+
+async def test_get_while_updating_returns_409_busy(ai, store, user_id):
+    # 処理中に更新前の状態を返すと、画面が送り直して古い回答が次の項目へ記録されてしまうため、
+    # 処理中のGETは409（CONSULTATION_BUSY）にする
+    state = _guided_state(store, user_id)
+    cid = state.consultation_id
+    transport = httpx.ASGITransport(app=_async_app(store, ai, user_id))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        ai.wait_event = asyncio.Event()
+        ai.push(fakes.guided_ask(question="架空の望みの質問"))
+        posting = asyncio.create_task(
+            client.post(
+                f"{BASE}/{cid}/guided-dialogue",
+                json={"answer": f"架空の背景 {MARKER}_answer"},
+            )
+        )
+        await ai.started.wait()
+
+        for path in ("", "/result"):
+            response = await asyncio.wait_for(client.get(f"{BASE}/{cid}{path}"), timeout=5)
+            assert response.status_code == 409
+            assert response.json()["error"]["code"] == "CONSULTATION_BUSY"
+            assert MARKER not in response.text
+
+        ai.wait_event.set()
+        assert (await posting).status_code == 200
+
+        # 処理が終わった後のGETは、進んだ後の状態を返す
+        response = await client.get(f"{BASE}/{cid}")
+        assert response.status_code == 200
+        assert response.json()["current_topic"] == "wish"
+        assert response.json()["ai_question"] == "架空の望みの質問"
+
+
+async def test_get_after_failed_update_returns_unchanged_state(ai, store, user_id):
+    # 処理が失敗した場合は、ロックが外れた後のGETで、送る前の状態を取得できる（送り直してよい）
+    state = _guided_state(store, user_id)
+    cid = state.consultation_id
+    transport = httpx.ASGITransport(app=_async_app(store, ai, user_id))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        ai.wait_event = asyncio.Event()
+        ai.push(AIClientError("失敗"))
+        posting = asyncio.create_task(
+            client.post(f"{BASE}/{cid}/guided-dialogue", json={"answer": "架空の背景"})
+        )
+        await ai.started.wait()
+        assert (await client.get(f"{BASE}/{cid}")).status_code == 409
+
+        ai.wait_event.set()
+        assert (await posting).status_code == 502
+
+        response = await client.get(f"{BASE}/{cid}")
+        assert response.status_code == 200
+        assert response.json()["current_topic"] == "background"
+        assert response.json()["ai_question"] == "架空の背景の質問"
+
+
+async def test_delete_and_approved_result_are_not_blocked_while_updating(store, user_id):
+    # GETは409になるが、中断（DELETE）とI-05向けの関数は、処理中でも待たずに使える
+    from app.features.consultations.public import get_approved_result
+
+    from tests.features.consultations.factories import make_save_confirmation_state
+
+    saved = make_save_confirmation_state(store, user_id)
+    async with store.locked(user_id, saved.consultation_id):
+        approved = await get_approved_result(user_id, saved.consultation_id, store=store)
+        assert approved.consultation_id == saved.consultation_id
+        ConsultationService(store, fakes.FakeAIClient()).discard(user_id, saved.consultation_id)
+    assert saved.consultation_id not in store._states
