@@ -112,6 +112,8 @@ async def service_exception_handler(request: Request, exc: Exception) -> JSONRes
     for exception_type, (status, code, message) in _SERVICE_ERRORS.items():
         if isinstance(exc, exception_type):
             # 例外メッセージ・トレースバックはレスポンスにもログにも含めない。
+            if status == 503:
+                logger.warning("%s %s", code, exception_type.__name__)
             return JSONResponse(
                 status_code=status,
                 content={"error": {"code": code, "message": message}},
