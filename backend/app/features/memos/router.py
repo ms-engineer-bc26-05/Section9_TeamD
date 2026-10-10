@@ -1,7 +1,7 @@
 """メモ保存API（docs/api-design.md 6.5.2）。
 
 - Routerの登録（main.py）は結合Issue（I-06）で行う
-- 認証は I-01 の get_current_user に置き換えるまで、仮の依存（常に401）を使う
+- 認証は I-01 の get_current_user を使う。401・403・503 は共通のエラーハンドラで返す
 - DBの実装は I-01 のORM・マイグレーション基盤の後に追加する。それまでは
   get_memo_repository が例外を送出し、テストでは dependency_overrides で差し替える
 - エラーの本文・ログに、本文・鍵・暗号文を含めない
@@ -15,24 +15,25 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.features.memos.api_schemas import SavedMemoView, SaveMemoRequest
 from app.features.memos.crypto import create_fernet
-from app.features.memos.exceptions import MemoRepositoryUnavailable, NotAuthenticated
+from app.features.auth.dependencies import get_current_user
+from app.features.auth.schemas import CurrentUser
+from app.features.memos.exceptions import MemoRepositoryUnavailable
 from app.features.memos.http_errors import MemoRoute
 from app.features.memos.repository import MemoRepository
 from app.features.memos.service import MemoSaveService
 
 
 # ---------------------------------------------------------------------------
-# 認証（I-01完了までの仮の依存）
+# 認証
 # ---------------------------------------------------------------------------
 
 
-async def get_current_user_id() -> UUID:
-    """I-01の Depends(get_current_user) の current_user.user_id へ置き換える。
+async def get_current_user_id(current_user: CurrentUser = Depends(get_current_user)) -> UUID:
+    """I-01の認証依存から内部ユーザーのIDを取り出す。
 
-    置き換えるまでは常に401とし、誤って結合しても認証なしで使えないようにする。
     テストでは dependency_overrides で固定UUIDを返す。
     """
-    raise NotAuthenticated
+    return current_user.user_id
 
 
 # ---------------------------------------------------------------------------

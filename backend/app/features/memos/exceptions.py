@@ -6,9 +6,5 @@ HTTPのステータス・エラーコードへの変換は http_errors.py で行
 """
 
 
-class NotAuthenticated(Exception):
-    """認証できない（APIでは401）"""
-
-
 class MemoRepositoryUnavailable(Exception):
     """DBの実装がまだない（I-01のORM・マイグレーション基盤の後に追加する）"""

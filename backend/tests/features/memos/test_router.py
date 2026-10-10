@@ -15,6 +15,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.errors import register_exception_handlers
+from app.core.exceptions import (
+    AccountDeletingError,
+    AuthServiceUnavailableError,
+    DatabaseUnavailableError,
+)
+from app.features.auth.dependencies import get_current_user
 from app.features.consultations.store import get_consultation_store
 from app.features.memos.crypto import create_fernet
 from app.features.memos.router import (
@@ -128,6 +134,32 @@ def test_unauthenticated_is_401(app, state, repo):
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
     assert repo.rows == {}
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code"),
+    [
+        (AccountDeletingError, 403, "ACCOUNT_DELETING"),
+        (AuthServiceUnavailableError, 503, "AUTH_UNAVAILABLE"),
+        (DatabaseUnavailableError, 503, "DB_UNAVAILABLE"),
+    ],
+)
+def test_auth_errors_keep_common_code(app, state, repo, store, error, status_code, code):
+    # I-01の認証依存の例外を500に変換せず、共通のエラーハンドラのcodeで返す
+    del app.dependency_overrides[get_current_user_id]
+
+    async def raise_error():
+        raise error("架空の内部情報")
+
+    app.dependency_overrides[get_current_user] = raise_error
+
+    response = TestClient(app).post(f"{BASE}/{state.consultation_id}/save", json={})
+
+    assert response.status_code == status_code
+    assert response.json()["error"]["code"] == code
+    assert "架空の内部情報" not in response.text
+    assert repo.rows == {}
+    assert store.exists(USER_ID, state.consultation_id)
 
 
 def test_other_users_state_is_404(app, state, repo):

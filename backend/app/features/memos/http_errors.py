@@ -17,9 +17,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from app.core.exceptions import (
+    AccountDeletingError,
+    AuthenticationRequiredError,
+    AuthServiceUnavailableError,
+    DatabaseUnavailableError,
+)
 from app.features.consultations.public import ConsultationRoute
 from app.features.memos.crypto import MemoEncryptionError
-from app.features.memos.exceptions import MemoRepositoryUnavailable, NotAuthenticated
+from app.features.memos.exceptions import MemoRepositoryUnavailable
 from app.features.memos.repository import UserNotActive, UserNotFound
 
 logger = logging.getLogger(__name__)
@@ -30,8 +36,16 @@ _SAVE_FAILED = (
     "メモを保存できませんでした。時間をおいてもう一度お試しください。",
 )
 
+# I-01（#47）の認証依存・DB基盤の例外。401・403・503 は共通のエラーハンドラ
+# （app.core.errors）で変換するため、500に変換せずに上へ送る
+_COMMON_ERRORS = (
+    AuthenticationRequiredError,
+    AccountDeletingError,
+    AuthServiceUnavailableError,
+    DatabaseUnavailableError,
+)
+
 _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
-    NotAuthenticated: (401, "UNAUTHORIZED", "ログインしてください。"),
     # ロック後の再確認（認証後に内部ユーザーが削除された・退会処理が始まった）。I-01と同じcode
     UserNotFound: (401, "UNAUTHORIZED", "ログインしてください。"),
     UserNotActive: (403, "ACCOUNT_DELETING", "退会処理中のため利用できません。"),
@@ -66,10 +80,8 @@ class MemoRoute(ConsultationRoute):
         async def route_handler(request: Request) -> Response:
             try:
                 return await handler(request)
-            except (RequestValidationError, HTTPException):
-                # 422・400などは共通のエラーハンドラ（app.core.errors）で変換する
-                # I-01（#47）との接続時：#47の認証・DB用の専用例外（401・403・503）も
-                # ここで共通ハンドラへ送り、500に変換しないようにする
+            except (RequestValidationError, HTTPException, *_COMMON_ERRORS):
+                # 422・400、認証の401・403・503は共通のエラーハンドラ（app.core.errors）で変換する
                 raise
             except Exception as exc:
                 return memo_error_response(exc)
