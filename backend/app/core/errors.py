@@ -12,7 +12,29 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.core.exceptions import (
+    AccountDeletingError,
+    AuthenticationRequiredError,
+    AuthServiceUnavailableError,
+    DatabaseUnavailableError,
+)
+
 logger = logging.getLogger(__name__)
+
+_SERVICE_ERRORS = {
+    AuthenticationRequiredError: (401, "UNAUTHORIZED", "ログインしてください。"),
+    AccountDeletingError: (
+        403, "ACCOUNT_DELETING", "退会処理中のため利用できません。"
+    ),
+    AuthServiceUnavailableError: (
+        503,
+        "AUTH_UNAVAILABLE",
+        "認証サービスを利用できません。時間をおいて再度お試しください。",
+    ),
+    DatabaseUnavailableError: (
+        503, "DB_UNAVAILABLE", "データベースに接続できませんでした。"
+    ),
+}
 
 # locの先頭に入る「どこから来た値か」を表す要素。項目名には含めない
 _LOCATION_PREFIXES = {"body", "query", "path", "header", "cookie"}
@@ -86,6 +108,22 @@ async def validation_exception_handler(
     )
 
 
+async def service_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    for exception_type, (status, code, message) in _SERVICE_ERRORS.items():
+        if isinstance(exc, exception_type):
+            # 例外メッセージ・トレースバックはレスポンスにもログにも含めない。
+            if status == 503:
+                logger.warning("%s %s", code, exception_type.__name__)
+            return JSONResponse(
+                status_code=status,
+                content={"error": {"code": code, "message": message}},
+                headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
+            )
+    raise exc
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """アプリへ共通のエラーハンドラを登録する。"""
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    for exception_type in _SERVICE_ERRORS:
+        app.add_exception_handler(exception_type, service_exception_handler)
