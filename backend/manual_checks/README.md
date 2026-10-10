@@ -102,6 +102,7 @@ docker run --rm -it --read-only --cap-drop ALL --security-opt no-new-privileges 
 
 ## 終了と記録
 
+- 段階実行で例外が起きた場合も、停止段階（`SIGN_IN`/`TOKEN_PROBE`/`GUARD`）とHTTP試行数を表示する。ガード開始前なら試行数は`UNKNOWN`とする。ログインの固定分類は`SIGN_IN_HTTP_REJECTED`（非200応答）、`SIGN_IN_TRANSPORT_FAILED`（通信失敗）、`SIGN_IN_RESPONSE_INVALID`（応答形式不正）。HTTP拒否だけでパスワード誤りとは断定しない。その他は`UNEXPECTED_ERROR`として本文・例外詳細を隠す。上限停止・中断でも自動再試行しない。
 - ケースのFAIL時には、固定カテゴリの`DIAGNOSTIC`でSDK結果・HTTP分類・DB呼び出し有無・ケース条件・ログ・本文検査の成否を表示する。例外メッセージ、例外名の動的出力、レスポンス本文、トークン、UIDは表示しない。`NOT_REACHED`や`OTHER_ERROR`だけでは原因を断定しない。
 - 診断表示を追加しても検証上限は変わらない。過去のFAILも累計に含め、再実行前に残り回数と必要ケースを確認する。
 

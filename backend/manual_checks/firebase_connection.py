@@ -34,6 +34,10 @@ MAX_PROBE_SECONDS = 60
 TEST_USER_EMAIL = "issue47-auth-check@example.com"
 
 
+class SignInFailure(ValueError):
+    """Carry only a locally defined diagnostic category."""
+
+
 def hidden_input(prompt):
     with warnings.catch_warnings():
         warnings.simplefilter("error", getpass.GetPassWarning)
@@ -55,13 +59,19 @@ def sign_in(api_key, password):
                 allow_redirects=False,
             ) as response:
                 if response.status_code != 200:
-                    raise ValueError("Sign-in failed")
+                    raise SignInFailure("SIGN_IN_HTTP_REJECTED")
                 data = response.json()
                 token = data.get("idToken")
                 lifetime = int(data.get("expiresIn", 0))
                 if not isinstance(token, str) or not token.strip() or lifetime <= 60:
-                    raise ValueError("Invalid sign-in response")
+                    raise SignInFailure("SIGN_IN_RESPONSE_INVALID")
                 return token, time.monotonic() + min(lifetime, 3600) - 60
+    except SignInFailure:
+        raise
+    except requests.exceptions.RequestException:
+        raise SignInFailure("SIGN_IN_TRANSPORT_FAILED") from None
+    except (ValueError, TypeError, AttributeError, OverflowError):
+        raise SignInFailure("SIGN_IN_RESPONSE_INVALID") from None
     finally:
         logging.disable(previous_disable)
 
@@ -87,11 +97,31 @@ def guided_probe():
                 if time.monotonic() >= deadline:
                     print("STOP: token lifetime exceeded. Do not restart without reviewing the run count.")
                     return False
-            with live_limits() as budget:
-                if case == "denied":
-                    token, deadline = sign_in(api_key, password)
-                    api_key = password = None
-                success = asyncio.run(probe(case, token))
+            budget = None
+            stage = "GUARD"
+            try:
+                with live_limits() as budget:
+                    if case == "denied":
+                        stage = "SIGN_IN"
+                        token, deadline = sign_in(api_key, password)
+                        api_key = password = None
+                    stage = "TOKEN_PROBE"
+                    success = asyncio.run(probe(case, token))
+            except (Exception, ProbeLimitReached, KeyboardInterrupt) as error:
+                category = "UNEXPECTED_ERROR"
+                if isinstance(error, SignInFailure):
+                    candidate = error.args[0] if error.args else None
+                    if candidate in ("SIGN_IN_HTTP_REJECTED", "SIGN_IN_TRANSPORT_FAILED", "SIGN_IN_RESPONSE_INVALID"):
+                        category = candidate
+                elif isinstance(error, ProbeLimitReached):
+                    category = "LIMIT_OR_GUARD_STOP"
+                elif isinstance(error, KeyboardInterrupt):
+                    category = "CANCELLED"
+                print("DIAGNOSTIC STAGE: " + stage)
+                print("DIAGNOSTIC FAILURE: " + category)
+                attempts = str(budget["attempts"]) if budget is not None else "UNKNOWN"
+                print("HTTP attempts: " + attempts + "/" + str(MAX_HTTP_ATTEMPTS))
+                return False
             print(f"{case}: {'PASS' if success else 'FAIL'}; HTTP attempts: {budget['attempts']}/{MAX_HTTP_ATTEMPTS}")
             if not success:
                 return False
@@ -107,6 +137,9 @@ def guided_self_test():
         (400, {"error": "DUMMY_SECRET"}, False),
         (302, {}, False),
         (200, {"idToken": "", "expiresIn": "3600"}, False),
+        (200, None, False),
+        (200, {"idToken": "DUMMY_TOKEN", "expiresIn": "invalid"}, False),
+        (None, {}, False),
     ):
         response = Mock(status_code=status)
         response.json.return_value = data
@@ -116,6 +149,8 @@ def guided_self_test():
         session_context = Mock()
         session = Mock()
         session.post.return_value = response_context
+        if status is None:
+            session.post.side_effect = requests.exceptions.ConnectionError("DUMMY_SECRET")
         session_context.__enter__ = Mock(return_value=session)
         session_context.__exit__ = Mock(return_value=False)
         previous_disable = logging.root.manager.disable
@@ -124,8 +159,14 @@ def guided_self_test():
                 token, deadline = sign_in("DUMMY_KEY", "DUMMY_PASSWORD")
                 if not expected or token != "DUMMY_TOKEN" or deadline <= time.monotonic():
                     return False
-            except ValueError:
+            except SignInFailure as error:
                 if expected:
+                    return False
+                category = (
+                    "SIGN_IN_TRANSPORT_FAILED" if status is None else
+                    "SIGN_IN_HTTP_REJECTED" if status != 200 else "SIGN_IN_RESPONSE_INVALID"
+                )
+                if error.args != (category,):
                     return False
         if logging.root.manager.disable != previous_disable or session.trust_env is not False:
             return False
@@ -155,6 +196,40 @@ def guided_self_test():
         if any(call.args[1] != "DUMMY_TOKEN" for call in check.await_args_list):
             return False
         if any(secret in output.getvalue() for secret in ("DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN")):
+            return False
+    for failed_stage, error, category in (
+        ("SIGN_IN", SignInFailure("SIGN_IN_HTTP_REJECTED"), "SIGN_IN_HTTP_REJECTED"),
+        ("SIGN_IN", SignInFailure("SIGN_IN_TRANSPORT_FAILED"), "SIGN_IN_TRANSPORT_FAILED"),
+        ("SIGN_IN", SignInFailure("SIGN_IN_RESPONSE_INVALID"), "SIGN_IN_RESPONSE_INVALID"),
+        ("SIGN_IN", SignInFailure("DUMMY_SECRET"), "UNEXPECTED_ERROR"),
+        ("SIGN_IN", RuntimeError("DUMMY_SECRET"), "UNEXPECTED_ERROR"),
+        ("TOKEN_PROBE", RuntimeError("DUMMY_SECRET"), "UNEXPECTED_ERROR"),
+        ("TOKEN_PROBE", ProbeLimitReached(), "LIMIT_OR_GUARD_STOP"),
+        ("TOKEN_PROBE", KeyboardInterrupt(), "CANCELLED"),
+    ):
+        output = io.StringIO()
+
+        @contextmanager
+        def fake_limits():
+            yield {"attempts": 2}
+
+        with patch("builtins.input", return_value="READY"), patch.object(
+            module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]
+        ), patch.object(module, "live_limits", fake_limits), patch.object(
+            module, "sign_in", side_effect=error if failed_stage == "SIGN_IN" else None,
+            return_value=("DUMMY_TOKEN", time.monotonic() + 300),
+        ), patch.object(module, "probe", AsyncMock(side_effect=error)) as check, redirect_stdout(output):
+            if guided_probe():
+                return False
+        rendered = output.getvalue()
+        if any(secret in rendered for secret in ("DUMMY_SECRET", "DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN")):
+            return False
+        if any(expected not in rendered for expected in (
+            "DIAGNOSTIC STAGE: " + failed_stage, "DIAGNOSTIC FAILURE: " + category,
+            "HTTP attempts: 2/10",
+        )):
+            return False
+        if check.await_count != (0 if failed_stage == "SIGN_IN" else 1):
             return False
     return True
 
