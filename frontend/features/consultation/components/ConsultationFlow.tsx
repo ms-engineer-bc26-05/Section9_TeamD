@@ -31,6 +31,7 @@ import { EventSummaryStep } from "./EventSummaryStep";
 import { GuidedDialogueStep } from "./GuidedDialogueStep";
 import { HandlingSelectionStep } from "./HandlingSelectionStep";
 import { ResultReviewStep } from "./ResultReviewStep";
+import { SafetyGuidanceStep } from "./SafetyGuidanceStep";
 import { SaveConfirmationStep } from "./SaveConfirmationStep";
 
 export interface ConsultationFlowLimits {
@@ -102,9 +103,12 @@ export function ConsultationFlow({
   const errorMessage = getConsultationErrorMessage(
     saveState.errorCode ?? (state.status === null ? null : state.errorCode),
   );
-  const displayedErrorMessage = state.recoveryRequired
-    ? "処理状況を確認できませんでした。元の操作を再送せず、現在の状態を確認してください。"
-    : errorMessage;
+  const displayedErrorMessage =
+    state.status === "safety_guidance"
+      ? null
+      : state.recoveryRequired
+        ? "処理状況を確認できませんでした。元の操作を再送せず、現在の状態を確認してください。"
+        : errorMessage;
   const unavailableScreen = (
     <ConsultationUnavailableStep
       onReturnHome={actions.onReturnHomeAfterStateLoss}
@@ -241,6 +245,13 @@ export function ConsultationFlow({
     ) : (
       unavailableScreen
     ),
+    safety_guidance: (
+      <SafetyGuidanceStep
+        safetyMessage={state.safetyGuidance?.safety_message ?? null}
+        isSubmitting={state.pendingOperation === "discard"}
+        onFinish={actions.onFinishSafetyGuidance}
+      />
+    ),
   } satisfies Record<ConsultationScreen, ReactNode>;
 
   return (
@@ -257,7 +268,6 @@ export function ConsultationFlow({
       <ConsultationScreenRouter
         state={state}
         screens={screens}
-        onFinishSafetyGuidance={actions.onFinishSafetyGuidance}
       />
     </ConsultationErrorNotice>
   );

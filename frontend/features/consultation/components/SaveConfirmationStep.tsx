@@ -6,6 +6,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type SyntheticEvent,
 } from "react";
 
 import { HANDLING_OPTIONS } from "../model/constants";
@@ -34,8 +35,9 @@ export function SaveConfirmationStep({
   onFinishWithoutSaving,
 }: SaveConfirmationStepProps) {
   const [showFinishConfirmation, setShowFinishConfirmation] = useState(false);
+  const finishTriggerButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const dialogBackButtonRef = useRef<HTMLButtonElement>(null);
-  const dialogFinishButtonRef = useRef<HTMLButtonElement>(null);
   const handlingLabel =
     HANDLING_OPTIONS.find((option) => option.value === handling)?.label ??
     "選択した扱い方";
@@ -45,33 +47,18 @@ export function SaveConfirmationStep({
       return;
     }
 
+    const dialog = dialogRef.current;
+    if (dialog !== null && !dialog.open) {
+      dialog.showModal();
+    }
     dialogBackButtonRef.current?.focus();
 
-    function handleDialogKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSubmitting) {
-        setShowFinishConfirmation(false);
-        return;
+    return () => {
+      if (dialog?.open) {
+        dialog.close();
       }
-
-      if (event.key !== "Tab") {
-        return;
-      }
-
-      if (event.shiftKey && document.activeElement === dialogBackButtonRef.current) {
-        event.preventDefault();
-        dialogFinishButtonRef.current?.focus();
-      } else if (
-        !event.shiftKey &&
-        document.activeElement === dialogFinishButtonRef.current
-      ) {
-        event.preventDefault();
-        dialogBackButtonRef.current?.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleDialogKeyDown);
-    return () => document.removeEventListener("keydown", handleDialogKeyDown);
-  }, [isSubmitting, showFinishConfirmation]);
+    };
+  }, [showFinishConfirmation]);
 
   function handleReasonChange(event: ChangeEvent<HTMLTextAreaElement>) {
     onReasonChange(event.target.value);
@@ -96,8 +83,15 @@ export function SaveConfirmationStep({
 
   function handleCloseFinishConfirmation() {
     if (!isSubmitting) {
+      dialogRef.current?.close();
       setShowFinishConfirmation(false);
+      finishTriggerButtonRef.current?.focus();
     }
+  }
+
+  function handleDialogCancel(event: SyntheticEvent<HTMLDialogElement>) {
+    event.preventDefault();
+    handleCloseFinishConfirmation();
   }
 
   function handleFinishWithoutSaving() {
@@ -105,6 +99,7 @@ export function SaveConfirmationStep({
       return;
     }
 
+    dialogRef.current?.close();
     setShowFinishConfirmation(false);
     onFinishWithoutSaving();
   }
@@ -175,6 +170,7 @@ export function SaveConfirmationStep({
             {isSubmitting ? "処理中…" : "保存する"}
           </button>
           <button
+            ref={finishTriggerButtonRef}
             className={styles.secondaryButton}
             type="button"
             disabled={isSubmitting}
@@ -194,42 +190,39 @@ export function SaveConfirmationStep({
       </section>
 
       {showFinishConfirmation ? (
-        <div className={styles.dialogBackdrop}>
-          <section
-            className={styles.dialog}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="finish-without-saving-title"
-            aria-describedby="finish-without-saving-description"
-          >
-            <h2 id="finish-without-saving-title" className={styles.dialogTitle}>
-              保存せずに終了しますか？
-            </h2>
-            <p id="finish-without-saving-description" className={styles.dialogText}>
-              承認した整理結果や入力した理由は、整理メモとして保存されません。
-            </p>
-            <div className={styles.dialogActions}>
-              <button
-                ref={dialogBackButtonRef}
-                className={styles.dialogSecondaryButton}
-                type="button"
-                disabled={isSubmitting}
-                onClick={handleCloseFinishConfirmation}
-              >
-                戻る
-              </button>
-              <button
-                ref={dialogFinishButtonRef}
-                className={styles.dialogPrimaryButton}
-                type="button"
-                disabled={isSubmitting}
-                onClick={handleFinishWithoutSaving}
-              >
-                保存せず終了
-              </button>
-            </div>
-          </section>
-        </div>
+        <dialog
+          ref={dialogRef}
+          className={styles.dialog}
+          aria-labelledby="finish-without-saving-title"
+          aria-describedby="finish-without-saving-description"
+          onCancel={handleDialogCancel}
+        >
+          <h2 id="finish-without-saving-title" className={styles.dialogTitle}>
+            保存せずに終了しますか？
+          </h2>
+          <p id="finish-without-saving-description" className={styles.dialogText}>
+            承認した整理結果や入力した理由は、整理メモとして保存されません。
+          </p>
+          <div className={styles.dialogActions}>
+            <button
+              ref={dialogBackButtonRef}
+              className={styles.dialogSecondaryButton}
+              type="button"
+              disabled={isSubmitting}
+              onClick={handleCloseFinishConfirmation}
+            >
+              戻る
+            </button>
+            <button
+              className={styles.dialogPrimaryButton}
+              type="button"
+              disabled={isSubmitting}
+              onClick={handleFinishWithoutSaving}
+            >
+              保存せず終了
+            </button>
+          </div>
+        </dialog>
       ) : null}
     </main>
   );
