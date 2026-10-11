@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
 from fastapi import FastAPI
+from cachecontrol.adapter import CacheControlAdapter
 from firebase_admin import exceptions as firebase_exceptions
 from google.auth import exceptions as google_auth_exceptions
 from httpx import ASGITransport, AsyncClient
@@ -33,6 +34,21 @@ from app.integrations.firebase import client as firebase_client
 MAX_HTTP_ATTEMPTS = 10
 MAX_PROBE_SECONDS = 60
 TEST_USER_EMAIL = "issue47-auth-check@example.com"
+
+
+def certificate_cache_preflight():
+    """Exercise the SDK's response cache with synthetic data and no transport."""
+    request = requests.Request("GET", "https://probe.invalid/certificates").prepare()
+    response = HTTPResponse(body=io.BytesIO(b"{}"), status=200, preload_content=False)
+    adapter = CacheControlAdapter()
+    try:
+        with adapter.build_response(request, response) as result:
+            return result.content == b"{}"
+    except Exception:
+        return False
+    finally:
+        response.close()
+        adapter.close()
 
 
 class SignInFailure(ValueError):
@@ -566,6 +582,9 @@ def main():
     modes.add_argument("--case", choices=("allowed", "denied", "disabled"))
     parser.add_argument("--approved", action="store_true", help="Confirm the documented live plan is approved")
     args = parser.parse_args()
+    if not certificate_cache_preflight():
+        print("STOP: certificate cache preflight failed; check writable temporary storage. No live request sent.")
+        return 2
     if args.self_test:
         success = guided_self_test() and asyncio.run(self_test())
     else:
