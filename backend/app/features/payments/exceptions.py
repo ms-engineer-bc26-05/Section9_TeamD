@@ -44,3 +44,11 @@ class PriceConfigError(Exception):
 
 class UnexpectedSessionState(Exception):
     """Stripeから想定外のSessionの状態が返った（APIでは500）"""
+
+
+class PaymentNotFound(Exception):
+    """確認する決済がない、または本人の決済ではない（APIでは404）"""
+
+
+class PaymentVerificationFailed(Exception):
+    """Stripeの金額・通貨が、購入時に保存した値と一致しない（APIでは500）。paid にしない"""

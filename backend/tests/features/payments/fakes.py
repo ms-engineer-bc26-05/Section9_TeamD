@@ -13,6 +13,8 @@ FakeStripe：
 - 同じ idempotency key で内容が違うときは StripeIdempotencyMismatch を送出する
 - create_gate を設定すると、作成の途中でそのイベントを待つ（同時リクエストの再現用）
 - create_errors に例外を入れると、次の作成でその例外を送出する（Stripeには作成されない）
+- retrieve_errors に例外を入れると、次のSession取得でその例外を送出する
+- pay で、Checkoutで支払いが完了した状態にする
 - lose_next_response を True にすると、次の作成ではStripe側に作成したうえで StripeUnavailable を送出する
   （作成されたのに、タイムアウトで応答を受け取れなかった場合の再現）
 """
@@ -52,11 +54,31 @@ class InMemoryPaymentRepository:
         # 現在有効な有料の利用権限を持つユーザー
         self.paid_users: set[UUID] = set()
         self.user_statuses: dict[UUID, str | None] = {}
+        # 付与した利用権限（user_id → plan_id）
+        self.entitlements: dict[UUID, UUID] = {}
         self._user_locks: dict[UUID, asyncio.Lock] = {}
 
     async def find_unfinished(self, user_id: UUID) -> StoredPayment | None:
         await asyncio.sleep(0)
         return _find_unfinished(self.rows.values(), user_id)
+
+    async def find_by_session_id(self, session_id: str) -> StoredPayment | None:
+        await asyncio.sleep(0)
+        for row in self.rows.values():
+            if row.stripe_checkout_session_id == session_id:
+                return row
+        return None
+
+    async def find_confirmable(self, user_id: UUID) -> StoredPayment | None:
+        await asyncio.sleep(0)
+        mine = [row for row in self.rows.values() if row.user_id == user_id]
+        for row in mine:
+            if row.status == "pending":
+                return row
+        for row in mine:
+            if row.status == "paid" and row.entitlement_applied_at is None:
+                return row
+        return None
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator["_InMemoryTransaction"]:
@@ -69,6 +91,8 @@ class InMemoryPaymentRepository:
                 if _count_unfinished(merged.values(), row.user_id) > 1:
                     raise DuplicateUnfinishedPayment
             self.rows = merged
+            self.entitlements.update(tx.granted)
+            self.paid_users.update(tx.granted)
         finally:
             tx.release_locks()
 
@@ -80,6 +104,7 @@ class _InMemoryTransaction:
     def __init__(self, repo: InMemoryPaymentRepository) -> None:
         self._repo = repo
         self.pending: dict[UUID, StoredPayment] = {}
+        self.granted: dict[UUID, UUID] = {}
         self._held: list[asyncio.Lock] = []
 
     async def lock_user(self, user_id: UUID, *, require_active: bool = True) -> str:
@@ -142,6 +167,20 @@ class _InMemoryTransaction:
     async def mark_failed(self, payment_id: UUID) -> None:
         self.pending[payment_id] = replace(self._rows()[payment_id], status="failed")
 
+    async def mark_paid(self, payment_id: UUID, verified_at: datetime) -> None:
+        row = self._rows()[payment_id]
+        assert row.status == "pending"
+        self.pending[payment_id] = replace(row, status="paid", verified_at=verified_at)
+
+    async def grant_entitlement(self, user_id: UUID, plan_id: UUID, now: datetime) -> None:
+        await asyncio.sleep(0)
+        self.granted[user_id] = plan_id
+
+    async def mark_entitlement_applied(self, payment_id: UUID, applied_at: datetime) -> None:
+        row = self._rows()[payment_id]
+        assert row.status == "paid"
+        self.pending[payment_id] = replace(row, entitlement_applied_at=applied_at)
+
     def _rows(self) -> dict[UUID, StoredPayment]:
         return {**self._repo.rows, **self.pending}
 
@@ -169,6 +208,8 @@ class FakeStripe:
         )
         self.sessions: dict[str, CheckoutSession] = {}
         self.create_calls: list[dict] = []
+        self.retrieve_calls: list[str] = []
+        self.retrieve_errors: list[Exception] = []
         self.create_errors: list[Exception] = []
         self.create_gate: asyncio.Event | None = None
         self.lose_next_response = False
@@ -214,7 +255,10 @@ class FakeStripe:
         return session
 
     async def retrieve_checkout_session(self, session_id: str) -> CheckoutSession:
+        self.retrieve_calls.append(session_id)
         await asyncio.sleep(0)
+        if self.retrieve_errors:
+            raise self.retrieve_errors.pop(0)
         if session_id not in self.sessions:
             raise StripeSessionNotFound("架空")
         return self.sessions[session_id]
@@ -227,3 +271,8 @@ class FakeStripe:
         session = self.sessions[session_id]
         url = session.url if status == "open" else None
         self.sessions[session_id] = replace(session, status=status, url=url)
+
+    def pay(self, session_id: str) -> None:
+        """Checkoutで支払いが完了した状態にする"""
+        self.set_session_status(session_id, "complete")
+        self.sessions[session_id] = replace(self.sessions[session_id], payment_status="paid")

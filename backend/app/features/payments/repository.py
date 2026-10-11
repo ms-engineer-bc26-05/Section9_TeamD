@@ -84,6 +84,8 @@ class StoredPayment:
     currency: str
     checkout_request: CheckoutRequest
     created_at: datetime
+    verified_at: datetime | None = None  # Stripeで支払い済みと確認した日時（paid の行）
+    entitlement_applied_at: datetime | None = None  # 利用権限へ反映した日時
 
 
 class PaymentTransaction(Protocol):
@@ -117,9 +119,31 @@ class PaymentTransaction(Protocol):
 
     async def mark_failed(self, payment_id: UUID) -> None: ...
 
+    async def mark_paid(self, payment_id: UUID, verified_at: datetime) -> None:
+        """pending の行を paid にし、Stripeで確認した日時を記録する"""
+
+    async def grant_entitlement(self, user_id: UUID, plan_id: UUID, now: datetime) -> None:
+        """有料の利用権限を付与する（status は active、valid_until は NULL。#59）
+
+        plans/public.py（F-03）ができたら、そこの権限付与の関数へ移す。
+        """
+
+    async def mark_entitlement_applied(self, payment_id: UUID, applied_at: datetime) -> None:
+        """paid の行へ、利用権限へ反映した日時を記録する"""
+
 
 class PaymentRepository(Protocol):
     async def find_unfinished(self, user_id: UUID) -> StoredPayment | None:
         """トランザクションの外で、同じユーザーの creating・pending の行を返す"""
+
+    async def find_by_session_id(self, session_id: str) -> StoredPayment | None:
+        """トランザクションの外で、Session IDの行を返す（本人かどうかは呼び出し側で確認する）"""
+
+    async def find_confirmable(self, user_id: UUID) -> StoredPayment | None:
+        """トランザクションの外で、本人の確認する決済を返す（session_id を省略した確認で使う）
+
+        pending の行を優先し、なければ「paid だが利用権限へ未反映」の行を返す。
+        creating の行は返さない（Sessionのurlがまだユーザーに渡っていないため）。
+        """
 
     def transaction(self) -> AbstractAsyncContextManager[PaymentTransaction]: ...
