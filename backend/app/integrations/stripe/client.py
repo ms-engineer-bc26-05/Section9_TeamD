@@ -61,6 +61,13 @@ class StripeIdempotencyMismatch(StripeClientError):
     """
 
 
+class StripeExpiresAtRejected(StripeClientError):
+    """Session作成で、expires_at がStripeの条件（作成時から30分以上・24時間以内）を満たさない。
+
+    入力の検査で断られたため、このidempotency keyでSessionは作成されていない。
+    """
+
+
 class StripeRequestFailed(StripeClientError):
     """上記以外の失敗（認証・パラメータ不正など）。再試行しても直らない"""
 
@@ -122,9 +129,10 @@ class StripeCheckoutClient:
         metadata: dict[str, str],
         success_url: str,
         cancel_url: str,
+        expires_at: int,
         idempotency_key: str,
     ) -> CheckoutSession:
-        """一回払いのCheckout Sessionを作成する（数量は1）"""
+        """一回払いのCheckout Sessionを作成する（数量は1）。expires_at はUNIX時刻（秒）"""
         self._check_test_key()
         params = {
             "mode": "payment",
@@ -133,6 +141,7 @@ class StripeCheckoutClient:
             "metadata": metadata,
             "success_url": success_url,
             "cancel_url": cancel_url,
+            "expires_at": expires_at,
         }
         try:
             session = await self._client.v1.checkout.sessions.create_async(
@@ -187,6 +196,12 @@ def _convert_error(exc: stripe.StripeError, operation: str) -> StripeClientError
         return StripeIdempotencyInProgress("同じidempotency keyのリクエストを処理中です")
     if isinstance(exc, stripe.IdempotencyError):
         return StripeIdempotencyMismatch("idempotency keyの内容が前回と異なります")
+    if (
+        operation == "create"
+        and isinstance(exc, stripe.InvalidRequestError)
+        and exc.param == "expires_at"
+    ):
+        return StripeExpiresAtRejected("Sessionの有効期限が条件を満たしません")
     if (
         operation == "retrieve"
         and isinstance(exc, stripe.InvalidRequestError)

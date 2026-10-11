@@ -43,6 +43,23 @@ class Plan:
 
 
 @dataclass(frozen=True)
+class CheckoutRequest:
+    """Stripeへ送るSession作成の内容（DBでは payments.checkout_request のJSON。#59）。
+
+    creating の行を作るときに1回だけ決めて保存し、同じ idempotency key で再試行するときも
+    この内容をそのまま送る（環境の設定値が途中で変わっても、初回と同じ内容になる）。
+    実際に送るパラメーターだけを持ち、秘密情報・相談内容は含めない。
+    """
+
+    price_id: str
+    expires_at: datetime  # Sessionの有効期限。行の作成時刻＋35分
+    success_url: str
+    cancel_url: str
+    client_reference_id: str = field(repr=False)
+    metadata: dict[str, str] = field(repr=False)
+
+
+@dataclass(frozen=True)
 class NewPayment:
     """INSERTする行（status は creating）。金額・通貨はStripe Priceから取得した値"""
 
@@ -52,6 +69,7 @@ class NewPayment:
     idempotency_key: UUID
     amount_minor: int
     currency: str
+    checkout_request: CheckoutRequest
 
 
 @dataclass(frozen=True)
@@ -64,6 +82,7 @@ class StoredPayment:
     status: PaymentStatus
     amount_minor: int
     currency: str
+    checkout_request: CheckoutRequest
     created_at: datetime
 
 

@@ -1,11 +1,12 @@
 """Checkout Session作成（CheckoutService）のテスト。DB・Stripeは fakes.py の偽物を使う。
 
-テスト設計書5.8のPY-02〜PY-05・PY-19〜PY-22と、Q-34の案（#59で相談中）に対応する。
+テスト設計書5.8のPY-02〜PY-05・PY-19〜PY-22と、Q-34・#59の結論に対応する。
 """
 
 import asyncio
 import logging
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -13,6 +14,7 @@ import pytest
 from app.features.payments.exceptions import (
     AlreadyPaid,
     CheckoutInProgress,
+    CheckoutNeedsReview,
     PaymentConfirmationRequired,
     PlanNotAvailable,
     PriceConfigError,
@@ -20,7 +22,11 @@ from app.features.payments.exceptions import (
 from app.features.payments.repository import UserNotActive, UserNotFound
 from app.features.payments.service import CheckoutService
 from app.features.payments.settings import CheckoutSettings
-from app.integrations.stripe.client import StripeUnavailable
+from app.integrations.stripe.client import (
+    StripeExpiresAtRejected,
+    StripeIdempotencyMismatch,
+    StripeUnavailable,
+)
 from tests.features.payments.fakes import (
     PREMIUM_PLAN,
     FakeStripe,
@@ -28,6 +34,7 @@ from tests.features.payments.fakes import (
 )
 
 USER_A = UUID("00000000-0000-0000-0000-000000000001")
+NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
 
 SETTINGS = CheckoutSettings(
     price_ids={"premium": "price_dummy"},
@@ -80,11 +87,14 @@ async def test_create_new_session(service, repo, stripe):
     assert (row.amount_minor, row.currency) == (300, "jpy")
 
 
-async def test_create_uses_server_issued_values(service, repo, stripe):
+async def test_create_uses_server_issued_values(repo, stripe):
+    service = CheckoutService(repo, stripe, SETTINGS, now=lambda: NOW)
+
     await service.create_checkout(USER_A, "premium")
 
     [row] = rows_of(repo)
     [call] = stripe.create_calls
+    expires_at = NOW + timedelta(minutes=35)
     assert call == {
         "idempotency_key": str(row.idempotency_key),
         "price_id": "price_dummy",
@@ -92,7 +102,18 @@ async def test_create_uses_server_issued_values(service, repo, stripe):
         "metadata": {"payment_id": str(row.id)},
         "success_url": SETTINGS.success_url,
         "cancel_url": SETTINGS.cancel_url,
+        "expires_at": int(expires_at.timestamp()),
     }
+    # 送った内容は行に保存されている（再試行で同じ内容を送るため）
+    request = row.checkout_request
+    assert request.expires_at == expires_at
+    assert (request.price_id, request.success_url, request.cancel_url) == (
+        "price_dummy",
+        SETTINGS.success_url,
+        SETTINGS.cancel_url,
+    )
+    assert request.client_reference_id == str(USER_A)
+    assert request.metadata == {"payment_id": str(row.id)}
 
 
 # --- 作成しない（PY-03・PY-04） -------------------------------------------------
@@ -242,20 +263,68 @@ async def test_lost_response_retry_returns_same_session(service, repo, stripe):
     assert row.status == "pending"
 
 
-async def test_changed_params_mark_failed_and_create_new(repo, stripe):
-    # 1回目はStripeで作成されたが応答を受け取れず、その後URLの設定が変わった。
-    # 同じ idempotency key で内容が違うため、Stripeが受け付けない
+async def test_retry_sends_saved_request_even_if_settings_changed(repo, stripe):
+    # 1回目はStripeで作成されたが応答を受け取れず、その後URL・Price IDの設定と時刻が変わった。
+    # 再試行では保存した送信内容をそのまま送るため、同じSessionが返る
+    first_service = CheckoutService(repo, stripe, SETTINGS, now=lambda: NOW)
     stripe.lose_next_response = True
     with pytest.raises(StripeUnavailable):
-        await CheckoutService(repo, stripe, SETTINGS).create_checkout(USER_A, "premium")
+        await first_service.create_checkout(USER_A, "premium")
 
-    changed = replace(SETTINGS, cancel_url="http://localhost:3000/plan?canceled=1")
-    started = await CheckoutService(repo, stripe, changed).create_checkout(USER_A, "premium")
+    changed = CheckoutSettings(
+        price_ids={"premium": "price_changed"},
+        success_url="http://localhost:3000/plan/done?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url="http://localhost:3000/plan?canceled=1",
+    )
+    later = NOW + timedelta(minutes=3)
+    started = await CheckoutService(repo, stripe, changed, now=lambda: later).create_checkout(
+        USER_A, "premium"
+    )
 
-    old_row, new_row = rows_of(repo)
-    assert old_row.status == "failed"
-    assert new_row.status == "pending"
-    assert new_row.stripe_checkout_session_id == started.session_id
+    first, second = stripe.create_calls
+    assert first == second
+    assert second["expires_at"] == int((NOW + timedelta(minutes=35)).timestamp())
+    assert stripe.created_session_count == 1
+    [row] = rows_of(repo)
+    assert row.status == "pending"
+    assert row.stripe_checkout_session_id == started.session_id
+
+
+@pytest.mark.parametrize(
+    "error", [StripeIdempotencyMismatch("架空"), StripeExpiresAtRejected("架空")]
+)
+async def test_unconfirmable_creating_stops_without_new_session(service, repo, stripe, error):
+    # 1回目は応答を受け取れなかった（作成されたか分からない）
+    stripe.create_errors.append(StripeUnavailable("架空"))
+    with pytest.raises(StripeUnavailable):
+        await service.create_checkout(USER_A, "premium")
+    [row] = rows_of(repo)
+
+    # 再試行で、内容の不一致・有効期限の拒否によりSessionを確認できなかった
+    stripe.create_errors.append(error)
+    with pytest.raises(CheckoutNeedsReview):
+        await service.create_checkout(USER_A, "premium")
+
+    # 経過時間・エラーだけで expired・failed にせず、新しい行・Sessionも作らない
+    assert rows_of(repo) == [row]
+    assert row.status == "creating"
+    assert stripe.created_session_count == 0
+    # 有効期限は書き換えずに同じ値を送っている
+    first, second = stripe.create_calls
+    assert first["expires_at"] == second["expires_at"]
+
+
+async def test_needs_review_log_has_payment_id_only(service, repo, stripe, caplog):
+    caplog.set_level(logging.DEBUG)
+    stripe.create_errors.append(StripeIdempotencyMismatch("架空"))
+
+    with pytest.raises(CheckoutNeedsReview):
+        await service.create_checkout(USER_A, "premium")
+
+    [row] = rows_of(repo)
+    # ダッシュボードで照合できるよう、payment_id（Stripeのmetadataと同じ値）は残す
+    assert str(row.id) in caplog.text
+    assert str(row.idempotency_key) not in caplog.text
 
 
 # --- 同時リクエスト（PY-20） -----------------------------------------------------

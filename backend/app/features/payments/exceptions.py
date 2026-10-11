@@ -18,6 +18,15 @@ class CheckoutInProgress(Exception):
     """同じユーザーのSession作成を処理中。少し待って再試行する（APIでは409・CHECKOUT_IN_PROGRESS。仮）"""
 
 
+class CheckoutNeedsReview(Exception):
+    """creating の行のSessionを確認できないため、新しいSessionを作らずに止めた。
+
+    APIの応答は CheckoutInProgress と同じ409・CHECKOUT_IN_PROGRESS（仮）にする。
+    止まった行は、F-05の担当がStripeのダッシュボードで状態を確かめて片付ける（#59）。
+    Session一覧での照合は後続のIssueで扱う。
+    """
+
+
 class PaymentConfirmationRequired(Exception):
     """支払い済みでまだ確認していないSessionがある（APIでは409・PAYMENT_CONFIRMATION_REQUIRED。仮）
 

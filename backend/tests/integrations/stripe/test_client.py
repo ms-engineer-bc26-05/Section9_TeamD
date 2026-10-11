@@ -9,6 +9,7 @@ import pytest
 from app.integrations.stripe.client import (
     StripeCheckoutClient,
     StripeConfigError,
+    StripeExpiresAtRejected,
     StripeIdempotencyInProgress,
     StripeIdempotencyMismatch,
     StripeRequestFailed,
@@ -22,6 +23,7 @@ SESSION_URL = "https://checkout.stripe.com/c/pay/cs_test_dummy_session"
 USER_ID = "00000000-0000-0000-0000-000000000001"
 PAYMENT_ID = "00000000-0000-0000-0000-0000000000a1"
 IDEMPOTENCY_KEY = "00000000-0000-0000-0000-0000000000b1"
+EXPIRES_AT = 1_791_700_000
 
 
 def make_client(handler, secret_key: str = TEST_KEY) -> StripeCheckoutClient:
@@ -44,10 +46,14 @@ def session_body(**overrides) -> dict:
     return body
 
 
-def error_response(status: int, error_type: str, code: str | None = None) -> httpx.Response:
+def error_response(
+    status: int, error_type: str, code: str | None = None, param: str | None = None
+) -> httpx.Response:
     error = {"type": error_type, "message": f"架空のエラー {SESSION_ID}"}
     if code:
         error["code"] = code
+    if param:
+        error["param"] = param
     return httpx.Response(status, json={"error": error})
 
 
@@ -58,6 +64,7 @@ async def create(client: StripeCheckoutClient):
         metadata={"payment_id": PAYMENT_ID},
         success_url="http://localhost:3000/plan/success?session_id={CHECKOUT_SESSION_ID}",
         cancel_url="http://localhost:3000/plan",
+        expires_at=EXPIRES_AT,
         idempotency_key=IDEMPOTENCY_KEY,
     )
 
@@ -94,6 +101,7 @@ async def test_create_sends_one_time_payment_request():
     assert form["success_url"] == [
         "http://localhost:3000/plan/success?session_id={CHECKOUT_SESSION_ID}"
     ]
+    assert form["expires_at"] == [str(EXPIRES_AT)]
 
 
 @pytest.mark.parametrize(
@@ -140,6 +148,13 @@ async def test_create_is_not_retried_by_sdk():
 )
 async def test_create_request_error_is_not_retryable(response):
     with pytest.raises(StripeRequestFailed):
+        await create(make_client(lambda request: response))
+
+
+async def test_create_expires_at_rejected():
+    # 有効期限が条件（作成時から30分以上）を満たさない。入力の検査で断られ、Sessionは作成されない
+    response = error_response(400, "invalid_request_error", "parameter_invalid", "expires_at")
+    with pytest.raises(StripeExpiresAtRejected):
         await create(make_client(lambda request: response))
 
 

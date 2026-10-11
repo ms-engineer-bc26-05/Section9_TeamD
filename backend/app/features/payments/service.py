@@ -1,19 +1,22 @@
 """Checkout Sessionの作成（docs/api-design.md 6.8.6・#59）。
 
-作成の流れ（PR #37で整理した第一候補。Q-34の案は#59で相談中）：
+作成の流れ（PR #37で整理した第一候補と、#59の結論）：
   1. Stripe Priceを取得し、一回払いの有効なPriceか・金額・通貨を確認する（DBロックなし）
   2. トランザクション1：ユーザー行をロック（active を再確認）→ 有料の権限があれば409
      → 未決済の行（creating・pending）を確認 → なければ creating の行と idempotency key を作る
+     （Stripeへ送る内容 checkout_request も、このとき1回だけ決めて保存する。expires_at は作成時刻＋35分）
   3. creating の行：その行の idempotency key でSessionを作成する（DBロックなし）
      → トランザクション2：ユーザー行 → 決済行の順にロックし、creating のままならSession IDを保存して pending にする
   4. pending の行：Session IDでStripeからSessionを取得する（DBロックなし）
      open → そのURLを返す／expired → 行を expired にして2からやり直す／complete → 決済の確認へ進んでもらう
 
-creating の扱い（Q-34の案）：
-  - 処理中か停滞しているかをタイムアウトで分けず、どちらも保存済みの同じ idempotency key でStripeを呼び直す
+creating の扱い（Q-34・#59の結論）：
+  - 処理中か停滞しているかをタイムアウトで分けず、どちらも保存した送信内容・同じ idempotency key でStripeを呼び直す
     （Stripeは同じキー・同じ内容なら、作成済みのSessionを返す）
   - 最初のリクエストがまだ処理中なら、Stripeが409を返すので CheckoutInProgress にする
-  - 送る内容が前回と違ってStripeが受け付けない場合は、その行を failed にして新しい行で作り直す
+  - 内容の不一致・有効期限の拒否などでSessionを確認できない場合は、経過時間だけで expired・failed にせず、
+    新しいSessionも作らずに止める（CheckoutNeedsReview）。expires_at も書き換えない。
+    止まった行は担当がStripeのダッシュボードで片付ける。Session一覧での照合は後続のIssueで扱う
   - 通信の失敗・タイムアウトでは failed にしない（creating のまま残し、次のリクエストで同じキーで再試行する）
 
 秘密鍵・Session ID・URLをログ・例外のメッセージに含めない。
@@ -22,19 +25,21 @@ creating の扱い（Q-34の案）：
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
 
 from app.features.payments.exceptions import (
     AlreadyPaid,
     CheckoutInProgress,
+    CheckoutNeedsReview,
     PaymentConfirmationRequired,
     PlanNotAvailable,
     PriceConfigError,
     UnexpectedSessionState,
 )
 from app.features.payments.repository import (
+    CheckoutRequest,
     DuplicateUnfinishedPayment,
     NewPayment,
     PaymentRepository,
@@ -44,6 +49,7 @@ from app.features.payments.repository import (
 from app.features.payments.settings import CheckoutSettings
 from app.integrations.stripe.client import (
     CheckoutSession,
+    StripeExpiresAtRejected,
     StripeIdempotencyInProgress,
     StripeIdempotencyMismatch,
     StripePrice,
@@ -54,6 +60,9 @@ logger = logging.getLogger(__name__)
 
 # 期限切れの行の置き換えや、同時リクエストとの競合でやり直す回数の上限
 MAX_ATTEMPTS = 3
+
+# Sessionの有効期限（行の作成時刻から）。Stripeの最短30分に、送信までの遅れの余裕5分を足す（#59）
+CHECKOUT_EXPIRES_AFTER = timedelta(minutes=35)
 
 
 class CheckoutClient(Protocol):
@@ -69,6 +78,7 @@ class CheckoutClient(Protocol):
         metadata: dict[str, str],
         success_url: str,
         cancel_url: str,
+        expires_at: int,
         idempotency_key: str,
     ) -> CheckoutSession: ...
 
@@ -102,10 +112,10 @@ class CheckoutService:
         price = await self._get_price(price_id)
 
         for _ in range(MAX_ATTEMPTS):
-            payment = await self._reserve(user_id, plan_code, price)
+            payment = await self._reserve(user_id, plan_code, price_id, price)
             # MVPの有料プランは1つのため、既存の行のプランと price_id は一致する前提
             if payment.status == "creating":
-                started = await self._create_session(user_id, payment, price_id)
+                started = await self._create_session(user_id, payment)
             else:
                 started = await self._reuse_session(user_id, payment)
             if started is not None:
@@ -126,7 +136,9 @@ class CheckoutService:
             raise PriceConfigError("Stripe Priceが一回払いの有効なPriceではありません")
         return price
 
-    async def _reserve(self, user_id: UUID, plan_code: str, price: StripePrice) -> StoredPayment:
+    async def _reserve(
+        self, user_id: UUID, plan_code: str, price_id: str, price: StripePrice
+    ) -> StoredPayment:
         """トランザクション1。未決済の行を返す（なければ creating の行を作る）"""
         try:
             async with self._repository.transaction() as tx:
@@ -140,14 +152,23 @@ class CheckoutService:
                 existing = await tx.find_unfinished(user_id)
                 if existing is not None:
                     return existing
+                payment_id = uuid4()
                 return await tx.insert(
                     NewPayment(
-                        id=uuid4(),
+                        id=payment_id,
                         user_id=user_id,
                         plan_id=plan.id,
                         idempotency_key=uuid4(),
                         amount_minor=price.unit_amount,
                         currency=price.currency,
+                        checkout_request=CheckoutRequest(
+                            price_id=price_id,
+                            expires_at=self._now() + CHECKOUT_EXPIRES_AFTER,
+                            success_url=self._settings.success_url,
+                            cancel_url=self._settings.cancel_url,
+                            client_reference_id=str(user_id),
+                            metadata={"payment_id": str(payment_id)},
+                        ),
                     )
                 )
         except DuplicateUnfinishedPayment:
@@ -157,27 +178,31 @@ class CheckoutService:
                 raise CheckoutInProgress from None
             return existing
 
-    async def _create_session(
-        self, user_id: UUID, payment: StoredPayment, price_id: str
-    ) -> CheckoutStarted | None:
+    async def _create_session(self, user_id: UUID, payment: StoredPayment) -> CheckoutStarted | None:
         """creating の行のSessionを作成する。やり直しが必要なら None を返す"""
+        request = payment.checkout_request
         try:
-            # 同じ行で再試行したときに同じ内容になるよう、行と設定の値だけから組み立てる
+            # 再試行でも初回と同じ内容になるよう、保存した送信内容だけを送る（今の設定値は使わない）
             session = await self._stripe.create_checkout_session(
-                price_id=price_id,
-                client_reference_id=str(user_id),
-                metadata={"payment_id": str(payment.id)},
-                success_url=self._settings.success_url,
-                cancel_url=self._settings.cancel_url,
+                price_id=request.price_id,
+                client_reference_id=request.client_reference_id,
+                metadata=dict(request.metadata),
+                success_url=request.success_url,
+                cancel_url=request.cancel_url,
+                expires_at=int(request.expires_at.timestamp()),
                 idempotency_key=str(payment.idempotency_key),
             )
         except StripeIdempotencyInProgress:
             raise CheckoutInProgress from None
-        except StripeIdempotencyMismatch:
-            # このキーでは作成できない。行を failed にして、新しい行で作り直す
-            logger.warning("checkout payment marked failed: idempotency key mismatch")
-            await self._mark(user_id, payment, "creating", "failed")
-            return None
+        except (StripeIdempotencyMismatch, StripeExpiresAtRejected) as exc:
+            # Sessionを確認できない。行は creating のまま残し、新しく作らずに止める
+            # （payment_id はStripeのmetadataと同じ値。ダッシュボードで照合するために残す）
+            logger.warning(
+                "checkout payment needs review: payment_id=%s reason=%s",
+                payment.id,
+                type(exc).__name__,
+            )
+            raise CheckoutNeedsReview from None
         if session.url is None:
             raise UnexpectedSessionState("作成したSessionにURLがありません")
 

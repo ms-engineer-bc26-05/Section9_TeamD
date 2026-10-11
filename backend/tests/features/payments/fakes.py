@@ -119,6 +119,7 @@ class _InMemoryTransaction:
             status="creating",
             amount_minor=payment.amount_minor,
             currency=payment.currency,
+            checkout_request=payment.checkout_request,
             created_at=datetime.now(UTC),
         )
         self.pending[stored.id] = stored
