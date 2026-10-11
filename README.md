@@ -35,6 +35,7 @@ Team Dの最終プロジェクト「ぽろり。」の開発用リポジトリ�
 | キャッシュ | Redis | 7 |
 | 開発環境 | Docker Compose | ― |
 | テスト | pytest | 8.3.2 |
+| Formatter・Lint | Ruff（バックエンド）/ ESLint・Prettier（フロントエンド） | Ruff 0.16.10 / ESLint 9.39.5 / Prettier 3.9.9 |
 
 採用の理由や比較結果は、[`docs/技術選定.md`](docs/技術選定.md)を参照してください。
 
@@ -176,7 +177,10 @@ docker compose up
 
 ## テスト・ビルド
 
-Pull Requestでは、GitHub Actionsがバックエンドのpytestとフロントエンドのビルドを自動実行します。
+Pull Requestでは、GitHub Actionsが次のチェックを自動実行します。
+
+- バックエンド：pytest、整形の確認（`ruff format --check`）、Lint（`ruff check`）
+- フロントエンド：ビルド、整形の確認（`prettier --check .`）、Lint（`eslint . --max-warnings 0`）
 
 ローカルでは、コンテナを起動した状態で、別のターミナルから実行します。
 
@@ -195,6 +199,29 @@ docker compose run --rm --no-deps frontend npm run build
 ```
 
 一時的なコンテナで実行するため、起動中の開発サーバーには影響しません。
+
+**整形・Lint**
+
+チェックだけ行う（ファイルは書き換えない）：
+
+```bash
+docker compose exec backend ruff format --check                      # バックエンドの整形
+docker compose exec backend ruff check                               # バックエンドのLint
+docker compose run --rm --no-deps frontend npm run format:check      # フロントエンドの整形
+docker compose run --rm --no-deps frontend npm run lint              # フロントエンドのLint
+```
+
+整形・自動修正する（ファイルを書き換える）：
+
+```bash
+docker compose exec backend ruff check --fix                         # バックエンドのLintの自動修正（importの並べ替えなど）
+docker compose exec backend ruff format                              # バックエンドの整形（--fixのあとに実行する）
+docker compose run --rm --no-deps frontend npm run format            # フロントエンドの整形
+```
+
+設定は、`backend/ruff.toml`、`frontend/eslint.config.mjs`、`frontend/.prettierrc.json`にあります。1行の長さは、どちらも100文字です。
+
+ESLintは、warningも1件あればエラーとして扱います（`--max-warnings 0`）。どうしても対応できない箇所は、`// eslint-disable-next-line ルール名 -- 理由`のように、理由を書いて個別に対象外にします。指摘の原因を直したら、`eslint-disable`のコメントも消してください（使われていないコメントもwarningになり、CIが失敗します）。
 
 **脆弱性チェック**
 
