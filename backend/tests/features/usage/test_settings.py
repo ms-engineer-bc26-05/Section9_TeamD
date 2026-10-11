@@ -14,6 +14,9 @@ def test_defaults():
     )
     assert settings.period_seconds == 30 * 24 * 60 * 60
     assert settings.redis_url == ""
+    # Issue #57（質問⑧）で実測して決めた値
+    assert settings.redis_connect_timeout_seconds == 0.5
+    assert settings.redis_command_timeout_seconds == 0.5
 
 
 def test_reads_environment():
