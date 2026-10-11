@@ -13,7 +13,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.errors import register_exception_handlers
+from app.core.errors import (
+    INTERNAL_ERROR_CODE,
+    INTERNAL_ERROR_MESSAGE,
+    register_exception_handlers,
+)
 from app.features.consultations import state as state_module
 from app.features.consultations.router import get_current_user_id, router
 from app.features.consultations.schemas import (
@@ -36,6 +40,7 @@ from tests.features.consultations import fakes
 
 BASE = "/api/v1/consultations"
 MARKER = "PORORI_TEST_MARKER_ST-19"
+INTERNAL_ERROR_BODY = {"error": {"code": INTERNAL_ERROR_CODE, "message": INTERNAL_ERROR_MESSAGE}}
 
 
 @pytest.fixture
@@ -114,6 +119,8 @@ def test_internal_error_in_event_dialogue_does_not_advance_state(
     )
 
     assert response.status_code == 500
+    # 想定外のエラーも、共通のエラー形式で返る（#86）
+    assert response.json() == INTERNAL_ERROR_BODY
     assert MARKER not in response.text
     # 送信前の状態（直近の質問・回数）へ戻っている
     assert client.get(f"{BASE}/{cid}").json() == before
@@ -145,6 +152,8 @@ def test_internal_error_in_guided_dialogue_does_not_advance_state(
     )
 
     assert response.status_code == 500
+    # 想定外のエラーも、共通のエラー形式で返る（#86）
+    assert response.json() == INTERNAL_ERROR_BODY
     assert MARKER not in response.text
     after = client.get(f"{BASE}/{cid}").json()
     assert after == before
@@ -274,6 +283,8 @@ def test_internal_error_in_other_updates_does_not_advance_state(
     response = getattr(client, method)(f"{BASE}/{state.consultation_id}{path}", **kwargs)
 
     assert response.status_code == 500
+    # 想定外のエラーも、共通のエラー形式で返る（#86）
+    assert response.json() == INTERNAL_ERROR_BODY
     assert MARKER not in response.text
     assert MARKER not in caplog.text
     assert _st19_fields(state) == before
