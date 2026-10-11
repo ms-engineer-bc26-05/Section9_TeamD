@@ -56,7 +56,11 @@ describe("NoticePage", () => {
 
     expect(screen.queryByText("詳しい注意")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "詳しい注意を見る" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "つらさが強いときの相談窓口" })).toBeInTheDocument();
+    
+    const support = screen.getByRole("link", { name: "つらさが強いときの相談窓口" });
+    expect(support).toHaveAttribute("href", "https://www.mhlw.go.jp/mamorouyokokoro/soudan/");
+    expect(support).toHaveAttribute("target", "_blank");
+    expect(support).toHaveAttribute("rel", "noopener noreferrer");
 
     await userEvent.click(screen.getByRole("button", { name: "確認して進む" }));
 

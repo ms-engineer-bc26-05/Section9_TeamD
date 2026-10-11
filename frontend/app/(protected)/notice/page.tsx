@@ -7,8 +7,8 @@ import { useAuth } from "@/components/AuthProvider";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { User } from "@/lib/types";
 
-// 相談窓口の案内先は未確定のため仮置き(確定したら差し替える)
-const SUPPORT_URL = "#";
+// 相談窓口の案内先(厚生労働省「まもろうよ こころ」。#48で確定)
+const SUPPORT_URL = "https://www.mhlw.go.jp/mamorouyokokoro/soudan/";
 // 遷移先(UI-004)は I-04 の範囲。実装されるまでは仮置き
 const NEXT_PATH = "/home";
 
@@ -77,7 +77,9 @@ export default function NoticePage() {
       )}
 
       <p>
-        <a href={SUPPORT_URL}>つらさが強いときの相談窓口</a>
+        <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
+          つらさが強いときの相談窓口
+        </a>
       </p>
 
       {errorMessage && <p role="alert">{errorMessage}</p>}

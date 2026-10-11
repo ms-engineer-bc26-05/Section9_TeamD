@@ -11,8 +11,8 @@ import { toAuthErrorMessage } from "@/lib/authErrors";
 import { useAuth } from "@/components/AuthProvider";
 import styles from "./login.module.css";
 
-// 相談窓口の案内先は未確定のため仮置き(確定したら差し替える)
-const SUPPORT_URL = "#";
+// 相談窓口の案内先(厚生労働省「まもろうよ こころ」。#48で確定)
+const SUPPORT_URL = "https://www.mhlw.go.jp/mamorouyokokoro/soudan/";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -111,7 +111,12 @@ export default function LoginPage() {
         </button>
       </form>
 
-      <a className={styles.support} href={SUPPORT_URL}>
+      <a
+        className={styles.support}
+        href={SUPPORT_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         つらさが強いときの相談窓口
       </a>
     </main>
