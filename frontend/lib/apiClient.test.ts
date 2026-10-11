@@ -106,4 +106,35 @@ describe("apiClient", () => {
     fetchMock.mockRejectedValueOnce(new DOMException("aborted", "AbortError"));
     expect(((await catchError(apiClient.get("/x"))) as ApiError).kind).toBe("aborted");
   });
+
+    it("初回のトークン取得で通信失敗なら、network を投げ、fetch は呼ばない", async () => {
+    getIdToken.mockRejectedValue({ code: "auth/network-request-failed" });
+
+    const error = await catchError(apiClient.get("/users/me"));
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).kind).toBe("network");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("401後の強制更新で通信失敗なら、unauthenticated ではなく network を投げる", async () => {
+    getIdToken
+      .mockResolvedValueOnce("dummy-token")
+      .mockRejectedValueOnce({ code: "auth/network-request-failed" });
+    fetchMock.mockResolvedValueOnce(json({}, 401));
+
+    const error = await catchError(apiClient.get("/users/me"));
+
+    expect((error as ApiError).kind).toBe("network");
+    expect(getIdToken).toHaveBeenNthCalledWith(2, true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("トークン取得が通信失敗以外で失敗したら、unauthenticated を投げる", async () => {
+    getIdToken.mockRejectedValue({ code: "auth/user-token-expired" });
+
+    const error = await catchError(apiClient.get("/users/me"));
+
+    expect((error as ApiError).kind).toBe("unauthenticated");
+  });
 });

@@ -13,7 +13,7 @@ import { getFirebaseAuth } from "@/lib/firebase";
 
 export type ApiErrorKind =
   | "bad_request" // 400
-  | "unauthenticated" // 401・トークン取得失敗
+  | "unauthenticated" // 401・トークン無効(通信失敗は network)
   | "forbidden" // 403(codeで分岐する。一律に退会扱いしない)
   | "not_found" // 404(他人のリソースも含む)
   | "conflict" // 409(相談状態と操作の矛盾)
@@ -113,13 +113,25 @@ async function readErrorBody(
   }
 }
 
+// Firebaseの「通信失敗」だけを network として扱う(それ以外は認証無効)
+function isFirebaseNetworkError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "auth/network-request-failed"
+  );
+}
+
 async function getToken(forceRefresh: boolean): Promise<string> {
   const user = getFirebaseAuth().currentUser;
   if (!user) throw new ApiError("unauthenticated");
   try {
     return await user.getIdToken(forceRefresh);
-  } catch {
-    throw new ApiError("unauthenticated");
+  } catch (error) {
+    // 通信失敗はログアウトにつなげず、再試行できるようにする
+    throw new ApiError(
+      isFirebaseNetworkError(error) ? "network" : "unauthenticated",
+    );
   }
 }
 
