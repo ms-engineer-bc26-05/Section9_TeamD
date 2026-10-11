@@ -3,7 +3,8 @@
 相談機能の例外（404・409）は、継承元の ConsultationRoute で変換する。
 エラーの本文・ログに、本文・鍵・暗号文を含めない。
 
-想定外の例外（commit失敗など）も500（INTERNAL_ERROR）へ変換し、上へ送らない。
+想定外の例外（commit失敗など）も500へ変換し、上へ送らない。
+500のcodeは共通の想定外エラー（app.core.errors、#86）と同じにし、messageだけ保存用の文にする。
 DBの例外はメッセージにSQLのパラメータ（暗号文）を含みうるため、
 トレースバック・メッセージを出さず、例外の種類だけを記録する。
 """
@@ -17,6 +18,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from app.core.errors import INTERNAL_ERROR_CODE
 from app.core.exceptions import (
     AccountDeletingError,
     AuthenticationRequiredError,
@@ -32,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 _SAVE_FAILED = (
     500,
-    "INTERNAL_ERROR",
+    INTERNAL_ERROR_CODE,
     "メモを保存できませんでした。時間をおいてもう一度お試しください。",
 )
 

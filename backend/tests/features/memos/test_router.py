@@ -214,7 +214,7 @@ def test_missing_key_is_500_without_details(app, state, repo, monkeypatch):
     assert response.status_code == 500
     assert response.json() == {
         "error": {
-            "code": "INTERNAL_ERROR",
+            "code": "INTERNAL_SERVER_ERROR",
             "message": "メモを保存できませんでした。時間をおいてもう一度お試しください。",
         }
     }
@@ -229,7 +229,7 @@ def test_ciphertext_moved_to_another_memo_is_500_without_details(client, state, 
     response = client.post(f"{BASE}/{state.consultation_id}/save", json={})
 
     assert response.status_code == 500
-    assert response.json()["error"]["code"] == "INTERNAL_ERROR"
+    assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
     assert "架空" not in response.text
 
 
@@ -243,7 +243,7 @@ def test_commit_failure_is_500_without_details(client, state, repo, store, caplo
     assert response.status_code == 500
     assert response.json() == {
         "error": {
-            "code": "INTERNAL_ERROR",
+            "code": "INTERNAL_SERVER_ERROR",
             "message": "メモを保存できませんでした。時間をおいてもう一度お試しください。",
         }
     }
