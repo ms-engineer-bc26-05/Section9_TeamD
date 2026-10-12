@@ -4,7 +4,8 @@
 - 設定値は共通の config.py ではなく、この機能の中で読み込む（他Issueとの競合を避けるため）
 - 上限値に "unlimited" を指定した場合だけ「無制限」（APIでは null）として扱う。
   値の読み込みに失敗した場合を無制限とみなさないよう、不正な値は起動時にエラーにする
-- 価格・Stripe PriceのID（F-05）と置き場所を共通にするかは #59 で相談中
+- #59の決定により、設定値とプランの判定は将来 backend/app/features/plans/ へ移す
+  （F-05で plans/ ができた後、後続のIssueで移す。他の機能は plans/public.py だけを使う）
 """
 
 import os
@@ -15,11 +16,11 @@ from functools import lru_cache
 
 UNLIMITED = "unlimited"
 
-# 既定値（#57 質問①・#59 の4で合意・提案した値）
+# 既定値（#57 質問①・#59で決定した値。有料プランの値はMVPテスト用の暫定値）
 DEFAULT_FREE_CONSULTATION_LIMIT = "3"
-DEFAULT_PREMIUM_CONSULTATION_LIMIT = "30"  # #59 の4で提案中。決定後に見直す
+DEFAULT_PREMIUM_CONSULTATION_LIMIT = "30"  # #59で決定（暫定値）
 DEFAULT_FREE_MEMO_LIMIT = "10"  # API設計6.8.1の仮の値
-DEFAULT_PREMIUM_MEMO_LIMIT = "100"  # #59で整理している値
+DEFAULT_PREMIUM_MEMO_LIMIT = "100"  # #59で決定（暫定値）
 DEFAULT_PERIOD_SECONDS = str(30 * 24 * 60 * 60)  # 30日
 
 # Redisのタイムアウト（秒）。Issue #57で待ち時間を実測して決定（質問⑧）
