@@ -59,5 +59,9 @@ class PaymentSettlementBlocked(Exception):
     """
 
 
+class PaymentDatabaseError(Exception):
+    """接続障害以外のDBの失敗（APIでは500）。DBの例外のメッセージはSQLのパラメータを含みうるため捨てる"""
+
+
 class PaymentVerificationFailed(Exception):
     """Stripeの金額・通貨が、購入時に保存した値と一致しない（APIでは500）。paid にしない"""
