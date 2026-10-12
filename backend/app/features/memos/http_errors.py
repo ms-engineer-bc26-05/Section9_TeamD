@@ -48,9 +48,6 @@ _COMMON_ERRORS = (
 )
 
 _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
-    # ロック後の再確認（認証後に内部ユーザーが削除された・退会処理が始まった）。I-01と同じcode
-    UserNotFound: (401, "UNAUTHORIZED", "ログインしてください。"),
-    UserNotActive: (403, "ACCOUNT_DELETING", "退会処理中のため利用できません。"),
     # 鍵の未設定・復号失敗・照合失敗。原因を区別して返さない
     MemoEncryptionError: _SAVE_FAILED,
     MemoDatabaseError: _SAVE_FAILED,
@@ -85,6 +82,12 @@ class MemoRoute(ConsultationRoute):
             except (RequestValidationError, HTTPException, *_COMMON_ERRORS):
                 # 422・400、認証の401・403・503は共通のエラーハンドラ（app.core.errors）で変換する
                 raise
+            except UserNotFound:
+                # ロック後の再確認（認証後に内部ユーザーが削除された・退会処理が始まった）。
+                # I-01の例外へ変換し、文言・WWW-Authenticate ヘッダーも共通のエラーハンドラにそろえる
+                raise AuthenticationRequiredError from None
+            except UserNotActive:
+                raise AccountDeletingError from None
             except Exception as exc:
                 return memo_error_response(exc)
 
