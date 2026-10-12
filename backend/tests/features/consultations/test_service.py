@@ -20,8 +20,8 @@ from app.features.consultations.exceptions import (
     GuidedSkipNotAllowed,
 )
 from app.features.consultations.public import discard_consultation, get_approved_result
+from app.features.consultations.safety import SAFETY_MESSAGE
 from app.features.consultations.service import (
-    SAFETY_MESSAGE_PLACEHOLDER,
     ConsultationService,
     current_guided_topic,
 )
@@ -186,7 +186,7 @@ async def test_safety_on_start(service, store, ai):
     state = await service.start(USER, ThemeCategory.OTHER, "架空の相談本文")
 
     assert state.status is ConsultationStatus.SAFETY_GUIDANCE
-    assert state.safety_guidance.safety_message == SAFETY_MESSAGE_PLACEHOLDER  # AIの文は使わない
+    assert state.safety_guidance.safety_message == SAFETY_MESSAGE  # AIの文は使わない
     assert state.safety_guidance.continued_normal_structuring is False
     assert state.messages == []  # 相談内容を保持しない
     assert store.exists(USER, state.consultation_id)
