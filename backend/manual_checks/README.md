@@ -1,5 +1,34 @@
 # Firebase最小権限の手動検証（#47）
 
+## 現在の実行計画（PR #85の追加合意）
+
+以下の従来手順にある「最大4回」「3ケースの段階実行」は当初計画の記録。現在の累計上限は5回で、4回使用済み。残る5回目は **正常系だけ** に使う。回数はプロセス再起動やスクリプト修正でリセットしない。
+
+- 使用するモードは `--allowed-only --approved`。`--guided`は使用しない。
+- 有効な専用テストユーザーで非表示ログインを1回行い、`allowed`を1回確認して終了する。ログインを含む全HTTP送信試行を同じ最大10回・60秒の制限で囲む。入力待ちは含めない。
+- 権限不足・無効ユーザーの実接続確認は後続Issueへ引き継ぐ方針。担当・期限・未確認事項は引き継ぎ先に記録する。
+- 成功・失敗にかかわらず、この実行後の追加実接続は行わない。想定外の結果は停止してPRへ共有する。
+- 対象プロジェクト、専用サービスアカウントの鍵、`firebaseauth.users.get`のみの権限と反映、専用ユーザーの有効状態、メール/パスワード認証、料金条件を実行前に確認する。権限を広げて回避しない。
+- 成功条件は `check_revoked=True`の実SDK検証と、模擬DB登録を使う201応答・安全性検査。実DB登録やフロント結合の成功とは区別する。
+
+通信なしのセルフテストで `PASS` を確認した後、上記の準備確認が済んだ場合だけ使用する。鍵・APIキー・パスワードを表示せず、画面録画・端末入力記録を停止する。
+
+```bash
+docker run --pull=never --rm -it --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges \
+  --mount "type=bind,src=$PWD/backend/app,dst=/app/app,readonly" \
+  --mount "type=bind,src=$PWD/backend/manual_checks,dst=/app/manual_checks,readonly" \
+  --mount "type=bind,src=$HOME/.config/porori/issue-47/firebase-service-account.json,dst=/run/secrets/firebase.json,readonly" \
+  --workdir /app --entrypoint /usr/bin/env team-d_project-review-backend:latest \
+  -i PATH=/usr/local/bin:/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 \
+  FIREBASE_PROJECT_ID=porori-auth-spike \
+  GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/firebase.json \
+  python -m manual_checks.firebase_connection --allowed-only --approved
+```
+
+`Type READY to start allowed verification:`を確認し、大文字の`READY`を入力する。続く非表示入力は対象プロジェクトのWeb APIキー、専用テストユーザーのパスワードの順。成功時は `allowed: PASS; HTTP attempts: N/10` と `PASS`を表示して終了する。トークンはメモリ内だけで受け渡す。
+
+セルフテストには、正常系だけを1回実行すること、確認拒否時にログインしないこと、ログイン失敗・検証失敗・上限停止・中断で後続ケースや再試行へ進まないこと、秘密値を出力しないことの確認を含む。
+
 ## 実施範囲と開始条件
 
 この手順は準備用。チームへの実施案が承認されるまで、サービスアカウント作成・権限付与・鍵発行・実接続を行わない。

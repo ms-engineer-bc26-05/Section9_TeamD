@@ -93,9 +93,13 @@ def sign_in(api_key, password):
         logging.disable(previous_disable)
 
 
-def guided_probe():
-    print("Dedicated test user only. Start with NO service-account roles.")
-    if input("Type READY to start denied verification: ") != "READY":
+def guided_probe(*, allowed_only=False):
+    cases = ("allowed",) if allowed_only else ("denied", "allowed", "disabled")
+    print(
+        "Dedicated test user must be enabled. Grant ONLY firebaseauth.users.get before starting."
+        if allowed_only else "Dedicated test user only. Start with NO service-account roles."
+    )
+    if input(f"Type READY to start {cases[0]} verification: ") != "READY":
         return False
     api_key = hidden_input("Approved project's Web API key (hidden): ").strip()
     password = hidden_input("Dedicated test user's password (hidden): ")
@@ -103,12 +107,12 @@ def guided_probe():
         return False
     token = None
     try:
-        for case in ("denied", "allowed", "disabled"):
-            if case == "allowed":
+        for index, case in enumerate(cases):
+            if index and case == "allowed":
                 print("Pause: grant ONLY firebaseauth.users.get and wait for IAM propagation.")
             elif case == "disabled":
                 print("Pause: disable ONLY the dedicated test user in the console; keep its role.")
-            if case != "denied":
+            if index:
                 if input("Type READY after the manual step (anything else stops): ") != "READY":
                     return False
                 if time.monotonic() >= deadline:
@@ -118,7 +122,7 @@ def guided_probe():
             stage = "GUARD"
             try:
                 with live_limits() as budget:
-                    if case == "denied":
+                    if index == 0:
                         stage = "SIGN_IN"
                         token, deadline = sign_in(api_key, password)
                         api_key = password = None
@@ -145,6 +149,74 @@ def guided_probe():
         return True
     finally:
         token = api_key = password = None
+
+
+def allowed_only_self_test():
+    module = sys.modules[__name__]
+    for confirmation, failure_stage, result in (
+        ("READY", None, True),
+        ("READY", None, False),
+        ("STOP", None, True),
+        ("READY", "SIGN_IN", SignInFailure("SIGN_IN_HTTP_REJECTED")),
+        ("READY", "SIGN_IN", RuntimeError("DUMMY_SECRET")),
+        ("READY", "TOKEN_PROBE", RuntimeError("DUMMY_SECRET")),
+        ("READY", "TOKEN_PROBE", ProbeLimitReached()),
+        ("READY", "TOKEN_PROBE", KeyboardInterrupt()),
+    ):
+        output = io.StringIO()
+        stages = []
+
+        @contextmanager
+        def fake_limits():
+            stages.append("GUARD_START")
+            try:
+                yield {"attempts": 2}
+            finally:
+                stages.append("GUARD_END")
+
+        def login_once(*args):
+            stages.append("SIGN_IN")
+            if failure_stage == "SIGN_IN":
+                raise result
+            return "DUMMY_TOKEN", time.monotonic() + 300
+
+        async def probe_once(case, token):
+            stages.append("TOKEN_PROBE")
+            if failure_stage == "TOKEN_PROBE":
+                raise result
+            return result
+
+        with patch("builtins.input", return_value=confirmation) as confirm, patch.object(
+            module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]
+        ) as hidden, patch.object(module, "live_limits", fake_limits), patch.object(
+            module, "sign_in", side_effect=login_once
+        ) as login, patch.object(module, "probe", AsyncMock(side_effect=probe_once)) as check, redirect_stdout(output):
+            actual = guided_probe(allowed_only=True)
+        if actual is not (confirmation == "READY" and failure_stage is None and result is True):
+            return False
+        if confirm.call_count != 1:
+            return False
+        if confirmation != "READY":
+            if hidden.called or login.called or check.called or stages:
+                return False
+            continue
+        expected_stages = ["GUARD_START", "SIGN_IN"]
+        if failure_stage != "SIGN_IN":
+            expected_stages.append("TOKEN_PROBE")
+            if check.await_args_list != [(("allowed", "DUMMY_TOKEN"), {})]:
+                return False
+        elif check.called:
+            return False
+        if stages != expected_stages + ["GUARD_END"] or login.call_count != 1:
+            return False
+        rendered = output.getvalue()
+        if any(secret in rendered for secret in ("DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN", "DUMMY_SECRET")):
+            return False
+        if "denied:" in rendered or "disabled:" in rendered or "2/10" not in rendered:
+            return False
+        if failure_stage and "DIAGNOSTIC STAGE: " + failure_stage not in rendered:
+            return False
+    return True
 
 
 def guided_self_test():
@@ -579,6 +651,7 @@ def main():
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--self-test", action="store_true")
     modes.add_argument("--guided", action="store_true")
+    modes.add_argument("--allowed-only", action="store_true", help="Sign in privately, run allowed once, then exit")
     modes.add_argument("--case", choices=("allowed", "denied", "disabled"))
     parser.add_argument("--approved", action="store_true", help="Confirm the documented live plan is approved")
     args = parser.parse_args()
@@ -586,7 +659,7 @@ def main():
         print("STOP: certificate cache preflight failed; check writable temporary storage. No live request sent.")
         return 2
     if args.self_test:
-        success = guided_self_test() and asyncio.run(self_test())
+        success = allowed_only_self_test() and guided_self_test() and asyncio.run(self_test())
     else:
         if not args.approved or not sys.stdin.isatty():
             print("STOP: live approval and an interactive terminal are required.")
@@ -598,8 +671,8 @@ def main():
         ):
             print("STOP: check the approved project and credential configuration.")
             return 2
-        if args.guided:
-            success = guided_probe()
+        if args.guided or args.allowed_only:
+            success = guided_probe(allowed_only=args.allowed_only)
         else:
             token = hidden_input("Test user ID token (hidden): ").strip()
             if not token or token == "dummy-token":
