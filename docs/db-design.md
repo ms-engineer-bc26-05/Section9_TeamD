@@ -54,11 +54,11 @@
 - 5テーマ＋「その他」の選択値・感情8種類の選択値を、整理結果とは別に保存するか、および保存形式
 - 画面・APIと照合した整理メモの保存候補項目の最終確定と最大文字数
 - 一覧用の短い要約を保存するか表示時に作るか、ページ分割の方式と復号する件数
-- 無料・有料プランの内容、価格、相談回数、保存件数
-- 買い切り型・サブスク型の選択
+- 無料・有料プランの内容、価格、相談回数、保存件数（課金方式・テスト用の価格・上限値をサーバー設定で持つことは#59・#57で決定。上限値の具体的な値は#57・#59で確認中）
+- ~~買い切り型・サブスク型の選択~~：#59で一回払い（買い切り型）に決定
 - 利用回数のリセット期間
-- 決済状態と利用権限の対応
-- 退会時の外部認証・決済サービス側の処理
+- ~~決済状態と利用権限の対応~~：#59で決定（payments・決済と利用権限の整合性を参照）
+- 退会時の外部認証・決済サービス側の処理（決済は、退会時に未完了の決済をStripeと照合する。#60で合意。退会時の削除手順を参照）
 - 退会処理の進捗記録・再試行・復旧方法
 
 
@@ -257,19 +257,18 @@ WHERE id = :memo_id
 | id | UUID | PRIMARY KEY |
 | code | VARCHAR(50) | NOT NULL、UNIQUE。プランの識別コード |
 | name | VARCHAR(100) | NOT NULL。表示名 |
-| stripe_price_id | TEXT | NULL可、UNIQUE。Stripe Priceとの対応。課金方式の決定後に使用可否を確定する |
-| consultation_limit | INTEGER | NULL可。相談回数の上限候補 |
-| memo_limit | INTEGER | NULL可。保存件数の上限候補 |
-| usage_period | VARCHAR(32) | NULL可。回数集計期間の識別子候補 |
+| stripe_price_id | TEXT | NULL可、UNIQUE。Stripe Priceとの対応。MVPでは使わず、NULLのままとする（下記） |
 | is_active | BOOLEAN | NOT NULL、DEFAULT true。新規提供の可否 |
 | created_at | TIMESTAMPTZ | NOT NULL、DEFAULT CURRENT_TIMESTAMP |
 
-- 上限値には、NULLまたは0以上とするCHECK制約を設ける。
-- NULLを無制限・未設定のどちらとして扱うかは、実装前に統一する。
-  未設定のまま利用可能と判定しない。
-- usage_periodの許容値は、Redisのリセット方針と合わせて決める。
-- 有料プランでは、サーバーがplans.stripe_price_idに対応するStripe Priceを取得し、金額・通貨を確認する案とする。
-- stripe_price_idをDBで管理するか、サーバー設定で管理するかは、課金方式の決定後に確定する。
+- idはDBが発行する（`gen_random_uuid()`）。環境ごとに値が変わるため、APIでは`code`を使う。
+- `free`（無料プラン）・`premium`（有料プラン）の2行は、マイグレーションで作成する（#59・F-05）。
+- **上限値（相談回数・保存件数）と集計期間の列は持たない**（#59・#57で決定）。
+  上限値・期間はサーバー設定（環境変数）で管理し、設定値の`unlimited`だけを無制限とする（#57）。
+  使わない列がNULLのまま残ると、「NULLは無制限」と読み違えるおそれがあるため、列そのものを作らない。
+- Stripe PriceのIDは、環境ごとのサーバー設定（`STRIPE_PRICE_ID_PREMIUM`）で管理する（#59）。
+  サーバーがそのStripe Priceを取得し、一回払いの有効なPriceであること・金額・通貨を確認する。
+  stripe_price_idの列をDBでの管理へ切り替えるかは、F-03（`plans/`）の作成時に確認する。
 - クライアントから送られた金額・Price IDを、そのまま決済作成に使用しない。
 - 利用中のプランの上限変更が既存ユーザーへ与える影響は要確認。
 - 参照されているプランは削除せず、必要に応じて新規提供を停止する。
@@ -290,7 +289,9 @@ WHERE id = :memo_id
 - valid_untilはNULL、またはvalid_fromより後とするCHECK制約を設ける。
 - 1ユーザーにつき現在の利用権限は最大1件とする初稿案。
 - valid_untilのNULLは期間による終了なしを意味する。
-  課金方式が未決定の有料権限へ、安易にNULLを設定しない。
+  #59で一回払い・期間による終了なしに決定したため、有料権限はNULLで付与する。
+- 決済の確認（API設計6.8.8）で、支払い済みの確認と同じトランザクションで1ユーザー1行をupsertする。
+  権限の行がないユーザーは無料プランとして扱う（API設計6.7・6.8.7）。
 - 利用許可にはusers.status、権限のstatus、有効期間を確認する。
 - 権限が存在しない場合の無料プラン割当ては、API仕様で明示する。
   有料権限を推測して付与しない。
@@ -310,6 +311,7 @@ WHERE id = :memo_id
 | status | VARCHAR(24) | NOT NULL。creating / pending / paid / expired / failed |
 | amount_minor | BIGINT | NOT NULL。通貨の最小単位による購入時の金額 |
 | currency | VARCHAR(3) | NOT NULL。購入時の通貨コード |
+| checkout_request | JSONB | NOT NULL。Stripeへ送るSession作成の内容（#59。下記） |
 | created_at | TIMESTAMPTZ | NOT NULL、DEFAULT CURRENT_TIMESTAMP |
 | verified_at | TIMESTAMPTZ | NULL可。Stripeで状態を確認した日時 |
 | entitlement_applied_at | TIMESTAMPTZ | NULL可。利用権限へ反映した日時 |
@@ -327,19 +329,27 @@ WHERE id = :memo_id
 - Stripe Priceの取得元と管理方法は、買い切り型・サブスク型の決定およびAPI設計と合わせて確定する。
 - 同じユーザーについてstatusがcreatingまたはpendingの未決済行は、
   原則として同時に1件だけ存在できるようにする。
-- PostgreSQLでは、次のような部分UNIQUE索引を設ける案とする。
-  `CREATE UNIQUE INDEX ... ON payments (user_id) WHERE status IN ('creating', 'pending');`
+- PostgreSQLでは、次の部分UNIQUE索引を設ける。
+  `CREATE UNIQUE INDEX uq_payments_user_id_unfinished ON payments (user_id) WHERE status IN ('creating', 'pending');`
 - 決済Session作成時はusersの対象行をロックし、
   statusがactiveであること、既存の利用権限、creating・pendingの決済行を確認する。
 - 有効なpending行が存在する場合は新しいSessionを作成せず、
   既存のStripe Checkout Sessionを再利用する案とする。
-- creating行が存在する場合の待機・再取得・エラー応答はAPI設計で確定する。
+- creating行が存在する場合は、保存した`checkout_request`と同じidempotency_keyでStripeを呼び直す。
+  Sessionを確認できない場合は新しいSessionを作らずに止める（API設計6.8.6で確定。Q-34）。
 - Stripe側でSessionが期限切れの場合はpayments.statusをexpiredへ更新してから、
   新しい決済試行を作成する。
 - Stripe APIへのSession作成では、サーバーが発行したidempotency_keyを
   StripeのIdempotency-Keyとして使用する。
-- 部分UNIQUE索引とユーザー行ロックの両方を採用するかは、
-  実装時のトランザクション境界と合わせて確定する。
+- 部分UNIQUE索引とユーザー行ロックの両方を採用する（#59・F-05）。
+  索引の違反は、既存の行を取り直して同じ扱いにする。
+
+checkout_request（#59）：
+
+- creating行を作るときに1回だけ決めて保存し、同じidempotency_keyで再試行するときもこの内容をそのまま送る。
+  環境の設定値が途中で変わっても、初回と同じ内容でStripeを呼び直せるようにするため。
+- 内容は、Price ID、Sessionの有効期限（行の作成時刻＋35分）、戻り先URL、client_reference_id（内部ユーザーID）、
+  metadataの決済ID。秘密情報・相談内容は含めない。
 
 状態の扱い：
 
@@ -349,6 +359,7 @@ WHERE id = :memo_id
 - expired：Stripe側でSessionの期限切れを確認済み。
 - failed：その決済試行を継続できないことが確定した状態。
 - 通信タイムアウトや確認画面のキャンセルだけでfailedへ変更しない。
+- pendingの行で、保存したSession IDのSessionがStripeに存在しない場合（テストモードのデータ削除など）はfailedとする。
 - カード拒否後も同じSessionで再試行できる場合はpendingのままとする。
 - 返金・継続課金の状態は本表だけでは扱わず、採用範囲に応じて追加設計する。
 
@@ -372,11 +383,12 @@ WHERE id = :memo_id
 
 ### 課金仕様として残る確認事項
 
-- 買い切り型・サブスク型の選択
-- 有料権限の有効期間と無料プランへの戻し方
-- 重複購入、返金、解約時の扱い
-- 決済記録の保持期間と退会時の削除方針
+- ~~買い切り型・サブスク型の選択~~：#59で一回払いに決定
+- ~~有料権限の有効期間と無料プランへの戻し方~~：#59で期間による終了なし（valid_untilはNULL）・解約機能なしに決定
+- 重複購入（有料権限があれば新しいSessionを作らない。#59）、返金（テストモードのため作らない。#59）
+- 決済記録の保持期間と退会時の削除方針（#60で、照合後にusersの前に物理削除する案に合意。実装は#60）
 - Stripe側に残るデータと、アプリ内データの扱いの違い
+- 状態不明で止まったcreating行の照合（Stripe上のSession一覧の検索）は後続のIssueで扱う。それまでは担当がStripeのダッシュボードで片付ける
 
 ## ER図（初稿）
 
@@ -414,9 +426,6 @@ erDiagram
         varchar code UK
         varchar name
         text stripe_price_id UK
-        integer consultation_limit
-        integer memo_limit
-        varchar usage_period
         boolean is_active
         timestamptz created_at
     }
@@ -439,6 +448,7 @@ erDiagram
         varchar status
         bigint amount_minor
         varchar currency
+        jsonb checkout_request
         timestamptz created_at
         timestamptz verified_at
         timestamptz entitlement_applied_at
@@ -479,6 +489,8 @@ NULL可否・CHECK制約・削除動作は、前節のテーブル定義を参�
    2. ロック取得後に、未完了の決済や継続契約を確認する。
       退会を開始できない場合はトランザクションをロールバックし、
       statusを変更せず409を返す。
+      決済では、Stripeを呼んでいる途中のcreating行がある場合に409とする。
+      pending行はdeletingにしてから手順4で照合する（#60で合意）。
    3. 退会を開始できる場合は、statusをdeletingへ変更して確定する。
       以降、通常の保存・決済・利用権限更新を拒否する。
    通常の保存・決済・利用権限更新も同じユーザー行をロックしてから
@@ -486,8 +498,12 @@ NULL可否・CHECK制約・削除動作は、前節のテーブル定義を参�
 3. 本人のapproved_memosを削除する。
    個人性の高いメモを、外部サービスの処理より先に削除する。
    以降の処理が失敗しても、削除したメモを再作成しない。
-4. 未完了の決済や継続契約について、
-   必要なキャンセル・解約・状態照合を採用する課金方式に従って行う。
+4. 未完了の決済をStripeと照合して確定する（F-05の`settle_unfinished_payments(user_id)`。#60で合意）。
+   - pending行：openのSessionは期限切れにしてexpired、expiredはexpired、
+     支払い済みはpaidの記録だけを残す（利用権限は付与しない）
+   - Stripeへの照会はDBロックの外で行い、確認できない場合は未確認のままexpiredにしない
+   - 確認できない場合・creating行が残っている場合・Stripeに接続できない場合は止め、
+     deletingのまま再実行で再開する
 5. 本人のRedis利用回数キーを削除する。
    deletingのユーザーについて、新しいキーを作成しない。
    退会開始前から進行中の処理によるキーの再作成も防ぐ。
@@ -542,7 +558,8 @@ plansは他ユーザーも参照する共通定義なので、退会では削除
 | Issue #7・PR #22 | 暗号化対象、保存禁止対象、鍵管理の確認事項 | 反映済み |
 | 画面設計PR #25 | 保存項目、任意理由、一覧・検索、個別削除・退会の導線 | a73aca3の保存項目・承認と保存同意・一覧／詳細・一時状態を照合して反映。個別削除・退会についても、本人確認・削除確認・失敗を完了扱いにしない方針との整合を確認。復旧方法・決済記録の保持などの未確定事項は残す |
 | API設計PR #27 | 所有者確認、承認・同意、一時状態、保存処理、決済・退会 | 68c0d3cからマージ版2fd82ddまでの追加差分を確認済み。今回の変更範囲について仕様の追加反映は不要 |
-| チーム | プラン条件、決済記録の保持、期限後のメモの扱い | 未決定 |
+| チーム | プラン条件、決済記録の保持、期限後のメモの扱い | 未決定（課金方式・有料権限の期間は#59で決定） |
+| Issue #59（F-05） | plans・user_entitlements・paymentsの実装（マイグレーション`e193a45a308a`）との照合 | 2026-10-12に反映（plansの上限値の列を持たない、checkout_request、部分UNIQUE索引とロックの併用、creatingの扱い、退会時の決済の照合）。主担当もえさんの確認待ち |
 | 講師 | テーブル分割、制約、暗号化、削除・決済の整合性 | 初回回答・指摘内容を反映済み |
 | みほさん | 削除順序、暗号文のひも付け、承認・同意日時、決済金額 | 最終レビューのApprove受領済み。承認後の追加変更は記録のみ（仕様変更なし） |
 | じまさん | メモ保存の二重実行防止 | 最終レビューのApprove受領済み。今回の照合記録の更新はApprove後の変更（仕様変更なし） |
