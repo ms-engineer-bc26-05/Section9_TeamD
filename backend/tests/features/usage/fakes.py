@@ -86,13 +86,20 @@ class FakeLimiter:
 
 
 class FakeUserStatusChecker:
-    def __init__(self, status: UserStatus | None = UserStatus.ACTIVE) -> None:
-        # None ならDB障害を模す
+    def __init__(
+        self,
+        status: UserStatus | None = UserStatus.ACTIVE,
+        error: BaseException | None = None,
+    ) -> None:
+        # status が None ならDB障害を模す。error を指定すると、その例外（中断など）を起こす
         self.status = status
+        self.error = error
         self.calls = 0
 
     async def get_status(self, user_id: UUID) -> UserStatus:
         self.calls += 1
+        if self.error is not None:
+            raise self.error
         if self.status is None:
             raise UserStatusUnavailable
         return self.status

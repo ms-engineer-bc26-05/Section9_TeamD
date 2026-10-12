@@ -24,12 +24,9 @@ from app.features.usage.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-# プランを確認できない場合のステータスは、認証基盤の障害時（テスト設計Q-05）の決定にそろえる
-_UNAVAILABLE = (
-    503,
-    "SERVICE_UNAVAILABLE",
-    "現在ご利用いただけません。時間をおいてお試しください。",
-)
+# プラン・ユーザーの状態・保存件数をDBで確認できない場合。
+# I-01（PR #85）の共通のエラー変換と同じcode・文言にそろえる
+_DB_UNAVAILABLE = (503, "DB_UNAVAILABLE", "データベースに接続できませんでした。")
 
 _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
     NotAuthenticated: (401, "UNAUTHORIZED", "ログインしてください。"),
@@ -40,9 +37,9 @@ _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
     ),
     # 退会処理中（#47で決定済みのコード・文言）
     AccountDeleting: (403, "ACCOUNT_DELETING", "退会処理中のため利用できません。"),
-    PlanUnavailable: _UNAVAILABLE,
-    MemoCountUnavailable: _UNAVAILABLE,
-    UserStatusUnavailable: _UNAVAILABLE,
+    PlanUnavailable: _DB_UNAVAILABLE,
+    MemoCountUnavailable: _DB_UNAVAILABLE,
+    UserStatusUnavailable: _DB_UNAVAILABLE,
 }
 
 

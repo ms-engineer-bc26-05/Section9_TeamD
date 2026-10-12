@@ -10,7 +10,7 @@ def test_defaults():
 
     assert settings.limits_for(PlanCode.FREE) == PlanLimits(consultation_limit=3, memo_limit=10)
     assert settings.limits_for(PlanCode.PREMIUM) == PlanLimits(
-        consultation_limit=30, memo_limit=None
+        consultation_limit=30, memo_limit=100
     )
     assert settings.period_seconds == 30 * 24 * 60 * 60
     assert settings.redis_url == ""

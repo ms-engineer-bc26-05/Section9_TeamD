@@ -20,6 +20,7 @@ from app.features.usage.consultation_gate import (
     ConsultationStartGate,
     get_consultation_start_gate,
 )
+from app.features.usage.exceptions import AccountDeleting
 from app.features.usage.limiter import UsageLimiter, usage_key
 from app.features.usage.service import UsageService
 from app.features.usage.settings import PlanCode
@@ -269,6 +270,47 @@ def test_user_status_unavailable_refunds():
     assert h.ai.calls == []
     assert h.limiter.count == 1
     assert h.limiter.delete_calls == 0
+
+
+def test_unexpected_error_in_status_check_refunds():
+    # 状態の確認中に想定外の例外が起きても、加算した1回を残さない（PR #90 レビュー①）
+    h = Harness(FakeLimiter(count=1), users=FakeUserStatusChecker(error=RuntimeError("架空")))
+    client = TestClient(h.app, raise_server_exceptions=False)
+
+    response = client.post(BASE, json=BODY)
+
+    assert response.status_code == 500
+    assert h.ai.calls == []
+    assert h.limiter.count == 1
+
+
+async def test_cancel_during_status_check_refunds():
+    # 状態の確認中に処理が中断（キャンセル）されても、加算した1回を残さない（PR #90 レビュー①）
+    limiter = FakeLimiter(count=1)
+    usage = UsageService(limiter, FakePlanResolver(), FakeMemoCounter(), make_settings())
+    users = FakeUserStatusChecker(error=asyncio.CancelledError())
+    gate = ConsultationStartGate(usage, users)
+
+    with pytest.raises(asyncio.CancelledError):
+        async with gate.consultation_start(uuid4()):
+            pytest.fail("状態の確認に失敗したのに相談開始へ進んだ")
+
+    assert limiter.count == 1
+    assert len(limiter.refund_calls) == 1
+
+
+async def test_refund_is_not_repeated_after_key_deleted():
+    # 退会処理中でキーを丸ごと削除した後は、戻す処理でRedisを重ねて操作しない
+    limiter = FakeLimiter(count=2)
+    usage = UsageService(limiter, FakePlanResolver(), FakeMemoCounter(), make_settings())
+    gate = ConsultationStartGate(usage, FakeUserStatusChecker(UserStatus.DELETING))
+
+    with pytest.raises(AccountDeleting):
+        async with gate.consultation_start(uuid4()):
+            pytest.fail("退会処理中なのに相談開始へ進んだ")
+
+    assert limiter.delete_calls == 1
+    assert limiter.count == 0  # 削除後に、さらに1回減らしていない
 
 
 def test_default_user_status_checker_blocks_start():

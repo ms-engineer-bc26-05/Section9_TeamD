@@ -138,8 +138,8 @@ def test_requires_authentication():
 
 UNAVAILABLE_BODY = {
     "error": {
-        "code": "SERVICE_UNAVAILABLE",
-        "message": "現在ご利用いただけません。時間をおいてお試しください。",
+        "code": "DB_UNAVAILABLE",
+        "message": "データベースに接続できませんでした。",
     }
 }
 
