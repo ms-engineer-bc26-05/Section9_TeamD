@@ -13,7 +13,7 @@ import { getFirebaseAuth } from "@/lib/firebase";
 
 export type ApiErrorKind =
   | "bad_request" // 400
-  | "unauthenticated" // 401・トークン無効(通信失敗は network)
+  | "unauthenticated" // 401・トークン無効(再ログインが必要なFirebaseエラー)
   | "forbidden" // 403(codeで分岐する。一律に退会扱いしない)
   | "not_found" // 404(他人のリソースも含む)
   | "conflict" // 409(相談状態と操作の矛盾)
@@ -21,7 +21,7 @@ export type ApiErrorKind =
   | "ai_failed" // 502(AI呼び出し失敗・AI出力不正)
   | "network" // 通信失敗
   | "aborted" // AbortSignal による意図的なキャンセル
-  | "server"; // 500・503・その他
+  | "server"; // 500・503・その他(トークン取得の一時的な制限・想定外のエラーも含む)
 
 export type ApiErrorDetail = { field: string; reason: string };
 
@@ -113,14 +113,20 @@ async function readErrorBody(
   }
 }
 
-// Firebaseの「通信失敗」だけを network として扱う(それ以外は認証無効)
-function isFirebaseNetworkError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { code?: unknown }).code === "auth/network-request-failed"
-  );
+function firebaseErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
 }
+
+// 再ログインが必要と分かっているコードだけを「認証無効」として扱う
+const REAUTH_REQUIRED_CODES = new Set([
+  "auth/invalid-user-token",
+  "auth/user-token-expired",
+  "auth/user-disabled",
+  "auth/user-not-found",
+  "auth/requires-recent-login",
+]);
 
 async function getToken(forceRefresh: boolean): Promise<string> {
   const user = getFirebaseAuth().currentUser;
@@ -128,10 +134,13 @@ async function getToken(forceRefresh: boolean): Promise<string> {
   try {
     return await user.getIdToken(forceRefresh);
   } catch (error) {
-    // 通信失敗はログアウトにつなげず、再試行できるようにする
-    throw new ApiError(
-      isFirebaseNetworkError(error) ? "network" : "unauthenticated",
-    );
+    const code = firebaseErrorCode(error);
+    // 通信失敗・一時的な制限・想定外のエラーは、ログアウトにつなげず再試行できるようにする
+    if (code === "auth/network-request-failed") throw new ApiError("network");
+    if (code !== undefined && REAUTH_REQUIRED_CODES.has(code)) {
+      throw new ApiError("unauthenticated");
+    }
+    throw new ApiError("server");
   }
 }
 

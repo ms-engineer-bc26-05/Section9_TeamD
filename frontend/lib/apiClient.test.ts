@@ -137,4 +137,33 @@ describe("apiClient", () => {
 
     expect((error as ApiError).kind).toBe("unauthenticated");
   });
+
+  it("トークン取得が too-many-requests なら、unauthenticated ではなく server を投げる", async () => {
+    getIdToken.mockRejectedValue({ code: "auth/too-many-requests" });
+
+    const error = await catchError(apiClient.get("/users/me"));
+
+    expect((error as ApiError).kind).toBe("server");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("トークン取得が想定外のエラーでも、unauthenticated にはしない", async () => {
+    getIdToken.mockRejectedValue(new Error("unexpected"));
+
+    const error = await catchError(apiClient.get("/users/me"));
+
+    expect((error as ApiError).kind).toBe("server");
+  });
+
+  it("401後の強制更新が too-many-requests でも、server を投げる", async () => {
+    getIdToken
+      .mockResolvedValueOnce("dummy-token")
+      .mockRejectedValueOnce({ code: "auth/too-many-requests" });
+    fetchMock.mockResolvedValueOnce(json({}, 401));
+
+    const error = await catchError(apiClient.get("/users/me"));
+
+    expect((error as ApiError).kind).toBe("server");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
