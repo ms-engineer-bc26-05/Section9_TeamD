@@ -40,3 +40,25 @@
   cursor: wait;
   opacity: 0.65;
 }
+
+.secondaryActionButton {
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 8px;
+  color: #6f352d;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.secondaryActionButton:hover {
+  background: rgb(255 250 247 / 65%);
+}
+
+.secondaryActionButton:focus-visible {
+  outline: 2px solid #6f352d;
+  outline-offset: 2px;
+}

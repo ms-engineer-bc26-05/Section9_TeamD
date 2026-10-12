@@ -264,6 +264,12 @@ export function ConsultationFlow({
       onAction={
         state.recoveryRequired ? actions.onCheckCurrentState : undefined
       }
+      secondaryActionLabel={
+        state.recoveryRequired ? "ホームへ戻る" : undefined
+      }
+      onSecondaryAction={
+        state.recoveryRequired ? actions.onReturnHomeAfterStateLoss : undefined
+      }
     >
       <ConsultationScreenRouter
         state={state}

@@ -7,6 +7,8 @@ interface ConsultationErrorNoticeProps {
   actionLabel?: string;
   actionDisabled?: boolean;
   onAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
   children: ReactNode;
 }
 
@@ -15,6 +17,8 @@ export function ConsultationErrorNotice({
   actionLabel,
   actionDisabled = false,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
   children,
 }: ConsultationErrorNoticeProps) {
   return (
@@ -31,6 +35,15 @@ export function ConsultationErrorNotice({
                 onClick={onAction}
               >
                 {actionDisabled ? "状態を確認しています…" : actionLabel}
+              </button>
+            ) : null}
+            {secondaryActionLabel && onSecondaryAction ? (
+              <button
+                className={styles.secondaryActionButton}
+                type="button"
+                onClick={onSecondaryAction}
+              >
+                {secondaryActionLabel}
               </button>
             ) : null}
           </div>
