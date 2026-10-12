@@ -16,7 +16,7 @@ creating の扱い（Q-34・#59の結論）：
   - 最初のリクエストがまだ処理中なら、Stripeが409を返すので CheckoutInProgress にする
   - 内容の不一致・有効期限の拒否などでSessionを確認できない場合は、経過時間だけで expired・failed にせず、
     新しいSessionも作らずに止める（CheckoutNeedsReview）。expires_at も書き換えない。
-    止まった行は担当がStripeのダッシュボードで片付ける。Session一覧での照合は後続のIssueで扱う
+    止まった行は担当がStripeのダッシュボードで片付ける。Session一覧での照合は後続のIssue（#91）で扱う
   - 通信の失敗・タイムアウトでは failed にしない（creating のまま残し、次のリクエストで同じキーで再試行する）
 
 秘密鍵・Session ID・URLをログ・例外のメッセージに含めない。

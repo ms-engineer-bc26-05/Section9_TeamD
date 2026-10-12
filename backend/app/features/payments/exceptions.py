@@ -23,7 +23,7 @@ class CheckoutNeedsReview(Exception):
 
     APIの応答は CheckoutInProgress と同じ409・CHECKOUT_IN_PROGRESS（仮）にする。
     止まった行は、F-05の担当がStripeのダッシュボードで状態を確かめて片付ける（#59）。
-    Session一覧での照合は後続のIssueで扱う。
+    Session一覧での照合は後続のIssue（#91）で扱う。
     """
 
 
@@ -53,7 +53,7 @@ class PaymentNotFound(Exception):
 class PaymentSettlementBlocked(Exception):
     """退会時の照合で、未完了の決済を確定できなかった（#60の退会処理を進めない）。
 
-    creating の行が残っている（状態不明。#59で照合を後続のIssueへ分けたため、担当がダッシュボードで片付ける）、
+    creating の行が残っている（状態不明。#59で照合を後続のIssue（#91）へ分けたため、担当がダッシュボードで片付ける）、
     open のSessionを期限切れにできず状態も確認できない、支払い済みかどうかが確定しない、のいずれか。
     退会は deleting のまま止め、原因を取り除いてから再実行する。APIのステータスは#60で決める。
     """
