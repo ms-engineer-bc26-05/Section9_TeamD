@@ -14,6 +14,8 @@ FakeStripe：
 - create_gate を設定すると、作成の途中でそのイベントを待つ（同時リクエストの再現用）
 - create_errors に例外を入れると、次の作成でその例外を送出する（Stripeには作成されない）
 - retrieve_errors に例外を入れると、次のSession取得でその例外を送出する
+- expire_checkout_session は open のSessionだけを期限切れにする（open でなければ StripeRequestFailed）
+- expire_errors に例外を入れると、次の期限切れの操作でその例外を送出する（Stripeでは期限切れにならない）
 - pay で、Checkoutで支払いが完了した状態にする
 - lose_next_response を True にすると、次の作成ではStripe側に作成したうえで StripeUnavailable を送出する
   （作成されたのに、タイムアウトで応答を受け取れなかった場合の再現）
@@ -40,6 +42,7 @@ from app.integrations.stripe.client import (
     StripeIdempotencyInProgress,
     StripeIdempotencyMismatch,
     StripePrice,
+    StripeRequestFailed,
     StripeSessionNotFound,
     StripeUnavailable,
 )
@@ -211,6 +214,8 @@ class FakeStripe:
         self.retrieve_calls: list[str] = []
         self.retrieve_errors: list[Exception] = []
         self.create_errors: list[Exception] = []
+        self.expire_calls: list[str] = []
+        self.expire_errors: list[Exception] = []
         self.create_gate: asyncio.Event | None = None
         self.lose_next_response = False
         # idempotency key → (送った内容, 作成したSession ID。作成中は None)
@@ -261,6 +266,18 @@ class FakeStripe:
             raise self.retrieve_errors.pop(0)
         if session_id not in self.sessions:
             raise StripeSessionNotFound("架空")
+        return self.sessions[session_id]
+
+    async def expire_checkout_session(self, session_id: str) -> CheckoutSession:
+        self.expire_calls.append(session_id)
+        await asyncio.sleep(0)
+        if self.expire_errors:
+            raise self.expire_errors.pop(0)
+        if session_id not in self.sessions:
+            raise StripeSessionNotFound("架空")
+        if self.sessions[session_id].status != "open":
+            raise StripeRequestFailed("架空")
+        self.set_session_status(session_id, "expired")
         return self.sessions[session_id]
 
     @property

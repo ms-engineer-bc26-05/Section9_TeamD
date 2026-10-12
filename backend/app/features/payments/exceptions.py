@@ -50,5 +50,14 @@ class PaymentNotFound(Exception):
     """確認する決済がない、または本人の決済ではない（APIでは404）"""
 
 
+class PaymentSettlementBlocked(Exception):
+    """退会時の照合で、未完了の決済を確定できなかった（#60の退会処理を進めない）。
+
+    creating の行が残っている（状態不明。#59で照合を後続のIssueへ分けたため、担当がダッシュボードで片付ける）、
+    open のSessionを期限切れにできず状態も確認できない、支払い済みかどうかが確定しない、のいずれか。
+    退会は deleting のまま止め、原因を取り除いてから再実行する。APIのステータスは#60で決める。
+    """
+
+
 class PaymentVerificationFailed(Exception):
     """Stripeの金額・通貨が、購入時に保存した値と一致しない（APIでは500）。paid にしない"""

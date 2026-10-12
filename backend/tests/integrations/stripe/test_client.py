@@ -250,6 +250,46 @@ async def test_retrieve_timeout_is_unavailable():
         await make_client(handler).retrieve_checkout_session(SESSION_ID)
 
 
+# --- Sessionを期限切れにする（退会時の照合。#60） -------------------------------------
+
+
+async def test_expire_posts_to_expire_endpoint():
+    sent = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent["method"] = request.method
+        sent["url"] = str(request.url)
+        return httpx.Response(200, json=session_body(status="expired", url=None))
+
+    session = await make_client(handler).expire_checkout_session(SESSION_ID)
+
+    assert sent["method"] == "POST"
+    assert sent["url"] == f"https://api.stripe.com/v1/checkout/sessions/{SESSION_ID}/expire"
+    assert session.status == "expired"
+    assert session.url is None
+
+
+async def test_expire_not_open_session_is_request_failed():
+    """完了済み・期限切れのSessionは期限切れにできない。呼び出し側が照会し直す"""
+    response = error_response(400, "invalid_request_error")
+    with pytest.raises(StripeRequestFailed):
+        await make_client(lambda request: response).expire_checkout_session(SESSION_ID)
+
+
+async def test_expire_missing_session_is_not_found():
+    response = error_response(404, "invalid_request_error", "resource_missing")
+    with pytest.raises(StripeSessionNotFound):
+        await make_client(lambda request: response).expire_checkout_session(SESSION_ID)
+
+
+async def test_expire_timeout_is_unavailable():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("架空のタイムアウト")
+
+    with pytest.raises(StripeUnavailable):
+        await make_client(handler).expire_checkout_session(SESSION_ID)
+
+
 # --- テストモードの鍵の確認 -------------------------------------------------------
 
 

@@ -161,6 +161,20 @@ class StripeCheckoutClient:
             raise _convert_error(exc, "retrieve") from None
         return _to_checkout_session(session)
 
+    async def expire_checkout_session(self, session_id: str) -> CheckoutSession:
+        """open のCheckout Sessionを期限切れにする（退会時の照合で使う。#60）
+
+        open でないSession（完了済み・期限切れ）では失敗するため、呼び出し側は失敗したら
+        Sessionを取得し直して状態を確かめる。
+        """
+        self._check_test_key()
+        try:
+            session = await self._client.v1.checkout.sessions.expire_async(session_id)
+        except stripe.StripeError as exc:
+            raise _convert_error(exc, "expire") from None
+        logger.info("Checkout Sessionを期限切れにしました")
+        return _to_checkout_session(session)
+
     async def retrieve_price(self, price_id: str) -> StripePrice:
         """Priceを取得する（金額・通貨はStripe Priceを正とする。#59）"""
         self._check_test_key()
@@ -203,7 +217,7 @@ def _convert_error(exc: stripe.StripeError, operation: str) -> StripeClientError
     ):
         return StripeExpiresAtRejected("Sessionの有効期限が条件を満たしません")
     if (
-        operation == "retrieve"
+        operation in ("retrieve", "expire")
         and isinstance(exc, stripe.InvalidRequestError)
         and exc.code == "resource_missing"
     ):
