@@ -18,7 +18,29 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.core.exceptions import (
+    AccountDeletingError,
+    AuthenticationRequiredError,
+    AuthServiceUnavailableError,
+    DatabaseUnavailableError,
+)
+
 logger = logging.getLogger(__name__)
+
+_SERVICE_ERRORS = {
+    AuthenticationRequiredError: (401, "UNAUTHORIZED", "ログインしてください。"),
+    AccountDeletingError: (
+        403, "ACCOUNT_DELETING", "退会処理中のため利用できません。"
+    ),
+    AuthServiceUnavailableError: (
+        503,
+        "AUTH_UNAVAILABLE",
+        "認証サービスを利用できません。時間をおいて再度お試しください。",
+    ),
+    DatabaseUnavailableError: (
+        503, "DB_UNAVAILABLE", "データベースに接続できませんでした。"
+    ),
+}
 
 # 想定外の例外（500）のときに返す固定の内容
 INTERNAL_ERROR_STATUS = 500
@@ -97,6 +119,20 @@ async def validation_exception_handler(
     )
 
 
+async def service_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    for exception_type, (status, code, message) in _SERVICE_ERRORS.items():
+        if isinstance(exc, exception_type):
+            # 例外メッセージ・トレースバックはレスポンスにもログにも含めない。
+            if status == 503:
+                logger.warning("%s %s", code, exception_type.__name__)
+            return JSONResponse(
+                status_code=status,
+                content={"error": {"code": code, "message": message}},
+                headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
+            )
+    raise exc
+
+
 def _innermost(exc: BaseException) -> BaseException:
     """非同期処理でまとめられた例外（ExceptionGroup）から、元の例外を取り出す"""
     while isinstance(exc, BaseExceptionGroup) and len(exc.exceptions) == 1:
@@ -171,4 +207,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     外側になるため、500の応答にもCORSのヘッダーが付き、ブラウザ（画面）が本文を読める。
     """
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    for exception_type in _SERVICE_ERRORS:
+        app.add_exception_handler(exception_type, service_exception_handler)
     app.add_middleware(InternalErrorMiddleware)
