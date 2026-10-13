@@ -5,6 +5,7 @@
 - 相談機能の例外は、http_errors.ConsultationRoute で設計書3.5の形式のエラーへ変換する
   （共通の errors.py・main.py を変更しないため、Routerごとの APIRoute で変換する）
 - エラーの本文・ログに、相談内容やAIの出力を含めない
+- 相談開始では利用回数を判定・加算する（Issue #57。usage.consultation_gate）
 """
 
 from typing import Any
@@ -36,6 +37,10 @@ from app.features.consultations.service import (
 )
 from app.features.consultations.state import ConsultationState
 from app.features.consultations.store import ConsultationStore, get_consultation_store
+from app.features.usage.consultation_gate import (
+    ConsultationStartGate,
+    get_consultation_start_gate,
+)
 from app.integrations.openrouter.client import OpenRouterClient, get_ai_client
 
 
@@ -133,9 +138,17 @@ async def start_consultation(
     body: StartConsultationRequest,
     user_id: UUID = Depends(get_current_user_id),
     service: ConsultationService = Depends(get_consultation_service),
+    usage_gate: ConsultationStartGate = Depends(get_consultation_start_gate),
 ) -> ConsultationView:
-    """相談を開始し、最初の質問を返す（6.2.1）"""
-    state = await service.start(user_id, body.theme, body.detail)
+    """相談を開始し、最初の質問を返す（6.2.1）。
+
+    利用回数の上限超過は403（USAGE_LIMIT_EXCEEDED）。開始に失敗した場合と、
+    開始時に安全案内へ切り替わった場合は、加算した1回を戻す（Issue #57 質問③）
+    """
+    async with usage_gate.consultation_start(user_id) as ticket:
+        state = await service.start(user_id, body.theme, body.detail)
+        if state.status is ConsultationStatus.SAFETY_GUIDANCE:
+            await ticket.refund()
     if state.status is ConsultationStatus.EVENT_DIALOGUE:
         # 設計書6.2.1のレスポンス例に合わせ、開始時は最初の質問だけを返す
         return ConsultationView(

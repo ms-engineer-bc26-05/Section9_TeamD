@@ -22,6 +22,7 @@ from app.features.consultations.exceptions import (
     NotAuthenticated,
     ResultNotReady,
 )
+from app.features.usage.http_errors import usage_error_response
 from app.integrations.openrouter.client import AIClientError
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,8 @@ def consultation_error_response(exc: Exception) -> JSONResponse | None:
                 status_code=status_code,
                 content={"error": {"code": code, "message": message}},
             )
-    return None
+    # 相談開始の利用回数のエラー（403 USAGE_LIMIT_EXCEEDED など。Issue #57）
+    return usage_error_response(exc)
 
 
 class ConsultationRoute(APIRoute):
