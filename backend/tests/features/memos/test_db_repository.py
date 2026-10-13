@@ -21,6 +21,7 @@ from app.core.database import make_database_url
 from app.features.consultations.public import ConsultationNotFound
 from app.features.memos.crypto import create_fernet
 from app.features.memos.db_repository import SqlAlchemyMemoRepository
+from app.features.memos.exceptions import MemoLimitExceeded
 from app.features.memos.models import ApprovedMemo
 from app.features.memos.repository import DuplicateMemo, NewMemo, UserNotActive, UserNotFound
 from app.features.memos.service import MemoSaveService
@@ -171,3 +172,53 @@ async def test_concurrent_saves_create_one_row_with_ciphertext_only(repo, user_i
     stored = rows[0].encrypted_payload
     for plain in ("架空の出来事の要約", "架空の本音", "架空の理由"):
         assert plain.encode() not in stored
+
+
+async def test_count_by_user_counts_only_own_memos(repo, user_id, session_factory):
+    other_user_id = uuid4()
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            insert(User).values(id=other_user_id, firebase_uid=f"test-{other_user_id}")
+        )
+    try:
+        async with repo.transaction() as tx:
+            await tx.insert(make_memo(user_id, uuid4()))
+            await tx.insert(make_memo(user_id, uuid4()))
+            await tx.insert(make_memo(other_user_id, uuid4()))
+            assert await tx.count_by_user(user_id) == 2
+
+        assert await repo.count_by_user(user_id) == 2
+        assert await repo.count_by_user(other_user_id) == 1
+        assert await repo.count_by_user(uuid4()) == 0
+    finally:
+        async with session_factory() as session, session.begin():
+            await session.execute(delete(ApprovedMemo).where(ApprovedMemo.user_id == other_user_id))
+            await session.execute(delete(User).where(User.id == other_user_id))
+
+
+async def test_concurrent_saves_of_different_consultations_do_not_exceed_limit(
+    repo, user_id, session_factory
+):
+    # 実DBのユーザー行のロックで、同時に保存しても上限（1件）を超えない
+    async def get_approved(uid: UUID, cid: UUID) -> _Approved:
+        return _Approved(consultation_id=cid)
+
+    async def discard(uid: UUID, cid: UUID) -> None:
+        return None
+
+    async def get_limit(uid: UUID) -> int | None:
+        return 1
+
+    cipher = create_fernet(Fernet.generate_key().decode("ascii"))
+    service = MemoSaveService(
+        repo, cipher, get_approved=get_approved, discard=discard, get_limit=get_limit
+    )
+
+    results = await asyncio.gather(
+        service.save(user_id, uuid4(), None),
+        service.save(user_id, uuid4(), None),
+        return_exceptions=True,
+    )
+
+    assert sum(isinstance(r, MemoLimitExceeded) for r in results) == 1
+    assert await repo.count_by_user(user_id) == 1

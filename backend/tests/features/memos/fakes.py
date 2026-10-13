@@ -39,6 +39,10 @@ class InMemoryMemoRepository:
         await asyncio.sleep(0)
         return self.rows.get((user_id, consultation_id))
 
+    async def count_by_user(self, user_id: UUID) -> int:
+        await asyncio.sleep(0)
+        return sum(1 for key in self.rows if key[0] == user_id)
+
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator["_InMemoryTransaction"]:
         tx = _InMemoryTransaction(self)
@@ -80,6 +84,11 @@ class _InMemoryTransaction:
         await asyncio.sleep(0)
         key = (user_id, consultation_id)
         return self.pending.get(key) or self._repo.rows.get(key)
+
+    async def count_by_user(self, user_id: UUID) -> int:
+        await asyncio.sleep(0)
+        keys = set(self._repo.rows) | set(self.pending)
+        return sum(1 for key in keys if key[0] == user_id)
 
     async def insert(self, memo: NewMemo) -> StoredMemo:
         await asyncio.sleep(0)

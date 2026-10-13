@@ -19,6 +19,7 @@ from app.features.consultations.public import (
 from app.features.consultations.schemas import ConsultationStatus, HandlingType
 from app.features.consultations.store import ConsultationStore
 from app.features.memos.crypto import MemoEncryptionError, create_fernet, decrypt_payload
+from app.features.memos.exceptions import MemoLimitExceeded
 from app.features.memos.repository import (
     DuplicateMemo,
     StoredMemo,
@@ -26,6 +27,7 @@ from app.features.memos.repository import (
     UserNotFound,
 )
 from app.features.memos.service import MemoSaveService
+from app.features.usage.exceptions import PlanUnavailable
 
 from tests.features.consultations.factories import make_save_confirmation_state
 from tests.features.memos.fakes import InMemoryMemoRepository, _InMemoryTransaction
@@ -50,12 +52,16 @@ def cipher():
     return create_fernet(Fernet.generate_key().decode("ascii"))
 
 
-def make_service(repo, cipher, store):
+def make_service(repo, cipher, store, limit=10):
+    async def get_limit(user_id: UUID) -> int | None:
+        return limit
+
     return MemoSaveService(
         repo,
         cipher,
         get_approved=partial(get_approved_result, store=store),
         discard=partial(discard_consultation, store=store),
+        get_limit=get_limit,
     )
 
 
@@ -395,3 +401,136 @@ async def test_rejects_memo_encrypted_with_another_key(repo, cipher, store):
         await make_service(repo, other_cipher, store).save(
             USER_ID, state.consultation_id, None
         )
+
+
+# ---------------------------------------------------------------------------
+# 保存件数の上限（#94。テスト設計 SV-05・SV-06）
+# ---------------------------------------------------------------------------
+
+
+async def save_new(service, store, user_id=USER_ID):
+    state = make_save_confirmation_state(store, user_id)
+    return await service.save(user_id, state.consultation_id, None), state
+
+
+async def test_can_save_up_to_limit_then_rejects(repo, cipher, store):
+    service = make_service(repo, cipher, store, limit=2)
+    await save_new(service, store)
+    (_, created), _ = await save_new(service, store)
+    assert created is True  # 上限ちょうどまでは保存できる
+
+    state = make_save_confirmation_state(store, USER_ID)
+    with pytest.raises(MemoLimitExceeded):
+        await service.save(USER_ID, state.consultation_id, "架空の理由")
+
+    # INSERTせず、一時状態も残す（保存せず終了を選べる）
+    assert len(repo.rows) == 2
+    assert store.exists(USER_ID, state.consultation_id)
+
+
+async def test_retry_of_saved_memo_is_allowed_at_limit(repo, cipher, store):
+    service = make_service(repo, cipher, store, limit=1)
+    (first, _), state = await save_new(service, store)
+
+    # 上限に達していても、保存済みの同じ相談への再試行は既存のメモを返す
+    second, created = await service.save(USER_ID, state.consultation_id, None)
+
+    assert created is False
+    assert second == first
+
+
+async def test_retry_found_after_lock_is_allowed_at_limit(repo, cipher, store):
+    # ロック後の再検索で保存済みと分かった場合も、上限の判定より先に既存のメモを返す
+    state = make_save_confirmation_state(store, USER_ID)
+    service = make_service(repo, cipher, store, limit=1)
+    other_request = make_service(repo, cipher, store, limit=1)
+
+    async def get_approved_then_other_saves(user_id, consultation_id):
+        approved = await get_approved_result(user_id, consultation_id, store=store)
+        await other_request.save(user_id, consultation_id, None)
+        return approved
+
+    service._get_approved = get_approved_then_other_saves
+
+    memo, created = await service.save(USER_ID, state.consultation_id, None)
+
+    assert created is False
+    assert memo.memo_id == repo.rows[(USER_ID, state.consultation_id)].id
+    assert len(repo.rows) == 1
+
+
+async def test_unlimited_plan_is_not_limited(repo, cipher, store):
+    service = make_service(repo, cipher, store, limit=None)
+    for _ in range(3):
+        await save_new(service, store)
+
+    assert len(repo.rows) == 3
+
+
+async def test_zero_limit_rejects_first_save(repo, cipher, store):
+    service = make_service(repo, cipher, store, limit=0)
+    state = make_save_confirmation_state(store, USER_ID)
+
+    with pytest.raises(MemoLimitExceeded):
+        await service.save(USER_ID, state.consultation_id, None)
+    assert repo.rows == {}
+
+
+async def test_other_users_memos_are_not_counted(repo, cipher, store):
+    service = make_service(repo, cipher, store, limit=1)
+    await save_new(service, store, user_id=OTHER_USER_ID)
+
+    (_, created), _ = await save_new(service, store)
+
+    assert created is True
+
+
+async def test_concurrent_saves_do_not_exceed_limit(repo, cipher):
+    # 別々の相談を同時に保存しても、ユーザー行のロック後に数えるため上限を超えない。
+    # 一時状態は1ユーザー1件までのため、相談ごとに別のストアへ置く
+    stores = {}
+    for _ in range(2):
+        other_store = ConsultationStore()
+        state = make_save_confirmation_state(other_store, USER_ID)
+        stores[state.consultation_id] = other_store
+
+    async def get_approved(user_id, consultation_id):
+        return await get_approved_result(user_id, consultation_id, store=stores[consultation_id])
+
+    async def discard(user_id, consultation_id):
+        await discard_consultation(user_id, consultation_id, store=stores[consultation_id])
+
+    async def get_limit(user_id):
+        return 1
+
+    service = MemoSaveService(
+        repo, cipher, get_approved=get_approved, discard=discard, get_limit=get_limit
+    )
+
+    results = await asyncio.gather(
+        *(service.save(USER_ID, consultation_id, None) for consultation_id in stores),
+        return_exceptions=True,
+    )
+
+    assert sum(isinstance(r, MemoLimitExceeded) for r in results) == 1
+    assert len(repo.rows) == 1
+
+
+async def test_plan_unavailable_does_not_save(repo, cipher, store):
+    async def get_limit(user_id: UUID) -> int | None:
+        raise PlanUnavailable
+
+    service = MemoSaveService(
+        repo,
+        cipher,
+        get_approved=partial(get_approved_result, store=store),
+        discard=partial(discard_consultation, store=store),
+        get_limit=get_limit,
+    )
+    state = make_save_confirmation_state(store, USER_ID)
+
+    # 無料・無制限とみなして保存しない
+    with pytest.raises(PlanUnavailable):
+        await service.save(USER_ID, state.consultation_id, None)
+    assert repo.rows == {}
+    assert store.exists(USER_ID, state.consultation_id)

@@ -19,6 +19,7 @@ from app.features.memos.api_schemas import SavedMemoView, SaveMemoRequest
 from app.features.memos.crypto import create_fernet
 from app.features.memos.db_repository import SqlAlchemyMemoRepository
 from app.features.memos.http_errors import MemoRoute
+from app.features.memos.limits import GetMemoLimit, get_memo_limit
 from app.features.memos.repository import MemoRepository
 from app.features.memos.service import MemoSaveService
 
@@ -50,11 +51,17 @@ def get_memo_cipher() -> Fernet:
     return create_fernet(os.environ.get("MEMO_ENCRYPTION_KEY"))
 
 
+def get_memo_limit_getter() -> GetMemoLimit:
+    """保存件数の上限値の取得。テストでは dependency_overrides で固定値を返す関数へ差し替える"""
+    return get_memo_limit
+
+
 def get_memo_save_service(
     repository: MemoRepository = Depends(get_memo_repository),
     cipher: Fernet = Depends(get_memo_cipher),
+    get_limit: GetMemoLimit = Depends(get_memo_limit_getter),
 ) -> MemoSaveService:
-    return MemoSaveService(repository, cipher)
+    return MemoSaveService(repository, cipher, get_limit=get_limit)
 
 
 router = APIRouter(

@@ -27,8 +27,9 @@ from app.core.exceptions import (
 )
 from app.features.consultations.public import ConsultationRoute
 from app.features.memos.crypto import MemoEncryptionError
-from app.features.memos.exceptions import MemoDatabaseError
+from app.features.memos.exceptions import MemoDatabaseError, MemoLimitExceeded
 from app.features.memos.repository import UserNotActive, UserNotFound
+from app.features.usage.exceptions import PlanUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ _COMMON_ERRORS = (
 )
 
 _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
+    # 保存件数の上限（#94）。messageは相談フロント（PR #83）の表示と同じ内容にする
+    MemoLimitExceeded: (403, "MEMO_LIMIT_EXCEEDED", "保存できる整理メモの上限に達しました。"),
     # 鍵の未設定・復号失敗・照合失敗。原因を区別して返さない
     MemoEncryptionError: _SAVE_FAILED,
     MemoDatabaseError: _SAVE_FAILED,
@@ -88,6 +91,9 @@ class MemoRoute(ConsultationRoute):
                 raise AuthenticationRequiredError from None
             except UserNotActive:
                 raise AccountDeletingError from None
+            except PlanUnavailable:
+                # プランを確認できない（DB障害など）。無料・無制限とみなさず、共通の503にする
+                raise DatabaseUnavailableError("Plan unavailable") from None
             except Exception as exc:
                 return memo_error_response(exc)
 
