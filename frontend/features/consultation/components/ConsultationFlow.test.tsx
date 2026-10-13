@@ -73,4 +73,99 @@ describe("ConsultationFlow", () => {
 
     expect(actions.onReturnHomeAfterStateLoss).toHaveBeenCalledOnce();
   });
+
+  it("保存APIの404では内容を表示せず状態消失画面へ切り替える", async () => {
+    const user = userEvent.setup();
+    const actions = createActions();
+
+    render(
+      <ConsultationFlow
+        state={{
+          ...initialConsultationState,
+          consultationId: "c1",
+          status: "save_confirmation",
+          handling: "hold",
+        }}
+        draft={{
+          selectedEmotion: null,
+          guidedHistory: [],
+          guidedAnswer: "",
+          saveReason: "架空の理由",
+          isReselectingHandling: false,
+        }}
+        limits={{
+          startDetail: 500,
+          eventAnswer: 500,
+          eventSummaryField: 500,
+          emotionDetail: 500,
+          guidedAnswer: 500,
+          resultField: 500,
+          saveReason: 500,
+        }}
+        actions={actions}
+        saveState={{
+          isSubmitting: false,
+          errorCode: "CONSULTATION_NOT_FOUND",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "相談を続けるための情報を確認できませんでした",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("架空の理由")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "ホームへ戻る" }));
+    expect(actions.onReturnHomeAfterStateLoss).toHaveBeenCalledOnce();
+  });
+
+  it("保存に失敗しても入力した理由を保持し手動で再試行できる", () => {
+    const actions = createActions();
+
+    render(
+      <ConsultationFlow
+        state={{
+          ...initialConsultationState,
+          consultationId: "c1",
+          status: "save_confirmation",
+          handling: "hold",
+        }}
+        draft={{
+          selectedEmotion: null,
+          guidedHistory: [],
+          guidedAnswer: "",
+          saveReason: "あとで落ち着いて考えたい",
+          isReselectingHandling: false,
+        }}
+        limits={{
+          startDetail: 500,
+          eventAnswer: 500,
+          eventSummaryField: 500,
+          emotionDetail: 500,
+          guidedAnswer: 500,
+          resultField: 500,
+          saveReason: 500,
+        }}
+        actions={actions}
+        saveState={{
+          isSubmitting: false,
+          errorCode: "NETWORK_ERROR",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("textbox")).toHaveValue(
+      "あとで落ち着いて考えたい",
+    );
+    expect(
+      screen.getByText(
+        "通信できませんでした。接続を確認して、もう一度お試しください。",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "保存する" }),
+    ).toBeEnabled();
+  });
 });

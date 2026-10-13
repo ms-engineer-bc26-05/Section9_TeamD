@@ -109,6 +109,10 @@ export function ConsultationFlow({
       : state.recoveryRequired
         ? "処理状況を確認できませんでした。元の操作を再送せず、現在の状態を確認してください。"
         : errorMessage;
+  const routingState =
+    saveState.errorCode === "CONSULTATION_NOT_FOUND"
+      ? { ...state, errorCode: saveState.errorCode }
+      : state;
   const unavailableScreen = (
     <ConsultationUnavailableStep
       onReturnHome={actions.onReturnHomeAfterStateLoss}
@@ -272,7 +276,7 @@ export function ConsultationFlow({
       }
     >
       <ConsultationScreenRouter
-        state={state}
+        state={routingState}
         screens={screens}
       />
     </ConsultationErrorNotice>
