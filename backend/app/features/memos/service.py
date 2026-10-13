@@ -100,7 +100,7 @@ class MemoSaveService:
                 await tx.lock_user(user_id)
                 stored = await tx.find_by_consultation(user_id, consultation_id)
                 if stored is None:
-                    # 保存件数の上限（403）はここで判定する。上限値が未定のため未実装
+                    # 保存件数の上限（403）はここで判定する。#94で実装する（上限値はPR #90の設定）
                     stored = await tx.insert(new_memo)
                     created = True
         except DuplicateMemo:

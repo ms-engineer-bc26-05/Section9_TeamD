@@ -201,6 +201,9 @@ def test_user_changed_after_auth_is_rejected(client, state, repo, store, status,
 
     assert response.status_code == status_code
     assert response.json() == {"error": error}
+    if status_code == 401:
+        # 共通のエラーハンドラの401と同じく、WWW-Authenticate ヘッダーを付ける
+        assert response.headers["WWW-Authenticate"] == "Bearer"
     assert repo.rows == {}
     assert store.exists(USER_ID, state.consultation_id)
 
