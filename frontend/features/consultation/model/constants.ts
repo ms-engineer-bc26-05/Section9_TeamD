@@ -75,7 +75,7 @@ export const GUIDED_TOPIC_LABELS: Record<GuidedTopic, string> = {
   wish: "望み",
 };
 
-// 2026年10月6日に、各項目のsourceUrlに記載した公式ページで確認。
+// 2026年10月13日に、各項目のsourceUrlに記載した公式ページで確認。
 // 窓口情報は変わる可能性があるため、STAGE公開前に再確認する。
 export const SAFETY_SUPPORT_CONTACTS = [
   {
@@ -107,4 +107,4 @@ export const SAFETY_SUPPORT_CONTACTS = [
   },
 ] as const satisfies readonly SafetySupportContact[];
 
-export const SAFETY_CONTACTS_VERIFIED_ON = "2026年10月6日";
+export const SAFETY_CONTACTS_VERIFIED_ON = "2026年10月13日";
