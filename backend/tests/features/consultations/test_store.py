@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.features.consultations.public import discard_user_consultations
 from app.features.consultations.schemas import ConsultationStatus, ThemeCategory
 from app.features.consultations.state import ConsultationState, DialogueTurn
 from app.features.consultations.store import (
@@ -164,3 +165,97 @@ async def test_successful_update_is_kept():
         s.question_count += 1
 
     assert state.question_count == 1
+
+
+# --- 退会処理の破棄の後は、相談開始を受け付けない（#96） ---------------------------
+
+
+def test_start_is_rejected_after_withdrawal_discard():
+    store = ConsultationStore()
+    user_id = uuid4()
+    store.discard_withdrawn_user(user_id)
+
+    with pytest.raises(ConsultationNotFound):
+        with store.reserve_start(user_id):
+            pass
+    # 拒否した場合は予約を残さない
+    assert user_id not in store._starting
+
+
+def test_registration_is_blocked_when_start_arrives_after_withdrawal_discard():
+    # deleting の確定前に認証を通過した相談開始が、退会処理の破棄の後に届いた場合を模す
+    store = ConsultationStore()
+    user_id = uuid4()
+    store.discard_withdrawn_user(user_id)
+
+    with pytest.raises(ConsultationNotFound):
+        with store.reserve_start(user_id) as reservation:
+            reservation.commit(make_state(user_id))
+    assert not [s for s in store._states.values() if s.user_id == user_id]
+
+
+def test_withdrawal_discard_does_not_affect_other_users():
+    store = ConsultationStore()
+    other = make_state(uuid4())
+    store.add(other)
+
+    store.discard_withdrawn_user(uuid4())
+
+    # 他のユーザーの相談は残り、相談開始もできる
+    assert store.exists(other.user_id, other.consultation_id)
+    new_state = make_state(uuid4())
+    with store.reserve_start(new_state.user_id) as reservation:
+        reservation.commit(new_state)
+    assert store.exists(new_state.user_id, new_state.consultation_id)
+
+
+def test_withdrawal_discard_is_idempotent():
+    store = ConsultationStore()
+    state = make_state(uuid4())
+    store.add(state)
+
+    store.discard_withdrawn_user(state.user_id)
+    store.discard_withdrawn_user(state.user_id)  # 2回目もエラーにならない
+
+    assert not store.exists(state.user_id, state.consultation_id)
+    with pytest.raises(ConsultationNotFound):
+        with store.reserve_start(state.user_id):
+            pass
+
+
+def test_new_consultation_does_not_block_next_start():
+    # 新しい相談の登録時の破棄（discard_user）では記録しないため、続けて相談を開始できる
+    store = ConsultationStore()
+    user_id = uuid4()
+    first = make_state(user_id)
+    with store.reserve_start(user_id) as reservation:
+        reservation.commit(first)
+
+    second = make_state(user_id)
+    with store.reserve_start(user_id) as reservation:
+        reservation.commit(second)
+
+    assert not store.exists(user_id, first.consultation_id)  # 1ユーザー1件
+    assert store.exists(user_id, second.consultation_id)
+
+
+def test_discard_user_does_not_block_next_start():
+    # discard_user 自体はユーザーを記録しない（退会以外の破棄に影響させない）
+    store = ConsultationStore()
+    user_id = uuid4()
+    store.discard_user(user_id)
+
+    with store.reserve_start(user_id) as reservation:
+        assert reservation.active
+
+
+@pytest.mark.asyncio
+async def test_discard_user_consultations_blocks_later_start():
+    # 公開関数（F-06から呼ぶ入口）が、退会用の破棄を使っていることを確認する
+    store = ConsultationStore()
+    user_id = uuid4()
+    await discard_user_consultations(user_id, store=store)
+
+    with pytest.raises(ConsultationNotFound):
+        with store.reserve_start(user_id):
+            pass
