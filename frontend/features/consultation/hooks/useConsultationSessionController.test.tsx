@@ -29,6 +29,27 @@ const startRequest = {
 };
 
 describe("useConsultationSessionController", () => {
+  it("開始処理中に相談が失われた404では内容を破棄して状態消失へ切り替える", async () => {
+    const api = createApi();
+    vi.mocked(api.start).mockRejectedValue(
+      new ApiError("not_found", { code: "CONSULTATION_NOT_FOUND" }),
+    );
+    const { result } = renderHook(() => useConsultationSessionController(api));
+
+    let started = true;
+    await act(async () => {
+      started = await result.current.startConsultation(startRequest);
+    });
+
+    expect(started).toBe(false);
+    expect(result.current.state).toMatchObject({
+      consultationId: null,
+      status: null,
+      errorCode: "CONSULTATION_NOT_FOUND",
+      pendingOperation: null,
+    });
+  });
+
   it("処理中に同じ操作を重ねてもAPIを二重送信しない", async () => {
     const api = createApi();
     let resolveStart: ((view: ConsultationView & { consultation_id: string }) => void) | null =
