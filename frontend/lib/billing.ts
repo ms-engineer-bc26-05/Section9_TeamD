@@ -103,13 +103,29 @@ function fetchUsageReal(): Promise<UsageResponse> {
 
 // ---------- モック(F-05マージ前の開発用) ----------
 
-const mockState: { plan: PlanCode; paid: boolean } = {
-  plan: "free",
-  paid: false,
-};
+// 購入後はページ遷移(全体の再読み込み)が起きるため、モックの状態はsessionStorageに持つ
+const MOCK_PLAN_KEY = "billing-mock-plan";
+
+function readMockPlan(): PlanCode {
+  try {
+    return sessionStorage.getItem(MOCK_PLAN_KEY) === "premium"
+      ? "premium"
+      : "free";
+  } catch {
+    return "free";
+  }
+}
+
+function writeMockPlan(plan: PlanCode): void {
+  try {
+    sessionStorage.setItem(MOCK_PLAN_KEY, plan);
+  } catch {
+    // 保存できなくても、モックなので無視する
+  }
+}
 
 async function createCheckoutSessionMock(): Promise<CheckoutResult> {
-  if (mockState.plan === "premium") return { type: "already_paid" };
+  if (readMockPlan() === "premium") return { type: "already_paid" };
   return {
     type: "redirect",
     // Stripeへは行かず、成功URLへ直接戻る
@@ -119,13 +135,12 @@ async function createCheckoutSessionMock(): Promise<CheckoutResult> {
 }
 
 async function confirmPaymentMock(): Promise<ConfirmResult> {
-  mockState.plan = "premium";
-  mockState.paid = true;
+  writeMockPlan("premium");
   return { status: "paid" };
 }
 
 async function fetchCurrentPlanMock(): Promise<PlanResponse> {
-  return { plan_code: mockState.plan };
+  return { plan_code: readMockPlan() };
 }
 
 async function fetchUsageMock(): Promise<UsageResponse> {
