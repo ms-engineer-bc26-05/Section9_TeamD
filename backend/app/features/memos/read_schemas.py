@@ -20,6 +20,7 @@ class MemoListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     memos: list[MemoListItem]
+    next_cursor: str | None = None
 
 
 class MemoDetailResponse(BaseModel):

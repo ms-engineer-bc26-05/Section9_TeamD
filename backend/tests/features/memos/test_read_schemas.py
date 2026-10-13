@@ -33,14 +33,15 @@ def test_memo_list_response_serializes():
                 "summary": "架空の出来事の要約",
                 "handling": "hold",
             }
-        ]
+        ],
+        "next_cursor": None,
     }
 
 
 def test_memo_list_response_accepts_empty_list():
     response = MemoListResponse(memos=[])
 
-    assert response.model_dump(mode="json") == {"memos": []}
+    assert response.model_dump(mode="json") == {"memos": [], "next_cursor": None}
 
 
 @pytest.mark.parametrize("reason", [None, "架空の選択理由"])
