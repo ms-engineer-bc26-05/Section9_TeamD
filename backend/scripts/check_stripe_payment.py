@@ -1,4 +1,4 @@
-"""F-05（#59）テストモードでの実決済の確認（Stripe・ローカルのPostgreSQL）。
+"""F-05（#59）テストモード（サンドボックス）での実決済の確認（Stripe・ローカルのPostgreSQL）。
 
 決済APIと同じサービス（CheckoutService・PaymentConfirmService）と実DBの実装を使い、
 架空のユーザーで次の2つを確認する。手順・記録の形式は manual_checks/payments_test_mode.md。

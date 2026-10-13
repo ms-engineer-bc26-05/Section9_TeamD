@@ -4,7 +4,7 @@ Checkout Sessionの作成で、Stripe側に作成されたかどうかを確認�
 Stripe上のSession一覧を検索して自動で照合する処理は、後続のIssue（#91）で扱う（#59で合意）。それまではこの手順で対応する。
 
 - 担当：じま（F-05）。不在のときは、チームで担当を相談する
-- 対象：Stripeの**テストモード**だけ。本番の鍵・本番のダッシュボードでは行わない
+- 対象：Stripeの**テストモード（サンドボックス）**だけ。本番の鍵・本番のダッシュボードでは行わない
 - Session ID・URL・秘密鍵・ユーザーIDを、Issue・PR・Discord・画面共有に貼らない。記録には決済ID（`payments.id`）と結果だけを書く
 
 ## どんなときに止まるか
@@ -45,7 +45,7 @@ SQL
 ## 2. Stripeのダッシュボードで確かめる
 
 1. **`expires_at`を過ぎるまで待つ。** Sessionが作られていた場合も、`expires_at`を過ぎるとStripeが自動で期限切れにし、支払えなくなる。状態が動かなくなってから確かめる（そのため、この手順で`open`のSessionが見つかることはない。見つかった場合は直さずに相談する）
-2. Stripeのダッシュボード（テストモード）で、行の`created_at`の前後に作られたCheckout Sessionを開き、metadataの`payment_id`が決済IDと一致するものを探す
+2. Stripeのダッシュボード（テストモード（サンドボックス））で、行の`created_at`の前後に作られたCheckout Sessionを開き、metadataの`payment_id`が決済IDと一致するものを探す
 3. 見つかった場合は、そのSessionの状態（`open`・`expired`・`complete`）と支払い状態を確かめる
 
 ## 3. 結果に合わせて行を直す
