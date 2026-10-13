@@ -7,10 +7,14 @@ main.py への登録は結合Issue（I-06）で行うため、利用状況Router
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.errors import register_exception_handlers
+from app.core.exceptions import DatabaseUnavailableError
+from app.features.memos.public import MemoDatabaseError
+from app.features.usage import memos as usage_memos
 from app.features.usage.limiter import get_usage_limiter
 from app.features.usage.memos import get_memo_counter
 from app.features.usage.plans import get_plan_resolver
@@ -152,8 +156,13 @@ def test_plan_unavailable_returns_error():
     assert response.json() == UNAVAILABLE_BODY
 
 
-def test_memo_count_unavailable_returns_error():
-    # F-01・I-05につなぐまでの仮の件数取得は、推測した件数を返さずエラーにする
+@pytest.mark.parametrize("error", [DatabaseUnavailableError, MemoDatabaseError])
+def test_memo_count_unavailable_returns_error(monkeypatch, error):
+    # DBで件数を確認できない場合は、推測した件数（0件など）を返さずエラーにする（#94）
+    async def fail(user_id):
+        raise error("架空の内部情報")
+
+    monkeypatch.setattr(usage_memos, "count_saved_memos", fail)
     client = make_client()
     client.app.dependency_overrides.pop(get_memo_counter)
 
@@ -161,3 +170,19 @@ def test_memo_count_unavailable_returns_error():
 
     assert response.status_code == 503
     assert response.json() == UNAVAILABLE_BODY
+    assert "架空の内部情報" not in response.text
+
+
+def test_memo_count_uses_saved_memo_count(monkeypatch):
+    # 保存の上限判定と同じ関数（memos/public.py）の件数を返す
+    async def count(user_id):
+        return 7
+
+    monkeypatch.setattr(usage_memos, "count_saved_memos", count)
+    client = make_client()
+    client.app.dependency_overrides.pop(get_memo_counter)
+
+    response = client.get(URL)
+
+    assert response.status_code == 200
+    assert response.json()["memo_count"] == 7

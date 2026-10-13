@@ -7,7 +7,9 @@
      404ではなく保存済みのメモを返す）
   3. 整理結果・扱い方・理由を暗号化する（暗号文の中に user_id・memo_id を含めて結び付ける）
   4. トランザクション内でユーザー行をロック（ユーザーの存在・status=active を再確認）
-     → 保存済みメモを再検索 → INSERT
+     → 保存済みメモを再検索 → 保存件数の上限を判定（#94）→ INSERT
+     上限に達していたら MemoLimitExceeded（403）。INSERTせず、一時状態も残す
+     （保存済みの同じ相談への再試行は、上限に達していても既存のメモを返す）
   5. commit に成功してから、返すメモを復号・照合し、一時状態を破棄する
      （commit に失敗した場合は一時状態を残し、再試行できるようにする）
      破棄だけが失敗しても保存は成功として返す。残った一時状態は、再試行時に既存のメモを返して破棄する
@@ -31,6 +33,8 @@ from app.features.consultations.public import (
     get_approved_result,
 )
 from app.features.memos.crypto import encrypt_payload
+from app.features.memos.exceptions import MemoLimitExceeded
+from app.features.memos.limits import GetMemoLimit, get_memo_limit
 from app.features.memos.payload import (
     ENCRYPTION_VERSION,
     KEY_VERSION,
@@ -68,11 +72,13 @@ class MemoSaveService:
         *,
         get_approved: GetApproved = get_approved_result,
         discard: Discard = discard_consultation,
+        get_limit: GetMemoLimit = get_memo_limit,
     ) -> None:
         self._repository = repository
         self._cipher = cipher
         self._get_approved = get_approved
         self._discard = discard
+        self._get_limit = get_limit
 
     async def save(
         self, user_id: UUID, consultation_id: UUID, reason: str | None
@@ -92,6 +98,9 @@ class MemoSaveService:
                 raise
             return await self._return_saved(stored, user_id, consultation_id), False
         new_memo = self._build_new_memo(user_id, approved, reason)
+        # 上限値（プランの判定）は、ユーザー行のロックの前に決める。
+        # プランを確認できない場合は PlanUnavailable（503）で、INSERTへ進まない
+        memo_limit = await self._get_limit(user_id)
 
         created = False
         try:
@@ -100,7 +109,9 @@ class MemoSaveService:
                 await tx.lock_user(user_id)
                 stored = await tx.find_by_consultation(user_id, consultation_id)
                 if stored is None:
-                    # 保存件数の上限（403）はここで判定する。#94で実装する（上限値はPR #90の設定）
+                    # ロック後に数えるため、同時に保存しても上限を超えない
+                    if memo_limit is not None and await tx.count_by_user(user_id) >= memo_limit:
+                        raise MemoLimitExceeded
                     stored = await tx.insert(new_memo)
                     created = True
         except DuplicateMemo:

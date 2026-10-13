@@ -6,7 +6,7 @@ DBの実装は db_repository.py（SQLAlchemy）。ServiceとテストはこのPr
 保存の流れ（DB設計「保存処理」・API設計6.5.2）：
   1. トランザクションの外で find_by_consultation により保存済みを確認する
   2. transaction() の中で lock_user（ユーザーの存在・status=active の再確認を含む）
-     → find_by_consultation（再検索）→ insert
+     → find_by_consultation（再検索）→ count_by_user（保存件数の上限の判定。#94）→ insert
   3. insert または commit が DuplicateMemo を送出した場合は、既存のメモを取得して返す
 
 DBの実装で守ること：
@@ -85,6 +85,9 @@ class MemoTransaction(Protocol):
         self, user_id: UUID, consultation_id: UUID
     ) -> StoredMemo | None: ...
 
+    async def count_by_user(self, user_id: UUID) -> int:
+        """本人の保存済みメモの件数。lock_user の後に呼び、同時の保存で上限を超えないようにする"""
+
     async def insert(self, memo: NewMemo) -> StoredMemo:
         """一意制約に違反した場合は DuplicateMemo を送出する"""
 
@@ -94,5 +97,8 @@ class MemoRepository(Protocol):
         self, user_id: UUID, consultation_id: UUID
     ) -> StoredMemo | None:
         """user_id と相談IDの両方で検索する（本人以外のメモは見つからない）"""
+
+    async def count_by_user(self, user_id: UUID) -> int:
+        """本人の保存済みメモの件数（GET /usage の memo_count。ロックは取らない）"""
 
     def transaction(self) -> AbstractAsyncContextManager[MemoTransaction]: ...
