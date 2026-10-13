@@ -115,6 +115,36 @@ describe("useConsultationSessionController", () => {
     expect(result.current.state.currentTopic).toBe("true_feeling");
   });
 
+  it("扱い方APIがstatusだけを返しても送信済みの選択を保存確認へ引き継ぐ", async () => {
+    const api = createApi();
+    vi.mocked(api.start).mockResolvedValue({
+      consultation_id: "c1",
+      status: "handling_selection",
+    });
+    vi.mocked(api.chooseHandling).mockResolvedValue({
+      status: "save_confirmation",
+    });
+    const { result } = renderHook(() => useConsultationSessionController(api));
+
+    await act(async () => {
+      await result.current.startConsultation(startRequest);
+    });
+
+    let selected = false;
+    await act(async () => {
+      selected = await result.current.chooseHandling("hold");
+    });
+
+    expect(selected).toBe(true);
+    expect(api.chooseHandling).toHaveBeenCalledWith(
+      "c1",
+      { handling: "hold" },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(result.current.state.status).toBe("save_confirmation");
+    expect(result.current.state.handling).toBe("hold");
+  });
+
   it("422では画面状態を更新せずGETによる復旧も行わない", async () => {
     const api = createApi();
     vi.mocked(api.start).mockResolvedValue({

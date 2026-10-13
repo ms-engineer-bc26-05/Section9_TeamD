@@ -878,9 +878,17 @@ export function useConsultationSessionController(
 
   const chooseHandling = useCallback(
     (handling: HandlingType) =>
-      runViewOperation("choose_handling", (consultationId, signal) =>
-        api.chooseHandling(consultationId, { handling }, { signal }),
-      ),
+      runViewOperation("choose_handling", async (consultationId, signal) => {
+        const view = await api.chooseHandling(
+          consultationId,
+          { handling },
+          { signal },
+        );
+
+        // 6.5.1の成功レスポンスはstatusだけを返すため、成功した送信値を
+        // 画面状態へ補い、UI-009で選択内容を表示できるようにする。
+        return { ...view, handling };
+      }),
     [api, runViewOperation],
   );
 
