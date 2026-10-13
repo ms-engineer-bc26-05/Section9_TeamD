@@ -27,6 +27,14 @@ services:
       DATABASE_URL: ${DATABASE_URL:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
       REDIS_URL: ${REDIS_URL:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # 利用回数制限（Issue #57）。.env に書かない場合はコードの既定値を使う
+      USAGE_FREE_CONSULTATION_LIMIT: ${USAGE_FREE_CONSULTATION_LIMIT:-3}
+      USAGE_PREMIUM_CONSULTATION_LIMIT: ${USAGE_PREMIUM_CONSULTATION_LIMIT:-30}
+      USAGE_FREE_MEMO_LIMIT: ${USAGE_FREE_MEMO_LIMIT:-10}
+      USAGE_PREMIUM_MEMO_LIMIT: ${USAGE_PREMIUM_MEMO_LIMIT:-100}
+      USAGE_PERIOD_SECONDS: ${USAGE_PERIOD_SECONDS:-2592000}
+      REDIS_CONNECT_TIMEOUT_SECONDS: ${REDIS_CONNECT_TIMEOUT_SECONDS:-0.5}
+      REDIS_COMMAND_TIMEOUT_SECONDS: ${REDIS_COMMAND_TIMEOUT_SECONDS:-0.5}
       # 自動リロードの有無（縦断確認時は .env で false にする）
       BACKEND_RELOAD: ${BACKEND_RELOAD:-true}
       # Windowsでもファイルの変更を検知できるよう、定期的に確認する
