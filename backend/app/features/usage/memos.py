@@ -1,13 +1,15 @@
 """保存メモの件数の取得（GET /usage の memo_count）。
 
 API設計6.7のとおり、件数はRedisでは数えず、DBの approved_memos を本人の user_id で数える。
-F-01・I-05の件数取得の関数ができたら、get_memo_counter の中身を差し替える。
-それまでは、誤って結合しても実際と違う件数を返さないよう、常に MemoCountUnavailable とする。
+保存の上限判定と同じ関数（memos/public.py の count_saved_memos。#94）を使う。
+DBで件数を確認できない場合は、0件などと推測せず MemoCountUnavailable（503）とする。
 """
 
 from typing import Protocol
 from uuid import UUID
 
+from app.core.exceptions import DatabaseUnavailableError
+from app.features.memos.public import MemoDatabaseError, count_saved_memos
 from app.features.usage.exceptions import MemoCountUnavailable
 
 
@@ -15,12 +17,15 @@ class MemoCounter(Protocol):
     async def count(self, user_id: UUID) -> int: ...
 
 
-class UnavailableMemoCounter:
+class SavedMemoCounter:
     async def count(self, user_id: UUID) -> int:
-        raise MemoCountUnavailable
+        try:
+            return await count_saved_memos(user_id)
+        except (DatabaseUnavailableError, MemoDatabaseError):
+            raise MemoCountUnavailable from None
 
 
-_counter = UnavailableMemoCounter()
+_counter = SavedMemoCounter()
 
 
 def get_memo_counter() -> MemoCounter:

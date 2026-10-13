@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from uuid import UUID
 
-from sqlalchemy import insert, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -69,6 +69,13 @@ async def _find(session: AsyncSession, user_id: UUID, consultation_id: UUID) -> 
     return _to_stored(row) if row is not None else None
 
 
+async def _count(session: AsyncSession, user_id: UUID) -> int:
+    statement = (
+        select(func.count()).select_from(ApprovedMemo).where(ApprovedMemo.user_id == user_id)
+    )
+    return (await session.execute(statement)).scalar_one()
+
+
 class _SqlAlchemyMemoTransaction:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -85,6 +92,9 @@ class _SqlAlchemyMemoTransaction:
         self, user_id: UUID, consultation_id: UUID
     ) -> StoredMemo | None:
         return await _find(self._session, user_id, consultation_id)
+
+    async def count_by_user(self, user_id: UUID) -> int:
+        return await _count(self._session, user_id)
 
     async def insert(self, memo: NewMemo) -> StoredMemo:
         statement = (
@@ -130,6 +140,13 @@ class SqlAlchemyMemoRepository:
         try:
             async with self._session_factory() as session:
                 return await _find(session, user_id, consultation_id)
+        except SQLAlchemyError as error:
+            raise _translate(error) from None
+
+    async def count_by_user(self, user_id: UUID) -> int:
+        try:
+            async with self._session_factory() as session:
+                return await _count(session, user_id)
         except SQLAlchemyError as error:
             raise _translate(error) from None
 

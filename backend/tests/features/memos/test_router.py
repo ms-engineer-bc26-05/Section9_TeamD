@@ -26,9 +26,11 @@ from app.features.memos.crypto import create_fernet
 from app.features.memos.router import (
     get_current_user_id,
     get_memo_cipher,
+    get_memo_limit_getter,
     get_memo_repository,
     router,
 )
+from app.features.usage.exceptions import PlanUnavailable
 
 from tests.features.consultations.factories import make_save_confirmation_state
 from tests.features.memos.fakes import InMemoryMemoRepository
@@ -266,3 +268,62 @@ def test_does_not_log_memo_content_or_ciphertext(client, state, repo, caplog):
     row = next(iter(repo.rows.values()))
     assert "架空" not in caplog.text
     assert row.encrypted_payload.decode("ascii") not in caplog.text
+
+
+def set_limit(app, limit):
+    async def get_limit(user_id):
+        return limit
+
+    app.dependency_overrides[get_memo_limit_getter] = lambda: get_limit
+
+
+def test_limit_exceeded_is_403_and_keeps_state(app, repo, store):
+    # SV-06：上限を超える保存は403。INSERTせず、一時状態も残す（保存せず終了を選べる）
+    set_limit(app, 1)
+    client = TestClient(app)
+    first = make_save_confirmation_state(store, USER_ID)
+    assert client.post(f"{BASE}/{first.consultation_id}/save", json={}).status_code == 201
+    second = make_save_confirmation_state(store, USER_ID)
+    try:
+        response = client.post(f"{BASE}/{second.consultation_id}/save", json={})
+
+        assert response.status_code == 403
+        assert response.json() == {
+            "error": {
+                "code": "MEMO_LIMIT_EXCEEDED",
+                "message": "保存できる整理メモの上限に達しました。",
+            }
+        }
+        assert len(repo.rows) == 1
+        assert store.exists(USER_ID, second.consultation_id)
+    finally:
+        store.discard(USER_ID, second.consultation_id)
+
+
+def test_retry_at_limit_returns_200(app, state, repo):
+    set_limit(app, 1)
+    client = TestClient(app)
+    first = client.post(f"{BASE}/{state.consultation_id}/save", json={})
+
+    retry = client.post(f"{BASE}/{state.consultation_id}/save", json={})
+
+    assert retry.status_code == 200
+    assert retry.json() == first.json()
+    assert len(repo.rows) == 1
+
+
+def test_plan_unavailable_is_503(app, state, repo, store):
+    # プランを確認できない場合は、無料・無制限とみなさず503
+    async def get_limit(user_id):
+        raise PlanUnavailable
+
+    app.dependency_overrides[get_memo_limit_getter] = lambda: get_limit
+
+    response = TestClient(app).post(f"{BASE}/{state.consultation_id}/save", json={})
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {"code": "DB_UNAVAILABLE", "message": "データベースに接続できませんでした。"}
+    }
+    assert repo.rows == {}
+    assert store.exists(USER_ID, state.consultation_id)

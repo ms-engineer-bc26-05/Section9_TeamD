@@ -6,5 +6,9 @@ HTTPのステータス・エラーコードへの変換は http_errors.py で行
 """
 
 
+class MemoLimitExceeded(Exception):
+    """保存済みメモの件数が、プランの保存件数の上限に達している（APIでは403）"""
+
+
 class MemoDatabaseError(Exception):
     """接続障害以外のDBの失敗（APIでは500）。元の例外のメッセージは持たない"""
