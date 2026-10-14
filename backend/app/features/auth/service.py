@@ -3,6 +3,7 @@
 from asyncio import to_thread
 
 from app.core.database import get_session_factory
+from app.core.database_errors import is_database_connection_error
 from app.core.exceptions import (
     AccountDeletingError,
     AuthenticationRequiredError,
@@ -10,6 +11,7 @@ from app.core.exceptions import (
     DatabaseUnavailableError,
 )
 from app.features.auth.schemas import CurrentUser
+from app.features.users.lifecycle_lock import lifecycle_lock
 from app.features.users.schemas import UserResponse
 from app.features.users.service import (
     get_or_create_user,
@@ -17,11 +19,11 @@ from app.features.users.service import (
 )
 from app.integrations.firebase.client import (
     AuthServiceUnavailableError as FirebaseUnavailableError,
+)
+from app.integrations.firebase.client import (
     InvalidTokenError,
     verify_token,
 )
-
-from app.core.database_errors import is_database_connection_error
 
 
 async def authenticate_user(token: str) -> CurrentUser:
@@ -35,9 +37,7 @@ async def authenticate_user(token: str) -> CurrentUser:
     except InvalidTokenError:
         raise AuthenticationRequiredError("Authentication required") from None
     except FirebaseUnavailableError:
-        raise AuthServiceUnavailableError(
-            "Authentication service unavailable"
-        ) from None
+        raise AuthServiceUnavailableError("Authentication service unavailable") from None
 
     try:
         factory = get_session_factory()
@@ -54,15 +54,25 @@ async def authenticate_user(token: str) -> CurrentUser:
             current_user = CurrentUser(user_id=user.id)
     except Exception as error:
         if is_database_connection_error(error):
-            raise DatabaseUnavailableError(
-                "Database connection unavailable"
-            ) from None
+            raise DatabaseUnavailableError("Database connection unavailable") from None
         raise
 
     return current_user
 
 
 async def register_or_get_user(token: str) -> tuple[UserResponse, bool]:
+    """Serialize registration with deletion, then revalidate before writing."""
+    try:
+        uid = await to_thread(verify_token, token, check_revoked=True)
+    except InvalidTokenError:
+        raise AuthenticationRequiredError from None
+    except FirebaseUnavailableError:
+        raise AuthServiceUnavailableError from None
+    async with lifecycle_lock(uid):
+        return await _register_locked(token, uid)
+
+
+async def _register_locked(token: str, expected_uid: str) -> tuple[UserResponse, bool]:
     """初回ログイン用。検証・状態確認・保存確定後に結果を返す。"""
     try:
         firebase_uid = await to_thread(
@@ -73,9 +83,10 @@ async def register_or_get_user(token: str) -> tuple[UserResponse, bool]:
     except InvalidTokenError:
         raise AuthenticationRequiredError("Authentication required") from None
     except FirebaseUnavailableError:
-        raise AuthServiceUnavailableError(
-            "Authentication service unavailable"
-        ) from None
+        raise AuthServiceUnavailableError("Authentication service unavailable") from None
+
+    if firebase_uid != expected_uid:
+        raise AuthenticationRequiredError
 
     try:
         factory = get_session_factory()
@@ -94,9 +105,7 @@ async def register_or_get_user(token: str) -> tuple[UserResponse, bool]:
                 )
     except Exception as error:
         if is_database_connection_error(error):
-            raise DatabaseUnavailableError(
-                "Database connection unavailable"
-            ) from None
+            raise DatabaseUnavailableError("Database connection unavailable") from None
         raise
 
     return response, created
