@@ -1,7 +1,7 @@
 > **ステータス**：ドラフト（チーム内初稿・講師確認済み・レビュー指摘反映済）
 > **作成日**：2026年9月25日
-> **最終修正日**：2026年10月12日（Issue #59：決済方式を一回払いに決定し、決済API（6.8.6〜6.8.8）の契約・エラーコードと退会時の決済の照合（6.9）を反映。10月11日：Issue #52の保存API（6.5.2）・ID形式（3.3）・500の`code`、Issue #57のRedis利用回数制限を反映）
-> **関連Issue**：依存 `#2` ／ 参照 `#4`〜`#8`、`#49`、`#52`、`#57`、`#59`、`#76` ／ 後続 実装Issue、`#13`、`#15`
+> **最終修正日**：2026年10月13日（Issue #89：I-03B #50の決定事項・更新処理中のGETの409（PR #82）・認証の共通エラー（#47）・500の`code`を反映。10月12日：Issue #59：決済方式を一回払いに決定し、決済API（6.8.6〜6.8.8）の契約・エラーコードと退会時の決済の照合（6.9）を反映。10月11日：Issue #52の保存API（6.5.2）・ID形式（3.3）・500の`code`、Issue #57のRedis利用回数制限を反映）
+> **関連Issue**：依存 `#2` ／ 参照 `#4`〜`#8`、`#47`、`#49`、`#50`、`#52`、`#57`、`#59`、`#76`、`#89` ／ 後続 実装Issue、`#13`、`#15`
 　**作成** : じま
 　**確認担当** : みほさん　もえさん
 
@@ -20,8 +20,8 @@
 
 - 相談中の会話全文・入力原文・未承認の内容は、DB・Redis・ログへ永続化しない。相談の進行状態は、相談完了または一定時間の未操作で破棄される**一時的な状態**として扱う。Issue #7の技術検証で、未承認・保存同意なしのデータがPostgreSQL・Redisへ保存されないことは確認済み。
 - 相談中の一時状態（会話文脈）は**APIプロセスのメモリで保持する**。会話全文・入力原文・未承認の内容をDB・Redis・ログへ保存しないため、クライアント保持やRedis保持は採用しない。
-- APIは**1ワーカー・1インスタンス（レプリカ数1、オートスケールなし）で起動する**。一時状態はAPIプロセスの再起動、開発時の自動リロード、インスタンスの切り替え、または一定時間の未操作による有効期限切れで失われる。ブラウザ再読み込み後の相談復帰は、APIプロセスに一時状態が残っている場合も含め、MVPでは保証しない。フロントエンドが相談IDを失った場合にサーバー側へ残る一時状態の扱いは、同時相談数・新規相談開始時の扱いとあわせてPR #37で整理中の後続実装Issueで決定する。1インスタンスでの配置・運用条件はI-03または別Issueで検討し、Issue・PRへ記録する。
-- 一時状態が失われた相談IDへのアクセスは、相談内容をレスポンスやログへ含めず`404`として扱う。クライアントは相談を最初から開始できる状態へ戻す。一時状態は相談の終了・中断・保存成功時にも破棄する。具体的な保持時間・有効期限の実装詳細はPR #37で整理中の後続実装Issueで検討・決定し、Issue・PRへ記録する。
+- APIは**1ワーカー・1インスタンス（レプリカ数1、オートスケールなし）で起動する**。一時状態はAPIプロセスの再起動、開発時の自動リロード、インスタンスの切り替え、または一定時間の未操作による有効期限切れで失われる。ブラウザ再読み込み後の相談復帰は、APIプロセスに一時状態が残っている場合も含め、MVPでは保証しない。フロントエンドが相談IDを失った場合も、新しい相談を開始すれば、その人の既存の相談は破棄される（1ユーザー1件。下記「一時状態の保持と破棄」）。一時状態の保持時間・破棄は、単一プロセスであることを前提にしている（I-03B #50で決定）。
+- 一時状態が失われた相談IDへのアクセスは、相談内容をレスポンスやログへ含めず`404`として扱う。クライアントは相談を最初から開始できる状態へ戻す。一時状態は相談の終了・中断・保存成功時にも破棄する。保持時間（有効期限）は下記「一時状態の保持と破棄」のとおり。
 - 一時状態を前提とするGET・PATCH・POST等のAPIでは、一時状態が存在しない場合、TTLや再起動等ですでに破棄された場合、または本人所有の相談でない場合を`404`へ統一する。これらの原因はAPIレスポンスで区別せず、相談内容・入力原文・内部情報・消失原因をレスポンスやログへ含めない。
 - ただし、`POST /consultations/{id}/save`は保存済みメモの確認を一時状態の確認より先に行うため、保存成功後の再試行では一時状態がなくても保存済みメモを`200`で返す（6.5.2）。
 - フロントエンドは、相談系API（`/consultations/{id}`配下）で発生した上記の`404`の詳しい原因を区別せず、「相談を続けられませんでした。ホームから新しい相談を始めてください」と表示し、UI-002（画面2：ホーム）へ戻す。API設計上、相談を最初から開始できる状態へ戻すことをクライアント側の共通処理とする。メモ等の相談以外のリソースで発生した`404`には、この画面遷移を適用しない。
@@ -30,8 +30,16 @@
   - 相談IDごとのロック（`asyncio.Lock`）を使い、グローバルロックは使わない。AI呼び出し中もロックを保持する。他の相談は止まらない。
   - ロック中の相談への別の更新リクエストは、待たずに`409`（`CONSULTATION_BUSY`。3.7参照）を返す（二重送信とみなす）。
   - AIの応答待ちの間に一時状態が破棄された場合は、応答後も状態を更新・復活させず`404`とする。
-  - `GET`（6.2.2・6.4.1）はロックを取らずに読み取る。
-- 一時状態の具体的な保持時間、破棄処理、1ユーザーが同時に保持できる相談数、新しい相談開始時の既存相談の扱い、GETで保持時間を延長するかはPR #37で整理中の後続実装Issueで検討・決定し、Issue・PRへ記録する。現時点では、GETによる参照だけでは保持時間を延長せず、相談内容を更新する操作が成功したときに最終操作時刻を更新する案を候補とする。
+  - `GET`（6.2.2・6.4.1）はロックを取らずに読み取るが、同じ相談の更新を処理中（ロック中）の場合は`409`（`CONSULTATION_BUSY`）を返す（PR #82で変更）。処理が終われば`200`に戻る（成功した場合は進んだ後の状態、失敗した場合は送る前の状態）。処理はAI呼び出しのタイムアウト（既定30秒）までに終わるため、GETの再試行はこれを目安にする。
+  - `DELETE /consultations/{id}`（6.5.3）と、I-05向けの`get_approved_result`（6.5.4）はロックを取らないため、更新の処理中でも待たずに使える。
+  - 想定外のエラー（500）で処理が失敗した場合は、ロックを取った時点の一時状態へ戻してからロックを解放する（ST-19。I-03B #50）。
+- **一時状態の保持と破棄**（I-03B #50で決定。単一プロセスが前提）
+  - **保持時間（TTL）**：最後に更新が成功してから**30分**。GETでは延長しない（更新が成功したときだけ最終操作時刻を進める）。新しい相談は、AIの応答待ちの時間を含めず、登録に成功した時点から数える。期限切れの相談は、存在しない相談と同じ`404`とする。
+  - 更新を処理中（ロック中。AIの応答待ちなど）の相談は、期限切れとして扱わない。
+  - 期限切れの一時状態は、その相談へのアクセス時と、新しい相談の登録時に消す（常駐の見回り処理は作らない）。
+  - **1ユーザー1件**：新しい相談の開始に成功したら、その人の既存の相談を破棄する。開始に失敗した場合は既存の相談を残す。同じユーザーが同時に相談を開始した場合、2つ目は`409`（`CONSULTATION_BUSY`）とする（6.2.1）。
+  - **AIの応答待ち中に破棄された場合**（`DELETE`・新しい相談による置き換え・ユーザー単位の破棄）：応答後も状態を書き込まず、復活もさせず`404`とする。破棄された後にAIの呼び出しが失敗した場合も、`502`ではなく`404`とする。500で状態を戻す処理（ST-19）でも、破棄された相談は復活しない。
+  - **ユーザー単位の破棄**：退会処理（6.9・F-06 #60）から`discard_user_consultations(user_id)`（6.5.4）を呼び、そのユーザーの一時相談をすべて破棄する。開始処理中の予約も取り消し、AIの応答後も登録しない。
 - 永続化されるのは、本人が確認・編集・承認し、保存を選んだ「整理メモ」のみ。Issue #7の技術検証で、`cryptography`ライブラリの`Fernet`による暗号化・復号・PostgreSQLへの保存と読み戻しを確認済み（**暫定推奨**。正式採用・鍵管理方式はDB設計・運用要件と合わせて別途決定するため未定）。
 - API側で所有者（本人）を確認し、本人以外がメモ・アカウント情報を閲覧・変更・削除できないようにする。Issue #5の技術検証で、他人のデータへのアクセスを拒否できることを実接続で確認済み。
 - エラーレスポンスの本文に、相談内容・入力原文・認証トークンを含めない。Issue #5・#7の技術検証で、レスポンス・収集ログへの混入がないことを確認済み。FastAPIの既定422ハンドラは送信値（`input`）を含むため、独自ハンドラで上書きする必要がある（3.5参照）。
@@ -92,7 +100,7 @@
 | 404 | Not Found | 指定したリソース（メモ・相談セッション等）が存在しない、または本人のものではなく存在を秘匿する場合 |
 | 409 | Conflict | 相談セッションの状態と操作が矛盾する場合（例：承認済みの結果を再承認しようとした等）。状態の矛盾は409、入力値の誤りは422に揃える方針を採用する |
 | 422 | Unprocessable Entity | Pydantic等によるスキーマ検証エラー（型・必須項目・文字数・許容値） |
-| 500 | Internal Server Error | サーバー側の想定外エラー |
+| 500 | Internal Server Error | サーバー側の想定外エラー。共通の形式で`code`は`INTERNAL_SERVER_ERROR`、`message`は「エラーが発生しました。時間をおいてもう一度お試しください。」（#86・PR #87）。保存API（6.5.2）も同じ`code`を使う（`message`は保存用の文。PR #74） |
 | 502 | Bad Gateway | AIの呼び出しに失敗した場合、またはAIの出力がスキーマ検証（4章）を満たさない場合（エラーコード例：`AI_OUTPUT_INVALID`）。クライアントの入力誤りではないため422は使わない |
 | 503 | Service Unavailable | DBに接続できない場合（`DB_UNAVAILABLE`。I-01 PR #85の共通のエラー変換と同じcode）。利用回数（Issue #57・6.7.4）では、利用権限（プラン）・ユーザーの状態・保存件数をDBで確認できない場合も同じcodeとし、無料・無制限などと推測して処理を続けない。認証基盤の障害は`AUTH_UNAVAILABLE`（PR #85） |
 
@@ -103,6 +111,21 @@
 - **所有者確認の方針**：メモ・相談セッション・アカウント情報など個人に紐づくリソースは、APIサーバー側で「トークンから復元したユーザーID」と「リソースの所有者ID」を必ず突き合わせる。一致しない場合は、リソースの存在自体を秘匿するため**404**を返す（他人のリソースIDの存在を推測されないようにするため）。Issue #5の技術検証で、他人のデータへのアクセスに対して404を返す動作を実接続で確認済みのため、本方針は検証済みとして採用する。
 - **相談中の一時状態APIの例外**：上記の所有者確認にかかわらず、`DELETE /consultations/{id}`は冪等な中断・終了処理として、本人所有でない場合も`204`を返す。本人所有でない一時状態は削除せず、レスポンスでも本人所有かどうかを区別しない（6.5.3参照）。
 
+#### 認証の共通エラー（I-01 #47で確定）
+
+認証が必要なAPIは、I-01の認証依存（`get_current_user`）と共通のエラーハンドラ（`backend/app/core/errors.py`）で、次のエラーを返す。各機能のAPIは、これらを500などへ変換せず、同じ`code`・`message`のまま返す。
+
+| ステータス | `code` | `message` | 返す場面 |
+| --- | --- | --- | --- |
+| 401 | `UNAUTHORIZED` | ログインしてください。 | トークンがない・無効・期限切れ、通常のAPIで内部ユーザーが存在しない。`POST /users/me`（初回ログインの登録・取得）では、トークンの失効・Firebase側でのユーザーの無効化・削除も含む（下記） |
+| 403 | `ACCOUNT_DELETING` | 退会処理中のため利用できません。 | 内部ユーザーが退会処理中（`deleting`） |
+| 503 | `AUTH_UNAVAILABLE` | 認証サービスを利用できません。時間をおいて再度お試しください。 | Firebaseの設定不備・権限不足・接続障害 |
+| 503 | `DB_UNAVAILABLE` | データベースに接続できませんでした。 | DBの接続障害（各機能のDB接続障害もこれにそろえる。PR #85で合意） |
+
+- `401`では、`WWW-Authenticate: Bearer`ヘッダーを付ける。
+- トークンの失効・Firebase側でのユーザーの無効化・削除の確認（`check_revoked=True`）は、`POST /users/me`（6.1.1）でだけ行う。通常のAPI（`get_current_user`）は`check_revoked=False`で署名・有効期限だけを確認するため、失効したトークンでも有効期限内は通る。ただし、内部ユーザーが存在しない場合は401になる（3.2の方針。#47の実装と同じ）。
+- 応答・ログに、例外のメッセージ・トークンを含めない。
+
 ### 3.7 相談APIのエラーコード（Issue #49で確定）
 
 相談API（`/consultations`配下。6.2〜6.5.1）は、次の`code`を返す。`message`は相談内容を含まない定型文とする。フロントエンドは`message`の文言ではなく、HTTPステータスと`code`で処理を分ける。
@@ -110,19 +133,19 @@
 | 原因 | ステータス | `code` |
 | --- | --- | --- |
 | 相談の一時状態がない・消失した・本人のものでない（§2） | 404 | `CONSULTATION_NOT_FOUND` |
-| 同じ相談の別のリクエストを処理中（AI応答待ち中の二重送信など。§2） | 409 | `CONSULTATION_BUSY` |
+| 同じ相談の別のリクエストを処理中（AI応答待ち中の二重送信、処理中の`GET`など。§2）、または同じユーザーが相談を同時に開始した（6.2.1） | 409 | `CONSULTATION_BUSY` |
 | 状態と操作が合わない（すでに遷移済み、未承認、承認済み、上限到達など） | 409 | `CONSULTATION_STATE_CONFLICT` |
 | 整理結果ができる前に取得しようとした（6.4.1） | 409 | `RESULT_NOT_READY` |
 | 入力値の誤り（型・必須・文字数・許容値・組み合わせ。背景以外の質問で`skipped: true`を指定した場合を含む） | 422 | `VALIDATION_ERROR` |
 | AIの呼び出しに失敗した（接続失敗・タイムアウト・エラー応答） | 502 | `AI_UNAVAILABLE` |
 | AIの出力が不正（4章のSchemaを満たさない、項目の組み合わせが不正、サーバーが指定した進め方と違う） | 502 | `AI_OUTPUT_INVALID` |
 
-- `401`（`UNAUTHORIZED`）・`403`（`ACCOUNT_DELETING`）は認証依存（I-01 #47）で共通に返す。
+- `401`（`UNAUTHORIZED`）・`403`（`ACCOUNT_DELETING`）・`503`（`AUTH_UNAVAILABLE`・`DB_UNAVAILABLE`）は、3.6「認証の共通エラー」のとおり共通のエラーハンドラで返す。
 - 相談開始（6.2.1）では、利用回数の判定（Issue #57）により、`403`（`USAGE_LIMIT_EXCEEDED`）と`503`（`DB_UNAVAILABLE`）も返す。加算後のユーザー状態の確認で退会処理中・退会完了と分かった場合も、それぞれ`403`（`ACCOUNT_DELETING`）・`401`（`UNAUTHORIZED`）を返す（6.7.3）。
 - `502`の場合、AIの出力をエラー本文・ログへ含めない。I-03Aではサーバー側で自動的に再試行しない（再試行の要否・回数はI-07 #54で決める）。
 - **`422`・`500`・`502`では、一時状態（`question_count`・`correction_count`・`current_topic`・整理結果・`status`など）を更新しない。** AIの呼び出しと出力の検証が成功してから状態を更新する。`POST /consultations`（6.2.1）が失敗した場合は、相談の一時状態を作らない。
 - 保存API（6.5.2）は、上の表の`CONSULTATION_NOT_FOUND`（404）・`CONSULTATION_STATE_CONFLICT`（409）・`VALIDATION_ERROR`（422）に加えて、保存処理に固有のエラーを返す。一覧は6.5.2に記載する（I-05 #52で確定）。
-- 中断API（6.5.3）のエラーコードは、I-03B #50で確定して反映する。
+- 中断API（6.5.3）は、上の表の`404`・`409`・`502`を返さない（UUIDの形式でないIDの`422`と、認証の共通エラーは返す）。I-03B #50で確定。
 
 ## 4. AIの構造化結果と画面入力の境界
 
@@ -133,7 +156,7 @@ AIの応答は、フロントエンドがそのまま保存・信用する対象
 - AIの構造化出力を、そのままDB操作・外部API呼び出し・権限判定に使用しない。
 - AIの出力がスキーマ検証を満たさない場合は、クライアントの入力誤り（422）とは区別し、`502`（`AI_OUTPUT_INVALID`）として扱う（3.6・3.7参照）。エラー本文・ログにはAIの出力内容を含めない。I-03Aでは再試行しない。サーバー側で自動的に再試行するか（回数を含む）はI-07 #54で決める。
 - **通常の出力と安全案内の識別（Issue #49で確定）**：AIを呼ぶ場面（相談開始／出来事の対話／感情入力の後／本音・背景・望み）ごとにAI出力Schemaを分け、どの場面でも`kind`（`normal`／`safety`）を必須項目とする。OpenAI系モデルのstrictモードに合わせて全項目を必須とし、使わない項目は`null`にする。`kind`の欠落・想定外の値、`kind`と各項目の不正な組み合わせ（例：`normal`なのに質問が`null`、`safety`なのに通常の項目がある）は検証で拒否し、`502`（`AI_OUTPUT_INVALID`）とする。
-- `kind`はバックエンド内部だけで使い、公開APIのレスポンスには含めない。`kind: safety`を受けた場合、バックエンドは相談内容を一時状態から消去して`status`を`safety_guidance`へ切り替え、4.5の`SafetyGuidance`を返す。**フロントエンドは`status`だけで画面を分岐し、質問文やAI内部の`kind`を解析しない。**
+- `kind`はバックエンド内部だけで使い、公開APIのレスポンスには含めない。`kind: safety`を受けた場合（Q-28の条件を含む。4.5）、バックエンドは相談内容を一時状態から消去して`status`を`safety_guidance`へ切り替え、4.5の`SafetyGuidance`を返す。**フロントエンドは`status`だけで画面を分岐し、質問文やAI内部の`kind`を解析しない。**
 - 本節のモデルは`model_config = ConfigDict(extra="forbid")`を付与し、想定外の項目を拒否する。必須文字列項目には`min_length=1`を付け、空文字での通過を防ぐ。
 - AI出力スキーマ（`*Draft`）も`extra="forbid"`とする。`extra="ignore"`（余計な項目を無視）にすると、AIの構造化出力の想定外の項目を拒否するというリポジトリ共通ルール（AGENTS.md「プロンプトインジェクション・AI出力の扱い」）と矛盾するためである。AIが古い形や余計な項目で出力して検証に失敗する問題は、次の方法で抑える。
   - AIへ渡すJSON Schema・プロンプトを、本資料のAI出力スキーマと同じ内容にする。JSON Schemaでは`additionalProperties: false`を指定する（I-03A（PR #73）の`ai_schemas.py`で対応済み）。
@@ -303,8 +326,52 @@ class SafetyGuidance(BaseModel):
 - Issue #4で使用した`eval/schema-safety.json`は`risk_detected`・`safety_message`・`continued_normal_structuring`の3つを必須項目としているため、`SafetyGuidanceDraft`もこれに合わせて`safety_message`を受け取る（`extra="forbid"`のため、スキーマと項目がずれていると、正常なAI出力でも検証に失敗してしまうことを避ける）。ただし`SafetyGuidanceDraft.safety_message`の値はバックエンドで破棄し、`SafetyGuidance.safety_message`はサーバー側の固定テンプレートへ差し替える。
 - Issue #4の検証で、`risk_detected: true`かつ`continued_normal_structuring: true`という矛盾した組み合わせが実際に発生した。バックエンドで`risk_detected: true`の場合は`continued_normal_structuring`を強制的に`false`へ正規化する。
 - `safety_message`は電話番号等の詳細情報の誤生成を防ぐため、AIの生成文をそのまま使わず、サーバー側で用意した固定テンプレート（相談窓口の案内文言等）から選択して返す。
-- AIを呼ぶAPI（`POST /consultations`（6.2.1）・`event-dialogue`（6.3.1）・`event-summary/confirm`の`ask_more`（6.3.2）・`emotion`（6.3.3）・`guided-dialogue`（6.3.4））は、いずれもAI出力の`kind: safety`（4章冒頭）を受けた場合に`status: safety_guidance`と`safety_guidance`を返す（Issue #49で確定）。
-- I-03Aでは、`kind: safety`を識別して`safety_guidance`へ切り替えるところまでを実装した。`safety_message`の固定文言（現在は仮の定数）、危機の判定方法（Q-09）、安全案内の出力自体が不正な場合に安全側へ倒すか（Q-28。現在は他の不正と同じく`502`）は、I-03B #50で決める。
+- AIを呼ぶAPI（`POST /consultations`（6.2.1）・`event-dialogue`（6.3.1）・`event-summary/confirm`の`ask_more`（6.3.2）・`emotion`（6.3.3）・`guided-dialogue`（6.3.4））は、いずれもAI出力の`kind: safety`（4章冒頭）を受けた場合（Q-28の条件を含む。下の「安全案内の出力が不正な場合」）に`status: safety_guidance`と`safety_guidance`を返す（Issue #49で確定）。
+- 安全案内へ切り替えたら、その相談の内容（入力・AIの出力・整理結果）を一時状態から消去し、サーバーの固定文言だけを返す。フロントは`status: safety_guidance`で画面を切り替え、`DELETE /consultations/{id}`（6.5.3）で相談を終了する。
+
+**危機的内容の検知（Q-09。I-03B #50で決定）**
+
+AIの判定に、サーバー側のキーワード判定を組み合わせる。キーワード判定はAIの判定の見逃しに備えた保険であり、網羅は目指さない。**キーワードに該当しなくても安全とは判断しない。**
+
+| 判定 | 内容 |
+| --- | --- |
+| AIの判定 | AIが`kind: safety`を返した場合（Q-28の条件を含む）に切り替える。対象は自傷・他害・暴力を受けている状況 |
+| キーワード判定 | 利用者の入力に、自傷・自殺の明らかな表現が含まれていれば、AIを呼ばずに切り替える |
+
+キーワード判定をする場面（AIが作った文章は、AIの判定がかかっているため対象にしない）：
+
+| API | 判定する入力 |
+| --- | --- |
+| `POST /consultations`（6.2.1） | 相談本文 |
+| `event-dialogue`（6.3.1） | 回答・訂正 |
+| `emotion`（6.3.3） | 気持ちの具体化 |
+| `guided-dialogue`（6.3.4） | 回答 |
+| `event-summary/confirm`の`proceed`（6.3.2） | 本人が直接編集した要約 |
+| `result/approve`（6.4.3） | `PATCH /result`（6.4.2）で本人が編集した項目（承認の時点の値） |
+
+- キーワードは、自傷・自殺の33語（`backend/app/features/consultations/safety.py`の`CRISIS_KEYWORDS`を正とする）。それだけで危険度が高いと分かる表現に絞り、誇張でもよく使う語（「死ぬ」「消えたい」単体など）は入れない。略語・隠語は意味が確定する形で登録する（例：「タヒ」単体ではなく「タヒにたい」）。
+- 照合の前に、全角・半角、大文字・小文字、ひらがな・カタカナ、空白・記号をそろえる。
+- ひらがなの「しにたい」と「氏にたい」は、直後が「して」「する」の場合は一致としない（「わたしにたいして」「田中氏にたいして」の誤検知を防ぐため）。漢字の「死にたい」は除外しない。
+- 既知の誤検知（安全側として許容する）：否定文・引用・一般的な説明（「死にたいわけではない」など）、「遺書」（ドラマや小説の話）、「練炭」（バーベキュー）、「過剰摂取」（カフェインなど）。
+
+**安全案内の出力が不正な場合（Q-28。I-03B #50で決定）**
+
+| AIの出力 | 扱い |
+| --- | --- |
+| `kind`が`"safety"`（`safety`の中身が壊れていても） | 固定の安全案内を返す |
+| `kind`が`"normal"`でも、`safety.risk_detected`が真偽値の`true`、または大文字・小文字を区別せず`"true"`と完全一致する | 安全側に倒して、固定の安全案内を返す |
+| 上のどちらにも当たらず、Schemaの検証に失敗した | `502`（`AI_OUTPUT_INVALID`）。状態は変えない |
+
+**固定文言（I-03B #50で決定）**
+
+APIの`safety_message`は、次の短い固定文だけを返す（`safety.py`の`SAFETY_MESSAGE`を正とする）。相談窓口の一覧は、画面側（I-04）の固定の定数で、確認日・公式URLとあわせて管理する。
+
+```text
+ここまで話してくれて、ありがとうございます。
+とてもつらい気持ちを抱えているのかもしれません。
+安全のため、ここでの整理はいったん終わりにします。
+ひとりで抱えずに、相談窓口で話を聞いてもらうこともできますよ。
+```
 
 各文字数上限は仮置きであり、画面設計・要件定義の確定後に見直す。**未定**。
 
@@ -446,7 +513,7 @@ response（201・危機的な内容を検知した場合。4.5参照）
   "status": "safety_guidance",
   "safety_guidance": {
     "risk_detected": true,
-    "safety_message": "（サーバー側の固定文言。I-03Bで確定）",
+    "safety_message": "（サーバー側の固定文言。4.5参照）",
     "continued_normal_structuring": false
   }
 }
@@ -454,6 +521,8 @@ response（201・危機的な内容を検知した場合。4.5参照）
 
 - `detail`の文字数上限は2000文字（**仮**。画面設計・要件定義の確定後に見直す）。
 - AIの呼び出しと出力の検証が成功してから一時状態を作る。失敗した場合（`502`・`500`）は相談の一時状態を残さない。
+- 危機的な内容を検知した場合も`201`とする（相談IDを発行し、相談内容を消去した一時状態を残すため。I-03B #50で決定）。`detail`がキーワード判定（4.5）に該当した場合は、AIを呼ばずに安全案内を返す。
+- 開始に成功したら、同じユーザーの既存の相談を破棄する（1ユーザー1件。§2）。開始に失敗した場合は、既存の相談を残す。
 
 利用回数（Issue #57）：開始時に利用回数を判定・加算し、開始に失敗した場合と、開始時に安全案内へ切り替わった場合は加算した1回を戻す。Redis障害時はフェイルオープン（判定せずに開始を許可し、加算しない）。詳細は6.7.3・6.7.4。
 
@@ -461,6 +530,7 @@ response（201・危機的な内容を検知した場合。4.5参照）
 - `401`（`UNAUTHORIZED`） 未ログイン。加算後の状態確認で内部ユーザーが存在しない（退会完了）場合も含む
 - `403`（`USAGE_LIMIT_EXCEEDED`） 利用回数の上限超過。回数を加算せず、AIも呼ばない
 - `403`（`ACCOUNT_DELETING`） 退会処理中
+- `404`（`CONSULTATION_NOT_FOUND`） 開始処理中に、退会処理からユーザー単位の破棄（§2・6.5.4）が呼ばれた。相談は登録しない（AIの応答の成功・失敗にかかわらず同じ。I-03B #50）
 - `409`（`CONSULTATION_BUSY`） 同じユーザーの開始処理中に2つ目の開始が届いた（I-03B #50）。加算した1回は戻す
 - `422`（`VALIDATION_ERROR`） `theme`が許可された値でない、`detail`が空・文字数超過
 - `502`（`AI_UNAVAILABLE`・`AI_OUTPUT_INVALID`） AIの呼び出し失敗・AI出力の検証失敗（3.7参照）。加算した1回は戻す
@@ -538,7 +608,9 @@ response（200・例：`guided_dialogue`状態）
 }
 ```
 
-主なエラー：`401`、`404`（`CONSULTATION_NOT_FOUND`。一時状態が存在しない・消失している・本人所有でない場合。§2参照）。ロックを取らないため、処理中でも`409`（`CONSULTATION_BUSY`）にはならない。
+主なエラー：`401`、`404`（`CONSULTATION_NOT_FOUND`。一時状態が存在しない・消失している・本人所有でない場合。§2参照）、`409`（`CONSULTATION_BUSY`。同じ相談の更新を処理中。処理が終われば`200`に戻る。§2。PR #82で変更）。
+
+処理中に更新前の状態を返すと、画面が「回答は届かなかった」と判断して送り直し、処理が終わった後に古い回答が次の項目へ記録されてしまうため、処理中は`409`とする。画面は`CONSULTATION_BUSY`を受けたら更新のPOSTを送り直さず、GETを再試行する（長引く場合は「現在の状態を確認する」操作を表示する。#51）。
 
 ---
 
@@ -597,7 +669,7 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
   "correction_limit_reached": false
 }
 ```
-訂正回数が上限に達した場合のresponse例（**I-03B #50で実装**。`action: "correct"`のレスポンスとして、`event_dialogue`から`event_summary_ready`へ直接遷移し、要約と編集可能な状態を返す。ワイヤーフレーム画面6-Aの「少し違います」導線はここで終了し、画面6-Bの「要約を直接編集する」導線へ引き継ぐ。訂正上限到達後は追加質問も受け付けないため、`can_ask_more`は`false`を返す）
+訂正回数が上限に達した場合のresponse例（I-03B #50で実装済み。`action: "correct"`のレスポンスとして、`event_dialogue`から`event_summary_ready`へ直接遷移し、要約と編集可能な状態を返す。ワイヤーフレーム画面6-Aの「少し違います」導線はここで終了し、画面6-Bの「要約を直接編集する」導線へ引き継ぐ。訂正上限到達後は追加質問も受け付けないため、`can_ask_more`は`false`を返す）
 ```json
 {
   "status": "event_summary_ready",
@@ -611,13 +683,13 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
   "correction_limit_reached": true
 }
 ```
-危機的な内容を検知した場合のresponse例（4.5のSafetyGuidance。検知ロジックの実装方法は**未定**）
+危機的な内容を検知した場合のresponse例（4.5のSafetyGuidance。回答・訂正がキーワード判定に該当した場合は、AIを呼ばずに返す）
 ```json
 {
   "status": "safety_guidance",
   "safety_guidance": {
     "risk_detected": true,
-    "safety_message": "つらい状況について、専門の相談窓口も案内します……",
+    "safety_message": "（サーバー側の固定文言。4.5参照）",
     "continued_normal_structuring": false
   }
 }
@@ -631,9 +703,20 @@ response（200・訂正後、修正した理解を再提示。`correct`を受け
 
 `answer`・`correction_input`の文字数上限は1000文字（**仮**）。
 
-主なエラー：`401`、`404`（`CONSULTATION_NOT_FOUND`。一時状態が存在しない・消失している・本人所有でない場合。§2参照）、`409`（`CONSULTATION_BUSY`：同じ相談を処理中。`CONSULTATION_STATE_CONFLICT`：`status`が既に`event_dialogue`から遷移済みの状態で本APIを呼び出した場合、`question_count`が3に達している状態で回答を続けようとした場合（I-03B #50で実装）、`correction_count`が上限に達した状態で`correct`を指定した場合（I-03B #50で実装））、`422`（`VALIDATION_ERROR`。`answer`または`correction_input`が空、`action`と合わない項目を指定した、両方またはどちらも指定していない等）、`502`（`AI_UNAVAILABLE`・`AI_OUTPUT_INVALID`。AIの呼び出し失敗・AI出力の検証失敗）
+主なエラー：`401`、`404`（`CONSULTATION_NOT_FOUND`。一時状態が存在しない・消失している・本人所有でない場合。§2参照）、`409`（`CONSULTATION_BUSY`：同じ相談を処理中。`CONSULTATION_STATE_CONFLICT`：`status`が既に`event_dialogue`から遷移済みの状態で本APIを呼び出した場合、`question_count`が3に達している状態で回答を続けようとした場合、`correction_count`が上限に達した状態で`correct`を指定した場合）、`422`（`VALIDATION_ERROR`。`answer`または`correction_input`が空、`action`と合わない項目を指定した、両方またはどちらも指定していない等）、`502`（`AI_UNAVAILABLE`・`AI_OUTPUT_INVALID`。AIの呼び出し失敗・AI出力の検証失敗）
 
-> **I-03B #50への引き継ぎ**：`question_count`・`correction_count`の上限に達したときの強制遷移（訂正上限到達時の`event_summary_ready`への遷移を含む）と上限超過時の`409`は、I-03Bで実装する。I-03A（PR #73）では、状態の不一致による`409`まで実装済み。
+**回数の上限（Q-33。I-03B #50で決定）**
+
+| 項目 | 上限 | 上限に達する回 | 上限を超える操作 |
+| --- | --- | --- | --- |
+| 出来事の回答（`question_count`） | 3回 | AIに「要約する」よう指定し、`event_summary_ready`へ進める（`can_ask_more: false`） | `409`（`CONSULTATION_STATE_CONFLICT`）。AIを呼ばない |
+| 訂正（`correction_count`） | 2回 | AIに「訂正を反映して要約する」よう指定し、`event_summary_ready`へ進める（`correction_limit_reached: true`） | 同上 |
+| 本音・背景・望み（6.3.4） | 3往復 | 3回目の回答で整理完了 | 同上 |
+
+- 上限に達する回に、AIが指定と違う動き（追加の質問など）を返した場合は`502`（`AI_OUTPUT_INVALID`）とし、回数は増やさない。
+- 上限の確認・AIの呼び出し・回数の更新は、すべて相談IDのロックの中で行うため、同時リクエストでも上限を超えない。
+- フロントは`can_ask_more`・`correction_limit_reached`でボタンを出し分けるため、通常の操作では`409`にならない。
+- 成功したAI呼び出しは、1回の相談で最大12回（開始1・出来事の回答と訂正あわせて最大4・追加質問最大3・感情1・本音〜望み3）。3回目の回答または2回目の訂正で要約へ進むため、回答3回と訂正2回を両方使い切ることはない。`502`の後のやり直しは含まない（再試行の扱いはI-07 #54）。
 
 #### 6.3.2 出来事要約の確認・編集（画面6-B）
 
@@ -672,7 +755,20 @@ response（200・ask_moreの場合）
 
 `can_ask_more`はサーバー管理状態であり、`question_count<3`かつ`correction_limit_reached: false`のときだけ`true`とする。フロントエンドは`can_ask_more`の値だけを見て、画面6-Bの「もう少し整理したい」を表示するかを決める。訂正上限到達後は「もう少し整理したい」を表示せず、本人は要約を直接編集して`proceed`で次へ進む。`correction_count`と`correction_limit_reached`は、`ask_more`後のレスポンスにも現在値を含める。
 
-`ask_more`でもAIが`kind: safety`を返した場合は、`status: safety_guidance`と`safety_guidance`を返す（4.5）。`ask_more`に対してAIが追加の質問を返さなかった場合は、AI出力の不正として`502`（`AI_OUTPUT_INVALID`）とし、状態を変えない。`ask_more`の`event_details`の指定は`422`とする。
+`proceed`で本人が直接編集した`event_details`がキーワード判定（4.5）に該当した場合は、AIを呼ばずに安全案内へ切り替え、`200`で`status: safety_guidance`と`safety_guidance`を返す（I-03B #50で決定。AIが作った要約をそのまま進める場合は判定しない）。
+response（200・`proceed`の直接編集で危機的な内容を検知した場合）
+```json
+{
+  "status": "safety_guidance",
+  "safety_guidance": {
+    "risk_detected": true,
+    "safety_message": "（サーバー側の固定文言。4.5参照）",
+    "continued_normal_structuring": false
+  }
+}
+```
+
+`ask_more`でもAIが`kind: safety`を返した場合（Q-28の条件を含む）は、`status: safety_guidance`と`safety_guidance`を返す（4.5）。`ask_more`に対してAIが追加の質問を返さなかった場合は、AI出力の不正として`502`（`AI_OUTPUT_INVALID`）とし、状態を変えない。`ask_more`の`event_details`の指定は`422`とする。
 
 主なエラー：`404`（`CONSULTATION_NOT_FOUND`。一時状態が存在しない・消失している・本人所有でない場合。§2参照）、`409`（`CONSULTATION_BUSY`：同じ相談を処理中。`CONSULTATION_STATE_CONFLICT`：`event_summary_ready`以外の状態で呼び出した場合、`can_ask_more: false`（`question_count`が3に達している、または`correction_count`が上限に達している）の状態で`ask_more`を指定した場合）、`422`（`VALIDATION_ERROR`。文字数超過・必須項目の欠落等の入力値エラー）、`502`（`AI_UNAVAILABLE`・`AI_OUTPUT_INVALID`。`ask_more`でのAIの呼び出し失敗・AI出力の検証失敗）
 
@@ -741,7 +837,7 @@ response（200・次の質問がある場合）
   "status": "safety_guidance",
   "safety_guidance": {
     "risk_detected": true,
-    "safety_message": "（サーバー側の固定文言。I-03Bで確定）",
+    "safety_message": "（サーバー側の固定文言。4.5参照）",
     "continued_normal_structuring": false
   }
 }
@@ -749,7 +845,7 @@ response（200・次の質問がある場合）
 
 - **整理結果の作成**：3問目への回答を処理する呼び出しで、AIが整理結果を作成する。バックエンドは整理結果を検証し、一時状態へ格納してから`result_ready`を返す。画面7は6.4.1で整理結果を取得する。作成・検証に失敗した場合（`502`・`500`）は`guided_dialogue`のまま状態を変えず、同じ回答を再送できる。
 - **AIが指定と違う進め方をした場合**：3問目より前に整理完了を返した、または3問目の後にまだ質問を返した場合は、AI出力の不正として`502`（`AI_OUTPUT_INVALID`）とし、状態を変えない。これにより、`current_topic`とAIの質問の順番が必ず一致する。ただし、AIの質問文が実際にその項目を聞いているかはSchemaでは検証できないため、プロンプトとI-07 #54での実API確認で担保する。
-- **往復回数の上限**：標準の質問数を3問としてサーバーが管理するため、1回の相談で`guided-dialogue`がAIを呼び出す回数は最大3回になる。往復回数の上限を別に設けるか、上限に達したときの扱いはI-03B #50で決める。なお、6.3.1の追加質問は`question_count`（最大3）、訂正は`correction_count`（最大2）、6.3.2の`ask_more`は`question_count<3`かつ`correction_limit_reached: false`のときのみ受け付けるため、それぞれ上限がある。
+- **往復回数の上限**：標準の質問数を3問としてサーバーが管理するため、1回の相談で`guided-dialogue`がAIを呼び出す回数は最大3回になる。往復の上限は3往復で、3回目の回答で整理完了とし、それを超える回答は`409`（`CONSULTATION_STATE_CONFLICT`）とする（Q-33。I-03B #50で決定。6.3.1「回数の上限」）。なお、6.3.1の追加質問は`question_count`（最大3）、訂正は`correction_count`（最大2）、6.3.2の`ask_more`は`question_count<3`かつ`correction_limit_reached: false`のときのみ受け付けるため、それぞれ上限がある。
 
 主なエラー：`404`（`CONSULTATION_NOT_FOUND`。一時状態が存在しない・消失している・本人所有でない場合。§2参照）、`409`（`CONSULTATION_BUSY`：同じ相談を処理中。`CONSULTATION_STATE_CONFLICT`：`guided_dialogue`以外の状態で呼び出した場合）、`422`（`VALIDATION_ERROR`。回答が空・文字数超過、`answer`と`skipped`の指定が不正、背景以外での`skipped: true`）、`502`（`AI_UNAVAILABLE`・`AI_OUTPUT_INVALID`。AIの呼び出し失敗・AI出力の検証失敗・指定と違う進め方）
 
@@ -775,10 +871,11 @@ response（200）
 
 UI-007では`background`（背景）を他の4項目と分けて表示する。背景が分からない場合は空欄とし、AIが推測して補わない（4.3参照）。
 
-取得できる状態（Issue #49で確定）：`result_ready`・`handling_selection`・`save_confirmation`の場合に`200`を返す。承認後（`handling_selection`・`save_confirmation`）は、承認時点で確定した内容を`approved: true`で返す。ロックを取らないため、処理中でも`409`（`CONSULTATION_BUSY`）にはならない。
+取得できる状態（Issue #49で確定）：`result_ready`・`handling_selection`・`save_confirmation`の場合に`200`を返す。承認後（`handling_selection`・`save_confirmation`）は、承認時点で確定した内容を`approved: true`で返す。同じ相談の更新を処理中は`409`（`CONSULTATION_BUSY`）を返し、処理が終われば`200`に戻る（6.2.2と同じ。§2。PR #82で変更）。
 
 主なエラー：
 - `404`（`CONSULTATION_NOT_FOUND`）：一時状態が存在しない・消失している・本人所有でない場合、破棄後（§2参照）
+- `409`（`CONSULTATION_BUSY`）：同じ相談の更新を処理中
 - `409`（`RESULT_NOT_READY`）：整理結果ができる前の状態（`event_dialogue`〜`guided_dialogue`）で取得しようとした場合
 - `409`（`CONSULTATION_STATE_CONFLICT`）：`safety_guidance`の場合（安全案内へ切り替わった相談には整理結果がない）
 
@@ -823,6 +920,19 @@ response（200）
 ```
 
 承認時点の整理結果と承認日時（DB設計の`approved_at`）を、APIプロセスのメモリ上の一時状態に確定させる。承認後の編集は409で拒否するため（6.4.2）、保存時（6.5.2）に保存対象が承認した内容と同じであることをサーバー側で保証できる。承認後、保存APIによる保存前に一時状態が失われた場合は、保存APIを`404`として扱う。保存済みメモがある場合の再試行は、6.5.2のとおり`200`を返す（§2参照）。
+
+承認の時点で、`PATCH /result`（6.4.2）で本人が編集した項目をキーワード判定（4.5）する。該当した場合は**承認せず**、編集内容も含めて整理結果を消去し、安全案内へ切り替える（I-03B #50で決定）。AIが作った項目は判定しない。
+response（200・承認の時点で危機的な内容を検知した場合）
+```json
+{
+  "status": "safety_guidance",
+  "safety_guidance": {
+    "risk_detected": true,
+    "safety_message": "（サーバー側の固定文言。4.5参照）",
+    "continued_normal_structuring": false
+  }
+}
+```
 
 承認は不可逆な操作として扱う。`handling_selection`から`result_ready`へ戻すAPIは提供せず、画面8（扱い方選択）から画面7（整理結果の確認・編集・承認）へ戻る導線はUIとして設けない。画面7では、この操作が承認であること、承認後は編集画面（画面7）へ戻れないことを明示する。
 
@@ -930,7 +1040,9 @@ response（204）：本文なし
 
 主な結果：`204`（認証済みで、本人の一時状態が存在しない・消失している・本人所有でない場合も含め、削除処理を冪等に完了する）
 
-#### 6.5.4 相談機能から保存処理へ公開するService（I-05向けの内部契約）
+- ロックを取らないため、AIの応答待ちなど同じ相談の更新を処理中でも、待たずにすぐ中断できる（`409`にしない）。応答待ちだった処理は、応答後に状態を書き込まず`404`になる（§2。I-03B #50で決定）。
+
+#### 6.5.4 相談機能が公開するService（I-05・F-06向けの内部契約）
 
 保存API（6.5.2）は、相談の一時状態を直接操作せず、相談機能（I-03A）が公開する次のServiceを使う（Issue #49で確定）。HTTPのAPIではなく、バックエンド内部の契約である。正確な型と説明は`backend/app/features/consultations/public.py`を正とし、本資料には要点だけを記載する。
 
@@ -938,9 +1050,10 @@ response（204）：本文なし
 | --- | --- | --- |
 | `get_approved_result(user_id, consultation_id)` | 承認済みの整理結果・`approved_at`（UTC）・`handling`を、書き換えできないコピー（`ApprovedConsultation`）で返す | `ConsultationNotFound`（404）：状態がない・本人のものでない／`ConsultationStateConflict`（409）：未承認・扱い方が未選択 |
 | `discard_consultation(user_id, consultation_id)` | 保存成功後に一時状態を破棄する。状態がない・本人のものでない場合も何もせず終わる（冪等） | なし |
+| `discard_user_consultations(user_id) -> None` | 退会処理（6.9・F-06 #60）から呼び、そのユーザーの一時相談をすべて破棄する。開始処理中の予約も取り消す。対象がない・削除済みの場合も正常に終わり、何度呼んでもよい（I-03B #50で決定） | なし |
 
 - 引数の`user_id`・`consultation_id`は`UUID`とする。`user_id`は認証依存の`current_user.user_id`を使う。
-- どちらの関数も相談IDのロックを取らないため、処理中でも`409`（`CONSULTATION_BUSY`）にならない。`save_confirmation`状態ではAIを呼ぶ処理がなく、状態の更新は途中で待ちが入らずに終わるため、ロックなしでも書き換え途中の状態を読まない。
+- どの関数も相談IDのロックを取らないため、処理中でも`409`（`CONSULTATION_BUSY`）にならない。`save_confirmation`状態ではAIを呼ぶ処理がなく、状態の更新は途中で待ちが入らずに終わるため、ロックなしでも書き換え途中の状態を読まない。
 - 保存APIのRouterに`route_class=ConsultationRoute`を指定すると、上記の例外を3.7と同じ`CONSULTATION_NOT_FOUND`（404）・`CONSULTATION_STATE_CONFLICT`（409）へ変換できる。
 - 保存処理からimportするのは`app.features.consultations.public`だけとする。テストに限り、`ConsultationStore`と`tests/features/consultations/factories.py`の`make_save_confirmation_state`も使える（AIを通さずに`save_confirmation`状態を作るため）。
 
@@ -1336,7 +1449,6 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 
 ## 7. 未確定項目一覧（本資料内の「未定」まとめ）
 
-- **一時状態に関する後続実装Issueでの検討事項**：具体的な保持時間、破棄処理、1ユーザーが同時に保持できる相談数、新しい相談開始時の既存相談の扱い、GETで保持時間を延長するかを、PR #37で整理中の後続実装Issueで検討・決定し、関連Issue・PRへ記録する。現時点の候補は、GETでは延長せず、相談内容を更新する操作が成功したときに最終操作時刻を更新する方式とする。AI呼び出しには`httpx.AsyncClient`を使い、応答待ちで他のリクエストを止めないことをI-03A（Issue #49・PR #73）で確定した。保持時間（TTL）・`DELETE`・ユーザー単位の破棄はI-03B #50で決める。
 - **利用回数（Issue #57で決定済みの事項は6.7）**：残る未定事項は次のとおり
   - 相談開始時にユーザーの状態を取得する関数の配置・DBセッションの扱い（I-01 #47のマージ後に、F-03の後続接続のIssueでもえさんと決める）
   - 上限値の設定とプランの判定を`backend/app/features/plans/`へ移す（#59の決定。F-05のマージ後に、F-03の後続接続のIssueで行う）
@@ -1345,14 +1457,13 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 - ~~決済方式（買い切り型／サブスク型）~~：Issue #59で一回払い（買い切り型）に決定（6.8）。照合（Stripe上のSession一覧の検索）は後続のIssue（#91）で扱う
 - APIバージョニング方式・ページネーション方式の最終採用（ID形式はUUIDで確定。3.3参照）
 - 各文字数上限・保存件数上限の具体的な値（無料プランの相談回数とリセット周期は6.7.1で決定。保存件数の上限の判定は#94で実装済みで、MVPの上限値はPR #90（#57）の設定に従う）
-- 安全案内の固定文言・危機の判定方法（Q-09）、安全案内の出力が不正な場合の扱い（Q-28）（I-03B #50。どのAPIで安全案内を返すかは4.5で確定済み）
+- 危機のキーワード一覧の見直し（I-03B #50で33語に決定。AIの判定の精度をI-07 #54で確認した後に、必要なら見直す）
 - AIモデルの最終選定（`gpt-oss-120b`は暫定候補。危機対応の安全案内の精度向上策は追加検討が必要）
 - メモ暗号化の正式採用方式・鍵管理（`Fernet`は暫定推奨。鍵の保管・更新・漏えい対応は未確定）
 - fastapi-usersを代替案として採用する場合のメール・パスワード認証APIの仕様、メール重複時の409エラー採用可否
 - 退会を開始できない決済・契約状態の判定条件（採用する課金方式に従う）、`payments`の退会時の削除可否
 - 退会処理がFirebase削除後に失敗した場合の検出・再実行の担当と、`users.deletion_requested_at`等の追加要否
 - `stripe_price_id`の管理場所（DB／サーバー設定）（#59。上限値の`null`の意味は6.7.1で決定）
-- 1回の相談でAIを呼び出せる回数の上限と、`question_count`・`correction_count`の上限に達したときの強制遷移・`409`（I-03B #50。`guided-dialogue`は標準3問のサーバー管理で最大3回。6.3.4参照）
 - AI出力の検証失敗（502）時に、サーバー側で自動的に再試行するか（回数を含む）（I-07 #54。I-03Aでは再試行しない）
 - 文字数上限の確定値（相談本文2000文字、回答・訂正1000文字は**仮**。保存時の`reason`500文字は**暫定**（Issue #52で合意））
 - トークンのリフレッシュ方法・有効期限の運用（Firebase Authentication採用は検証済み）
@@ -1375,6 +1486,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 | 2026-10-11 | Issue #57（Redis利用回数制限） | 上限値・リセット、`null`の意味、回数を戻す条件、Redis障害時の動作、`GET /usage`の項目追加、加算後のユーザー状態の確認、退会処理との関係 | 本資料へ反映（3.6・3.7・6.2.1・6.7・6.8.1・6.9・7章）。決定の経緯はIssue #57のコメントに記録 |
 | 2026-10-12 | Issue #59（F-05。実装との照合） | 決済方式（一回払い）、Session作成の流れ・`creating`の扱い（Q-34）、エラーコード（`ALREADY_PAID`・`CHECKOUT_IN_PROGRESS`・`PAYMENT_CONFIRMATION_REQUIRED`・`PLAN_NOT_AVAILABLE`・`PAYMENT_NOT_FOUND`・`PAYMENT_UNAVAILABLE`）、`confirm`の`session_id`省略と`pending`・`expired`、退会時の決済の照合 | 本資料へ反映（1章・6.8・6.8.6〜6.8.8・6.9・7章）。契約は#59でF-04（#58）へ共有済み |
 | 2026-10-13 | Issue #94（保存件数の上限） | 保存API（6.5.2）の上限判定の位置・再試行・一時状態・プランを確認できない場合、`GET /usage`の`memo_count`の数え方 | 本資料へ反映（6.5.2・6.7・7章） |
+| 2026-10-13 | Issue #89（#50・PR #82・#47・PR #87との照合） | I-03B #50の決定事項（危機の検知・判定するAPI・キーワード・不正出力・固定文・開始時の201・回数上限・TTL・1ユーザー1件・応答待ち中の破棄・ユーザー単位の破棄）と決定事項の補足、更新処理中のGETの409、認証の共通エラー（401・403・503と`WWW-Authenticate`）、500の`code` | 本資料へ反映（§2・3.6・3.7・4.5・6.2.1・6.2.2・6.3.1・6.3.2・6.3.4・6.4.1・6.4.3・6.5.3・6.5.4・7章・10章）。#50・PR #82の部分はみほさん、認証の部分はもえさんに確認を依頼 |
 
 講師への確認結果・指摘事項と対応内容は、Issueまたは対応するPull Requestにも記録する。
 
@@ -1422,7 +1534,7 @@ stateDiagram-v2
     event_dialogue --> safety_guidance: event-dialogue（危機検知）
     event_summary_ready --> event_dialogue: confirm（ask_more・can_ask_moreがtrueのときのみ）
     event_summary_ready --> emotion_selection: confirm（proceed）
-    event_summary_ready --> safety_guidance: confirm（ask_more・危機検知）
+    event_summary_ready --> safety_guidance: confirm（ask_more・proceed。危機検知）
     emotion_selection --> guided_dialogue: emotion
     emotion_selection --> safety_guidance: emotion（危機検知）
     guided_dialogue --> guided_dialogue: guided-dialogue（本音・背景の回答後。current_topicが進む）
@@ -1430,6 +1542,7 @@ stateDiagram-v2
     guided_dialogue --> safety_guidance: guided-dialogue（危機検知）
     result_ready --> result_ready: PATCH result（編集）
     result_ready --> handling_selection: result/approve
+    result_ready --> safety_guidance: result/approve（編集した項目で危機検知）
     handling_selection --> save_confirmation: handling
     save_confirmation --> save_confirmation: handling（画面9から画面8へ戻っての選び直し）
     save_confirmation --> [*]: save または DELETE（保存しない）
@@ -1444,4 +1557,4 @@ stateDiagram-v2
 
 `DELETE /consultations/{id}`はどの状態からも呼び出し可能で、一時状態を破棄して終了する（6.5.3参照）。
 
-図の遷移は、いずれもAIの呼び出しと出力の検証が成功した場合だけ起こる。`422`・`500`・`502`では状態を変えない（3.7参照）。
+AIを呼ぶ遷移は、AIの呼び出しと出力の検証が成功した場合だけ起こる（キーワードで検知した場合は、AIを呼ばずに安全案内へ進む）。`422`・`500`・`502`では状態を変えない（3.7参照）。
