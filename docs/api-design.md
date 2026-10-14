@@ -1,7 +1,7 @@
 > **ステータス**：ドラフト（チーム内初稿・講師確認済み・レビュー指摘反映済）
 > **作成日**：2026年9月25日
-> **最終修正日**：2026年10月13日（Issue #89：I-03B #50の決定事項・更新処理中のGETの409（PR #82）・認証の共通エラー（#47）・500の`code`を反映）
-> **関連Issue**：依存 `#2` ／ 参照 `#4`〜`#8`、`#47`、`#49`、`#50`、`#52`、`#57`、`#76`、`#89` ／ 後続 実装Issue、`#13`、`#15`
+> **最終修正日**：2026年10月13日（Issue #89：I-03B #50の決定事項・更新処理中のGETの409（PR #82）・認証の共通エラー（#47）・500の`code`を反映。10月12日：Issue #59：決済方式を一回払いに決定し、決済API（6.8.6〜6.8.8）の契約・エラーコードと退会時の決済の照合（6.9）を反映。10月11日：Issue #52の保存API（6.5.2）・ID形式（3.3）・500の`code`、Issue #57のRedis利用回数制限を反映）
+> **関連Issue**：依存 `#2` ／ 参照 `#4`〜`#8`、`#47`、`#49`、`#50`、`#52`、`#57`、`#59`、`#76`、`#89` ／ 後続 実装Issue、`#13`、`#15`
 　**作成** : じま
 　**確認担当** : みほさん　もえさん
 
@@ -14,8 +14,7 @@
 - 対象は[porori-mvp-wireframes.md](../issue-review/porori-mvp-wireframes.md)の画面1〜13に対応するMVP機能。
 - 技術検証（`#4`〜`#8`）が未確定の項目は「**未定**」と明記する。仮の値・仮の方式で記載している箇所も、確定事項ではない。
 - 本資料は本実装・OpenAPIの完全自動生成・認証方式や課金方式の断定を行わない。
-- 以下の一点は、チームの判断が必要な選択肢として本文中に明記し、**本 PR でチームの意見を仰ぐ**（詳細はPR本文参照）。
-  - 決済方式（買い切り型／サブスク型）（§6.8）
+- 決済方式（買い切り型／サブスク型）は、チームの判断が必要な選択肢として本文中に並記していたが、Issue #59で**一回払い（買い切り型）**に決定した（§6.8）。
 
 ## 2. 前提・保存方針（企画案・要件定義より）
 
@@ -1201,9 +1200,13 @@ response（200）
 
 ---
 
-### 6.8 決済・プラン（画面12）※要チーム判断（PR参照）
+### 6.8 決済・プラン（画面12）
 
-Stripe連携は、買い切り型（Issue #6で検証済み）とサブスク型（未検証・比較のみ）の2案がある。**どちらを採用するかはPR本文でチームに判断を仰ぐ**。以下は両案を並記する。
+Stripe連携は、買い切り型（Issue #6で検証済み）とサブスク型（未検証・比較のみ）の2案を並記していた。Issue #59で、**一回払い（買い切り型）・有料権限は期間による終了なし・解約機能なし**に決定した。MVPで実装するのは6.8.1と6.8.6〜6.8.8で、サブスク案（6.8.2〜6.8.5）は検討の記録として残し、実装しない。
+
+- 価格・利用条件は、Stripeテストモードで決済と権限反映を確認するための暫定の条件とする（テスト用の価格は¥300。本番で販売する場合は販売の前に別途決める）。
+- 金額・通貨はStripe Priceを正とする。Stripe PriceのIDはサーバー設定（環境変数`STRIPE_PRICE_ID_PREMIUM`）で管理し、クライアントから金額・Price IDを受け取らない。
+- 決済のエラーの本文・ログに、秘密鍵・Session ID・URL・Stripeの例外の詳細を含めない（`PAYMENT_CONFIRMATION_REQUIRED`で本人へ返す`session_id`を除く）。
 
 #### 6.8.1 プラン一覧
 
@@ -1278,7 +1281,7 @@ response（200）：受信確認のみ
 
 Webhookで受け取るイベントの種類・失敗時の再試行方針・冪等処理は**未定**（Stripe公式にat-least-once配信であり、同一イベントの二重処理防止が必要）。
 
-#### 6.8.6 Checkout Session作成（買い切り案・Issue #6をもとに拡張）
+#### 6.8.6 Checkout Session作成（一回払い。Issue #6をもとに拡張・#59で確定）
 
 - **POST /api/v1/payments/checkout-session**（認証必要）
 
@@ -1286,27 +1289,69 @@ request
 ```json
 { "plan_code": "premium" }
 ```
+- `plan_code`以外の項目（金額・Price IDなど）は受け付けない（422）。
 
-response（200）
+response（200）：新しく作成した、または支払い前の既存のSession
 ```json
 {
-  "checkout_url": "https://checkout.stripe.com/pay/xxxxx",
+  "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_xxxxx",
   "session_id": "cs_test_xxxxx"
 }
 ```
 
-Session作成時に`client_reference_id`（またはmetadata）へ内部ユーザーIDを埋め込み、6.8.8の`confirm`での所有者検証に使う。
+処理の流れ（Stripeの呼び出し中はDBロックを持たない）：
 
-二重決済防止（Issue #6の申し送り事項）は、以下の手順で行う（**講師指摘反映**：「既に有料プランか」の事前チェックだけでは、同一ユーザーが複数タブ・同時リクエストでSessionを作成した場合を防げない。両方のリクエストが有料プランではないと判定してしまい、それぞれSessionを作成できてしまうため）。
+1. Stripe Priceを取得し、一回払いの有効なPriceか、金額・通貨があるかを確認する（DBロックなし）。
+2. トランザクション1：ユーザー行をロックし、`active`であることを再確認する → 有料の利用権限があれば`409`（`ALREADY_PAID`）→ プランが提供中か確認する → 同じユーザーの未決済の行（`creating`・`pending`）がなければ、`creating`の行を作る。このとき`idempotency_key`と、Stripeへ送る内容（`checkout_request`：Price ID・戻り先URL・`client_reference_id`・metadataの決済ID・有効期限）を1回だけ決めて保存する。有効期限は行の作成時刻から35分（Stripeの最短30分に、送信までの遅れの余裕5分を足す）。
+3. `creating`の行：保存した内容と同じ`idempotency_key`で、StripeにSessionを作成する（DBロックなし）→ トランザクション2：ユーザー行→決済行の順にロックし、`creating`のままならSession IDを保存して`pending`にする。
+4. `pending`の行：Session IDでStripeからSessionを取得する（DBロックなし）。`open`ならそのURLを返す。`expired`なら行を`expired`にして2からやり直す。`complete`（支払い済み）なら新しいSessionは作らず、`409`（`PAYMENT_CONFIRMATION_REQUIRED`）で決済の確認（6.8.8）へ進ませる。Sessionが見つからない場合（Stripeの`resource_missing`）は、作成時と照会時でアカウント・サンドボックス・鍵が違う可能性があり、環境の一致を確認できないため、行を`failed`にせず`pending`のまま残し、新しいSessionも作らずに止める（`409`・`CHECKOUT_IN_PROGRESS`。PR #100のレビュー）。
 
-1. `payments`テーブルの`user_id`に対し、`status`が`creating`または`pending`の未決済行が既に存在する場合は、新規Sessionを作成せず、その既存Session（`checkout_url`・`session_id`）を返す（200）。Stripe側でSessionが期限切れの場合はDB設計側の`expired`更新を経てから新規作成する。
-2. 同時に複数リクエストが届いても1件しか`creating`行を作れないよう、`payments`に「同一`user_id`について`status`が`creating`／`pending`の行は1件まで」という部分ユニーク制約（またはユーザー単位のDBロック）を設け、作成処理をDBトランザクション内で直列化する。制約違反時は新規作成をせず、直後に既存行を再取得して1と同様に返す。
-3. 上記1・2とは別に、既に有料プランの場合は`409`を返し、新たなSessionを作成しない（既存の事前チェックは維持する）。
-4. クライアント都合の再試行（通信エラー時の再送など）は、Stripe APIへの`Idempotency-Key`ヘッダーに`payments.idempotency_key`を指定し、同一リクエストの重複作成を防ぐ。`idempotency_key`はクライアントではなくサーバーが発行・管理する。
+二重決済の防止：
 
-主なエラー：`401`、`409`（既に有料プランの場合）、`422`（`plan_code`不正・提供停止中）、`500`（Stripe API呼び出し失敗）
+- 同じユーザーの未決済の行（`creating`・`pending`）は1件までとし、ユーザー行のロックに加えて、DBの部分UNIQUE索引でも守る（DB設計 payments）。索引の違反は、既存の行を取り直して上の3・4と同じ扱いにする。
+- 再試行は、サーバーが発行した`idempotency_key`をStripeの`Idempotency-Key`として使う。同じキー・同じ内容なら、Stripeは作成済みのSessionを返す。
 
-#### 6.8.7 現在の有料状態（買い切り案）
+`creating`の行の扱い（Q-34。#59で確定）：
+
+- 処理中か停滞しているかを時間で分けず、どちらも保存した内容・同じキーでStripeを呼び直す。最初のリクエストがまだ処理中でStripeが`409`を返した場合は、`409`（`CHECKOUT_IN_PROGRESS`）とする。
+- 通信の失敗・タイムアウトでは行を`failed`にしない（`creating`のまま残し、次のリクエストで同じキーで再試行する。応答は`503`）。
+- 内容の不一致・有効期限の拒否などでSessionを確認できない場合は、時間の経過だけで`expired`・`failed`にせず、新しいSessionも作らずに止める（応答は`409`・`CHECKOUT_IN_PROGRESS`）。止まった行は担当がStripeのダッシュボードで状態を確かめて片付ける（手順は`backend/manual_checks/payments.md`）。Session一覧での照合は後続のIssue（#91）で扱う。
+
+主なエラー：
+
+| ステータス | code | 意味 | 画面ですること（#58） |
+| --- | --- | --- | --- |
+| 401 | `UNAUTHORIZED` | 未ログイン。ロック後の再確認で内部ユーザーがいなかった場合も含む | 共通の扱い |
+| 403 | `ACCOUNT_DELETING` | 退会処理中 | 共通の扱い |
+| 409 | `ALREADY_PAID` | すでに有料 | プランを再取得して表示する |
+| 409 | `CHECKOUT_IN_PROGRESS` | 同じユーザーのSession作成を処理中、または状態不明で止めている | 少し待って再試行してもらう |
+| 409 | `PAYMENT_CONFIRMATION_REQUIRED` | 支払い済みでまだ確認していない。`error`に`session_id`を含める | その`session_id`で決済の確認（6.8.8）へ進む |
+| 422 | `VALIDATION_ERROR` | 本文の形が不正（`plan_code`がない・定義外の項目がある） | エラー表示 |
+| 422 | `PLAN_NOT_AVAILABLE` | 定義外・提供停止中・Price IDが未設定のプラン | エラー表示 |
+| 503 | `PAYMENT_UNAVAILABLE` | Stripeに接続できない | 時間をおいて再試行 |
+| 503 | `DB_UNAVAILABLE` | DBに接続できない | 時間をおいて再試行 |
+| 500 | `INTERNAL_SERVER_ERROR` | Stripe Priceの設定の誤り・Stripeの想定外の応答・DBの失敗など。原因は区別して返さない | 共通の扱い |
+
+`PAYMENT_CONFIRMATION_REQUIRED`のレスポンス例：
+```json
+{
+  "error": {
+    "code": "PAYMENT_CONFIRMATION_REQUIRED",
+    "message": "お支払い済みの決済があります。決済を確認してください。",
+    "session_id": "cs_test_xxxxx"
+  }
+}
+```
+
+`409`を3種類に分けている理由：3つとも「入力は正しいが、今のユーザーの状態と合わないため、新しい決済画面を作れない」場合で、相談APIの`CONSULTATION_BUSY`と同じく`409`にそろえ、画面の動きは`code`で分ける。`CHECKOUT_IN_PROGRESS`に`429`・`503`を使わないのは、それぞれ回数制限・サーバー障害の意味のため。`PAYMENT_CONFIRMATION_REQUIRED`を`200`にしないのは、このAPIの`200`が「`checkout_url`へ移動する」意味のため。
+
+戻り先URL（サーバー設定。`CHECKOUT_SUCCESS_URL`・`CHECKOUT_CANCEL_URL`）：
+
+- 成功：`http://localhost:3000/plan/success?session_id={CHECKOUT_SESSION_ID}`（仮。`{CHECKOUT_SESSION_ID}`はStripeが実際の値に置き換える）
+- キャンセル：`http://localhost:3000/plan`（仮）。キャンセルで戻ったときは、サーバーへ何も送らない（行はSessionの期限切れの後、次の購入時に片付ける）
+- 画面のパスは#58の実装に合わせて設定値で変える。
+
+#### 6.8.7 現在のプラン（一回払い）
 
 - **GET /api/v1/payments/me**（認証必要）
 
@@ -1315,30 +1360,55 @@ response（200）
 { "plan_code": "free" }
 ```
 
-主なエラー：`401`
+- `plan_code`は`free`または`premium`。有効な有料の利用権限（`user_entitlements`）があれば`premium`、行がなければ`free`とする。
+- DBで利用権限を確認できない場合は、無料と推測せず`503`（`DB_UNAVAILABLE`）とする。
+- 判定は、F-03（#57）の`plans/public.py`の`get_current_plan`ができたら差し替え、`GET /usage`（6.7）と同じ判定にする。
 
-#### 6.8.8 決済確認（買い切り案・検証済み。Issue #6）
+主なエラー：`401`、`403`（`ACCOUNT_DELETING`）、`503`（`DB_UNAVAILABLE`）
+
+#### 6.8.8 決済確認（一回払い・検証済み。Issue #6・#59で拡張）
 
 - **POST /api/v1/payments/confirm**（認証必要）
 
-Checkout Session成功後のリダイレクトで受け取った`session_id`を送り、Stripeの`Session.retrieve`で`payment_status`を確認する（Webhookを使わない同期確認方式。Issue #6で検証済み）。同一`session_id`で複数回呼んでも同じ結果（200）を返す冪等な実装とする。二重決済の防止は6.8.6のSession作成時に行うため、このAPIでは409を返さない。
+Checkout Session成功後のリダイレクトで受け取った`session_id`を送り、Stripeの`Session.retrieve`で支払い状態を確認する（Webhookを使わない同期確認方式。Issue #6で検証済み）。同じ`session_id`で何度呼んでも同じ結果を返す。
 
 request
 ```json
 { "session_id": "cs_test_xxxxx" }
 ```
+- `session_id`は省略できる（本文なし・`{}`）。省略した場合は、本人の`pending`の行、なければ「`paid`だが利用権限へ未反映」の行を確認する。`creating`の行は対象にしない（URLがまだユーザーに渡っていないため）。成功画面ではURLの`session_id`を送り、マイページ・プラン画面の「決済を確認する」ボタンでは省略する（ブラウザを閉じた場合の再確認）。
 
 response（200）
 ```json
 { "status": "paid" }
 ```
 
-主なエラー：
-- `401`
-- `404`（`session_id`が存在しない、または`client_reference_id`／metadataのユーザーIDが本人と一致しない。Issue #6では所有者検証が未実装のため本実装で追加する）
-- `500`
+| `status` | 意味 | 画面ですること（#58） |
+| --- | --- | --- |
+| `paid` | 支払いを確認し、有料になった（確認済みのものも同じ） | 成功表示・プランを再取得 |
+| `pending` | まだ支払われていない（行は変えない） | 「決済状態をまだ確認できません」→ UI-012で再確認 |
+| `expired` | Sessionの有効期限が切れていて、支払われていなかった（行を`expired`にする） | 「手続きが完了していません」と表示し、再購入できるようにする |
 
-この方式はWebhookを使わないため、ユーザーが決済成功後`success_url`へ遷移する前に離脱した場合は反映されない制約がある（Issue #6「既知の制約」参照）。
+確認の流れ（Stripeへの照会はDBのトランザクションの外で先に行う）：
+
+1. 確認する行を決める。`paid`かつ利用権限へ反映済みなら、Stripeを呼ばずに`paid`を返す。`paid`だが未反映なら、利用権限の反映だけをやり直す。
+2. Stripeに照会し、本人（`client_reference_id`）・metadataの決済IDが行と一致するか、金額・通貨が購入時に保存した値と一致するかを確認する。
+3. 短いトランザクションで、ユーザー行→決済行の順にロックして再確認し、行を`paid`にする。ユーザーが`active`なら、利用権限の付与（`valid_until`はNULL）と反映日時の記録を同じトランザクションで行う。
+4. 支払った後に退会処理が始まっていた場合は、利用権限を付与せず、`paid`の記録だけを確定してから`403`（`ACCOUNT_DELETING`）を返す。テストモードのため返金の処理は作らない。
+
+主なエラー：
+
+| ステータス | code | 意味 |
+| --- | --- | --- |
+| 401 | `UNAUTHORIZED` | 未ログイン |
+| 403 | `ACCOUNT_DELETING` | 退会処理中（支払いの記録だけ残り、有料にはならない） |
+| 404 | `PAYMENT_NOT_FOUND` | `session_id`の決済がない・本人のものではない・`client_reference_id`やmetadataが一致しない・確認できる決済がない（`creating`・`expired`・`failed`の行を含む）。原因は区別しない |
+| 422 | `VALIDATION_ERROR` | 本文の形が不正（定義外の項目がある等） |
+| 503 | `PAYMENT_UNAVAILABLE` | Stripeに接続できない |
+| 503 | `DB_UNAVAILABLE` | DBに接続できない |
+| 500 | `INTERNAL_SERVER_ERROR` | 金額・通貨が購入時の値と一致しない（`paid`にしない）、Stripeの想定外の応答など |
+
+この方式はWebhookを使わないため、ユーザーが決済成功後に成功画面へ戻らなかった場合は、`session_id`を省略した再確認か、次の購入操作（`PAYMENT_CONFIRMATION_REQUIRED`）で反映する（Issue #6「既知の制約」）。
 
 ---
 
@@ -1357,7 +1427,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 
    決済作成（6.8）・保存（6.5.2）も同じユーザー行をロックしてから状態を確認するため、確認と`deleting`への変更の間に決済作成が割り込むことはない（ロック取得順序を統一する。DB設計側の手順にも同じ順序の反映を依頼する）。
 2. 保存済みメモ（`approved_memos`）を削除する。個人性の高いメモを、外部サービスの処理より先に削除する。
-3. 未完了の決済や継続契約について、採用する課金方式に従って必要なキャンセル・解約・状態照合を行う。
+3. 未完了の決済をStripeと照合して確定する（F-05の`payments/public.py`の`settle_unfinished_payments(user_id)`。#60で合意）。`pending`の行は、`open`のSessionを期限切れにして`expired`、`expired`は`expired`、支払い済みは`paid`の記録だけ残す（利用権限は付与しない）。確認できない場合（Sessionが見つからない場合を含む。行は`failed`にしない）・`creating`が残っている場合・Stripeに接続できない場合は例外で止め、`deleting`のまま再実行で再開する（照会はDBロックの外で行い、未確認のまま`expired`にしない）。
 4. Redisの利用回数キー（`usage_limit:{user_id}`）を削除する（同時に開始された相談との関係は6.7.5参照）。
 5. Firebase側のユーザーを削除する（Admin SDK）。「すでに存在しない」場合も処理済みとして続行する。
 6. `user_entitlements`・`payments`（削除方針の合意が前提）・`users`を物理削除する。
@@ -1374,7 +1444,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 
 主なエラー：
 - `401`
-- `409`（未完了の決済や継続契約があり退会を開始できない場合。判定条件は採用する課金方式に従う。**未定**）
+- `409`（退会を開始できない場合。決済では、Stripeを呼んでいる途中の`creating`の行がある場合（#60で合意）。`pending`の行は`deleting`にしてから手順3で照合する）
 - `500`（途中失敗。`deleting`状態のまま残り、再実行で再開する）
 
 ## 7. 未確定項目一覧（本資料内の「未定」まとめ）
@@ -1384,7 +1454,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
   - 上限値の設定とプランの判定を`backend/app/features/plans/`へ移す（#59の決定。F-05のマージ後に、F-03の後続接続のIssueで行う）
   - 退会後に利用回数のキーが残る可能性を許容するか（6.7.5。チームで確認）
   - テスト設計Q-05を、`DB_UNAVAILABLE`・`AUTH_UNAVAILABLE`（PR #85）を前提に更新する（るなさんと相談）
-- **決済方式（買い切り型／サブスク型）**：チーム判断待ち（PR参照）。買い切り型はIssue #6で検証済み、サブスク型は比較のみで未検証
+- ~~決済方式（買い切り型／サブスク型）~~：Issue #59で一回払い（買い切り型）に決定（6.8）。照合（Stripe上のSession一覧の検索）は後続のIssue（#91）で扱う
 - APIバージョニング方式・ページネーション方式の最終採用（ID形式はUUIDで確定。3.3参照）
 - 各文字数上限・保存件数上限の具体的な値（無料プランの相談回数とリセット周期は6.7.1で決定。保存件数の上限の判定は#94で実装済みで、MVPの上限値はPR #90（#57）の設定に従う）
 - 危機のキーワード一覧の見直し（I-03B #50で33語に決定。AIの判定の精度をI-07 #54で確認した後に、必要なら見直す）
@@ -1414,6 +1484,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 | 2026-10-10 | Issue #52（I-05。PR #74の実装との照合） | 保存API（6.5.2）のリクエスト（本文必須・`reason`暫定500文字）、保存の手順、保存失敗時に一時状態を残すこと、エラーコード（401・403・404・409・422・500）、ID形式（UUID） | 本資料へ反映済み（3.3・3.7・6.5.2・7章）。保存件数の上限（`MEMO_LIMIT_EXCEEDED`は#48で確定）の判定は#94で実装し、上限値はPR #90（#57）の設定に従う。暗号化する中身・鍵管理はチームの確認後 |
 | 2026-10-11 | PR #87（#86）との照合 | 保存APIの500の`code`が、共通の想定外エラーの`INTERNAL_SERVER_ERROR`と異なっていた（`INTERNAL_ERROR`） | 6.5.2の`code`を`INTERNAL_SERVER_ERROR`へそろえた（`message`は保存用の文のまま）。各機能のDB接続障害を503にそろえることは#47（PR #85）で確認済み |
 | 2026-10-11 | Issue #57（Redis利用回数制限） | 上限値・リセット、`null`の意味、回数を戻す条件、Redis障害時の動作、`GET /usage`の項目追加、加算後のユーザー状態の確認、退会処理との関係 | 本資料へ反映（3.6・3.7・6.2.1・6.7・6.8.1・6.9・7章）。決定の経緯はIssue #57のコメントに記録 |
+| 2026-10-12 | Issue #59（F-05。実装との照合） | 決済方式（一回払い）、Session作成の流れ・`creating`の扱い（Q-34）、エラーコード（`ALREADY_PAID`・`CHECKOUT_IN_PROGRESS`・`PAYMENT_CONFIRMATION_REQUIRED`・`PLAN_NOT_AVAILABLE`・`PAYMENT_NOT_FOUND`・`PAYMENT_UNAVAILABLE`）、`confirm`の`session_id`省略と`pending`・`expired`、退会時の決済の照合 | 本資料へ反映（1章・6.8・6.8.6〜6.8.8・6.9・7章）。契約は#59でF-04（#58）へ共有済み |
 | 2026-10-13 | Issue #94（保存件数の上限） | 保存API（6.5.2）の上限判定の位置・再試行・一時状態・プランを確認できない場合、`GET /usage`の`memo_count`の数え方 | 本資料へ反映（6.5.2・6.7・7章） |
 | 2026-10-13 | Issue #89（#50・PR #82・#47・PR #87との照合） | I-03B #50の決定事項（危機の検知・判定するAPI・キーワード・不正出力・固定文・開始時の201・回数上限・TTL・1ユーザー1件・応答待ち中の破棄・ユーザー単位の破棄）と決定事項の補足、更新処理中のGETの409、認証の共通エラー（401・403・503と`WWW-Authenticate`）、500の`code` | 本資料へ反映（§2・3.6・3.7・4.5・6.2.1・6.2.2・6.3.1・6.3.2・6.3.4・6.4.1・6.4.3・6.5.3・6.5.4・7章・10章）。#50・PR #82の部分はみほさん、認証の部分はもえさんに確認を依頼 |
 

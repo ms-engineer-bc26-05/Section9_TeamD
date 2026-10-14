@@ -109,10 +109,11 @@ async def discard_user_consultations(
     - 対象がない・すでに破棄済みの場合も、正常に終了する（何度呼んでも安全）
     - AIの応答待ち中の相談も待たずに破棄し、その処理は応答後に書き込まず404となる
     - 相談の開始処理中だった場合も、AIの応答後に新しい相談を登録しない
+    - 破棄の後に届いた相談開始も受け付けない（予約をとらずに404。#96）
     想定外の失敗が起きた場合の扱い・再試行は、F-06（#60）で決める。
     """
     store = store or get_consultation_store()
-    store.discard_user(user_id)
+    store.discard_withdrawn_user(user_id)
 
 
 class _FrozenApprovableResult(ApprovableResult):

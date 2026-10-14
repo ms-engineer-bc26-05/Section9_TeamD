@@ -9,3 +9,4 @@ pytest-asyncio==0.24.0
 SQLAlchemy[asyncio]==2.0.54
 alembic==1.20.0
 firebase-admin==7.6.0
+stripe==15.6.1
