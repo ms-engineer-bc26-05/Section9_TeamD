@@ -61,6 +61,7 @@ export interface ConsultationFlowActions {
   onBackToNotice: () => void;
   onReturnHomeAfterStateLoss: () => void;
   onReturnHomeAfterUsageLimit: () => void;
+  onReturnHomeFromSafetyGuidance: () => void;
   onOpenPlan: () => void;
   onCancel: () => void;
   onStartConsultation: (request: StartConsultationRequest) => void;
@@ -100,9 +101,16 @@ export function ConsultationFlow({
   const isSubmitting = isConsultationPending(state);
   const isSaveSubmitting = isSubmitting || saveState.isSubmitting;
   const selectedEmotion = state.emotionCategory ?? draft.selectedEmotion;
+  const activeSaveErrorCode = draft.isReselectingHandling
+    ? null
+    : saveState.errorCode;
   const errorMessage = getConsultationErrorMessage(
-    saveState.errorCode ?? (state.status === null ? null : state.errorCode),
+    activeSaveErrorCode ?? (state.status === null ? null : state.errorCode),
   );
+  const safetyErrorMessage =
+    state.status === "safety_guidance"
+      ? getConsultationErrorMessage(state.errorCode)
+      : null;
   const displayedErrorMessage =
     state.status === "safety_guidance"
       ? null
@@ -121,7 +129,7 @@ export function ConsultationFlow({
 
   const handlingSelectionScreen = (
     <HandlingSelectionStep
-      selectedHandling={state.handling}
+      selectedHandling={draft.isReselectingHandling ? null : state.handling}
       isSubmitting={isSubmitting}
       onSelect={actions.onChooseHandling}
       onCancel={actions.onCancel}
@@ -252,8 +260,10 @@ export function ConsultationFlow({
     safety_guidance: (
       <SafetyGuidanceStep
         safetyMessage={state.safetyGuidance?.safety_message ?? null}
+        errorMessage={safetyErrorMessage}
         isSubmitting={state.pendingOperation === "discard"}
         onFinish={actions.onFinishSafetyGuidance}
+        onReturnHome={actions.onReturnHomeFromSafetyGuidance}
       />
     ),
   } satisfies Record<ConsultationScreen, ReactNode>;

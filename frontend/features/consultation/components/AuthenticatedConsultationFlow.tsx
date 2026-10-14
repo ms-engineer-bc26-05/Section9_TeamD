@@ -68,6 +68,7 @@ export function AuthenticatedConsultationFlow({
       onReturnHome={handleReturnHome}
       onOpenPlan={onOpenPlan}
       onSaveRequested={(request) => void handleSaveRequested(request)}
+      onResetSaveState={resetMemoSave}
     />
   );
 }

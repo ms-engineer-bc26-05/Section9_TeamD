@@ -11,14 +11,18 @@ const FALLBACK_SAFETY_MESSAGE =
 
 interface SafetyGuidanceStepProps {
   safetyMessage: string | null;
+  errorMessage: string | null;
   isSubmitting: boolean;
   onFinish: () => void;
+  onReturnHome: () => void;
 }
 
 export function SafetyGuidanceStep({
   safetyMessage,
+  errorMessage,
   isSubmitting,
   onFinish,
+  onReturnHome,
 }: SafetyGuidanceStepProps) {
   const message = safetyMessage?.trim() || FALLBACK_SAFETY_MESSAGE;
 
@@ -85,14 +89,37 @@ export function SafetyGuidanceStep({
           窓口情報は{SAFETY_CONTACTS_VERIFIED_ON}に公式情報を確認しています。
         </p>
 
-        <button
-          className={styles.finishButton}
-          type="button"
-          disabled={isSubmitting}
-          onClick={onFinish}
-        >
-          {isSubmitting ? "終了しています…" : "相談を終了してホームへ戻る"}
-        </button>
+        {errorMessage ? (
+          <p className={styles.errorMessage} role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
+
+        <div className={styles.finishActions}>
+          <button
+            className={styles.finishButton}
+            type="button"
+            disabled={isSubmitting}
+            onClick={onFinish}
+          >
+            {isSubmitting
+              ? "終了しています…"
+              : errorMessage
+                ? "もう一度終了する"
+                : "相談を終了してホームへ戻る"}
+          </button>
+
+          {errorMessage ? (
+            <button
+              className={styles.returnHomeButton}
+              type="button"
+              disabled={isSubmitting}
+              onClick={onReturnHome}
+            >
+              ホームへ戻る
+            </button>
+          ) : null}
+        </div>
 
         {isSubmitting ? (
           <p className={styles.loadingMessage} role="status">

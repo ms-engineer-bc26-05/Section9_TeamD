@@ -30,6 +30,8 @@ const IDLE_SAVE_STATE: ConsultationSaveState = {
   errorCode: null,
 };
 
+const NOOP = () => {};
+
 interface ConsultationFlowContainerProps {
   api: ConsultationApi;
   limits: ConsultationFlowLimits;
@@ -38,6 +40,7 @@ interface ConsultationFlowContainerProps {
   onReturnHome: () => void;
   onOpenPlan: () => void;
   onSaveRequested: (request: ConsultationSaveRequest) => void;
+  onResetSaveState?: () => void;
 }
 
 /**
@@ -52,6 +55,7 @@ export function ConsultationFlowContainer({
   onReturnHome,
   onOpenPlan,
   onSaveRequested,
+  onResetSaveState = NOOP,
 }: ConsultationFlowContainerProps) {
   const controller = useConsultationSessionController(api);
   const [selectedEmotion, setSelectedEmotion] =
@@ -155,6 +159,11 @@ export function ConsultationFlowContainer({
     });
   }
 
+  function handleReturnToHandlingSelection() {
+    onResetSaveState();
+    setIsReselectingHandling(true);
+  }
+
   return (
     <ConsultationFlow
       state={controller.state}
@@ -171,6 +180,7 @@ export function ConsultationFlowContainer({
         onBackToNotice: handleBackToNotice,
         onReturnHomeAfterStateLoss: handleReturnHome,
         onReturnHomeAfterUsageLimit: handleReturnHome,
+        onReturnHomeFromSafetyGuidance: handleReturnHome,
         onOpenPlan,
         onCancel: () => void discardAndReturnHome(),
         onStartConsultation: (request) =>
@@ -194,7 +204,7 @@ export function ConsultationFlowContainer({
         onCheckCurrentState: () => void controller.checkCurrentState(),
         onChooseHandling: (handling) => void handleChooseHandling(handling),
         onSaveReasonChange: setSaveReason,
-        onReturnToHandlingSelection: () => setIsReselectingHandling(true),
+        onReturnToHandlingSelection: handleReturnToHandlingSelection,
         onSave: handleSave,
         onFinishWithoutSaving: () => void discardAndReturnHome(),
         onFinishSafetyGuidance: () => void discardAndReturnHome(),

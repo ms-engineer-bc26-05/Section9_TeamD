@@ -106,7 +106,8 @@
 .emergencyLink:focus-visible,
 .contactLink:focus-visible,
 .secondaryLink:focus-visible,
-.finishButton:focus-visible {
+.finishButton:focus-visible,
+.returnHomeButton:focus-visible {
   outline: 3px solid #493e38;
   outline-offset: 3px;
 }
@@ -147,18 +148,44 @@
   line-height: 1.6;
 }
 
-.finishButton {
+.errorMessage {
+  padding: 14px 16px;
+  margin: 28px 0 0;
+  color: #7c382f;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  background: #f7e4df;
+  border: 1px solid #d98978;
+  border-radius: 12px;
+}
+
+.finishActions {
+  display: grid;
+  gap: 12px;
+  margin-top: 36px;
+}
+
+.finishButton,
+.returnHomeButton {
   width: 100%;
   min-height: 58px;
   padding: 10px 20px;
-  margin-top: 36px;
-  color: #ffffff;
-  background: #d98978;
-  border: 2px solid #d98978;
   border-radius: 16px;
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+.finishButton {
+  color: #ffffff;
+  background: #d98978;
+  border: 2px solid #d98978;
+}
+
+.returnHomeButton {
+  color: #493e38;
+  background: transparent;
+  border: 2px solid #a69b93;
 }
 
 .finishButton:hover:not(:disabled) {
@@ -166,7 +193,12 @@
   border-color: #c96f60;
 }
 
-.finishButton:disabled {
+.returnHomeButton:hover:not(:disabled) {
+  background: #fffdfc;
+}
+
+.finishButton:disabled,
+.returnHomeButton:disabled {
   color: #81766f;
   cursor: not-allowed;
   background: #e5ded7;
