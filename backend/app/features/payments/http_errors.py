@@ -47,9 +47,6 @@ _COMMON_ERRORS = (
 )
 
 _ERRORS: dict[type[Exception], tuple[int, str, str]] = {
-    # ロック後の再確認（認証後に内部ユーザーが削除された・退会処理が始まった）。I-01と同じcode
-    UserNotFound: (401, "UNAUTHORIZED", "ログインしてください。"),
-    UserNotActive: (403, "ACCOUNT_DELETING", "退会処理中のため利用できません。"),
     PlanNotAvailable: (422, "PLAN_NOT_AVAILABLE", "このプランは現在購入できません。"),
     AlreadyPaid: (409, "ALREADY_PAID", "すでに有料プランをご利用中です。"),
     # 状態不明の creating で止めた場合も、画面では同じ扱い（少し待って再試行）にする（#59）
@@ -107,6 +104,12 @@ class PaymentRoute(APIRoute):
             except (RequestValidationError, HTTPException, *_COMMON_ERRORS):
                 # 422・400、認証の401・403・503は共通のエラーハンドラ（app.core.errors）で変換する
                 raise
+            except UserNotFound:
+                # ロック後の再確認（認証後に内部ユーザーが削除された・退会処理が始まった）。
+                # I-01の例外へ変換し、文言・WWW-Authenticate ヘッダーも共通のエラーハンドラにそろえる
+                raise AuthenticationRequiredError from None
+            except UserNotActive:
+                raise AccountDeletingError from None
             except Exception as exc:
                 return payment_error_response(exc)
 

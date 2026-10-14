@@ -9,6 +9,7 @@
      → トランザクション2：ユーザー行 → 決済行の順にロックし、creating のままならSession IDを保存して pending にする
   4. pending の行：Session IDでStripeからSessionを取得する（DBロックなし）
      open → そのURLを返す／expired → 行を expired にして2からやり直す／complete → 決済の確認へ進んでもらう
+     Sessionが見つからない → pending のまま止める（CheckoutNeedsReview。PR #100のレビュー）
 
 creating の扱い（Q-34・#59の結論）：
   - 処理中か停滞しているかをタイムアウトで分けず、どちらも保存した送信内容・同じ idempotency key でStripeを呼び直す
@@ -229,31 +230,29 @@ class CheckoutService:
         try:
             session = await self._stripe.retrieve_checkout_session(session_id)
         except StripeSessionNotFound:
-            # Stripe側にSessionがない（テストモードのデータ削除など）。この行では続けられない
-            logger.warning("checkout payment marked failed: session not found")
-            await self._mark(user_id, payment, "pending", "failed")
-            return None
+            # 作成時と照会時でアカウント・サンドボックス・鍵が違うと、支払い済みのSessionでも見つからない。
+            # 環境の一致を確認できないため、failed にせず・新しいSessionも作らずに止める（PR #100のレビュー）
+            logger.warning(
+                "checkout payment needs review: payment_id=%s reason=session_not_found",
+                payment.id,
+            )
+            raise CheckoutNeedsReview from None
 
         if session.status == "open" and session.url is not None:
             return CheckoutStarted(session_id=session.id, checkout_url=session.url)
         if session.status == "expired":
-            await self._mark(user_id, payment, "pending", "expired")
+            await self._mark_expired(user_id, payment)
             return None
         if session.status == "complete":
             # 新しいSessionは作らない。画面から決済の確認へ進んでもらう
             raise PaymentConfirmationRequired(session.id)
         raise UnexpectedSessionState("想定外のSessionの状態です")
 
-    async def _mark(
-        self, user_id: UUID, payment: StoredPayment, expected: str, new_status: str
-    ) -> None:
-        """行がまだ expected の状態のときだけ new_status に変える（別のリクエストが進めていたら何もしない）"""
+    async def _mark_expired(self, user_id: UUID, payment: StoredPayment) -> None:
+        """行がまだ pending のときだけ expired に変える（別のリクエストが進めていたら何もしない）"""
         async with self._repository.transaction() as tx:
             await tx.lock_user(user_id, require_active=False)
             current = await tx.lock_payment(payment.id)
-            if current is None or current.status != expected:
+            if current is None or current.status != "pending":
                 return
-            if new_status == "expired":
-                await tx.mark_expired(payment.id, self._now())
-            else:
-                await tx.mark_failed(payment.id)
+            await tx.mark_expired(payment.id, self._now())

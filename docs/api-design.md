@@ -1191,7 +1191,7 @@ response（200）：新しく作成した、または支払い前の既存のSes
 1. Stripe Priceを取得し、一回払いの有効なPriceか、金額・通貨があるかを確認する（DBロックなし）。
 2. トランザクション1：ユーザー行をロックし、`active`であることを再確認する → 有料の利用権限があれば`409`（`ALREADY_PAID`）→ プランが提供中か確認する → 同じユーザーの未決済の行（`creating`・`pending`）がなければ、`creating`の行を作る。このとき`idempotency_key`と、Stripeへ送る内容（`checkout_request`：Price ID・戻り先URL・`client_reference_id`・metadataの決済ID・有効期限）を1回だけ決めて保存する。有効期限は行の作成時刻から35分（Stripeの最短30分に、送信までの遅れの余裕5分を足す）。
 3. `creating`の行：保存した内容と同じ`idempotency_key`で、StripeにSessionを作成する（DBロックなし）→ トランザクション2：ユーザー行→決済行の順にロックし、`creating`のままならSession IDを保存して`pending`にする。
-4. `pending`の行：Session IDでStripeからSessionを取得する（DBロックなし）。`open`ならそのURLを返す。`expired`なら行を`expired`にして2からやり直す。`complete`（支払い済み）なら新しいSessionは作らず、`409`（`PAYMENT_CONFIRMATION_REQUIRED`）で決済の確認（6.8.8）へ進ませる。
+4. `pending`の行：Session IDでStripeからSessionを取得する（DBロックなし）。`open`ならそのURLを返す。`expired`なら行を`expired`にして2からやり直す。`complete`（支払い済み）なら新しいSessionは作らず、`409`（`PAYMENT_CONFIRMATION_REQUIRED`）で決済の確認（6.8.8）へ進ませる。Sessionが見つからない場合（Stripeの`resource_missing`）は、作成時と照会時でアカウント・サンドボックス・鍵が違う可能性があり、環境の一致を確認できないため、行を`failed`にせず`pending`のまま残し、新しいSessionも作らずに止める（`409`・`CHECKOUT_IN_PROGRESS`。PR #100のレビュー）。
 
 二重決済の防止：
 
@@ -1314,7 +1314,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 
    決済作成（6.8）・保存（6.5.2）も同じユーザー行をロックしてから状態を確認するため、確認と`deleting`への変更の間に決済作成が割り込むことはない（ロック取得順序を統一する。DB設計側の手順にも同じ順序の反映を依頼する）。
 2. 保存済みメモ（`approved_memos`）を削除する。個人性の高いメモを、外部サービスの処理より先に削除する。
-3. 未完了の決済をStripeと照合して確定する（F-05の`payments/public.py`の`settle_unfinished_payments(user_id)`。#60で合意）。`pending`の行は、`open`のSessionを期限切れにして`expired`、`expired`は`expired`、支払い済みは`paid`の記録だけ残す（利用権限は付与しない）。確認できない場合・`creating`が残っている場合・Stripeに接続できない場合は例外で止め、`deleting`のまま再実行で再開する（照会はDBロックの外で行い、未確認のまま`expired`にしない）。
+3. 未完了の決済をStripeと照合して確定する（F-05の`payments/public.py`の`settle_unfinished_payments(user_id)`。#60で合意）。`pending`の行は、`open`のSessionを期限切れにして`expired`、`expired`は`expired`、支払い済みは`paid`の記録だけ残す（利用権限は付与しない）。確認できない場合（Sessionが見つからない場合を含む。行は`failed`にしない）・`creating`が残っている場合・Stripeに接続できない場合は例外で止め、`deleting`のまま再実行で再開する（照会はDBロックの外で行い、未確認のまま`expired`にしない）。
 4. Redisの利用回数キー（`usage_limit:{user_id}`）を削除する（同時に開始された相談との関係は6.7.5参照）。
 5. Firebase側のユーザーを削除する（Admin SDK）。「すでに存在しない」場合も処理済みとして続行する。
 6. `user_entitlements`・`payments`（削除方針の合意が前提）・`users`を物理削除する。

@@ -173,6 +173,8 @@ def test_deleted_user_is_401(client, repo):
 
     assert response.status_code == 401
     assert error_of(response)["code"] == "UNAUTHORIZED"
+    # 共通のエラーハンドラの401と同じく、WWW-Authenticate ヘッダーを付ける
+    assert response.headers["WWW-Authenticate"] == "Bearer"
 
 
 def test_invalid_price_is_fixed_500(client, stripe):

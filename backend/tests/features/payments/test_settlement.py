@@ -110,13 +110,30 @@ async def test_paid_session_is_recorded_without_entitlement(settlement, repo, st
     assert USER_A not in repo.entitlements
 
 
-async def test_missing_session_is_marked_failed(settlement, repo, stripe):
+async def test_missing_session_blocks(settlement, repo, stripe):
     session_id = await start_pending(repo, stripe)
     del stripe.sessions[session_id]
 
-    await settlement.settle_unfinished_payments(USER_A)
+    with pytest.raises(PaymentSettlementBlocked):
+        await settlement.settle_unfinished_payments(USER_A)
 
-    assert row_of(repo, session_id).status == "failed"
+    # 見つからないだけでは failed にせず、退会を止める（PR #100のレビュー）
+    assert row_of(repo, session_id).status == "pending"
+
+
+async def test_session_in_other_environment_blocks(settlement, repo, stripe):
+    session_id = await start_pending(repo, stripe)
+    stripe.pay(session_id)
+
+    # 作成時と別のアカウント・サンドボックスの鍵で照会すると、支払い済みでも見つからない
+    other_settlement = PaymentSettlementService(repo, FakeStripe(), now=lambda: NOW)
+    with pytest.raises(PaymentSettlementBlocked):
+        await other_settlement.settle_unfinished_payments(USER_A)
+    assert row_of(repo, session_id).status == "pending"
+
+    # 元の環境に戻すと、支払い済みの記録が残る
+    await settlement.settle_unfinished_payments(USER_A)
+    assert row_of(repo, session_id).status == "paid"
 
 
 # --- 期限切れにできない場合 ---------------------------------------------------------

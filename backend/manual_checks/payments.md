@@ -1,6 +1,6 @@
-# 決済：止まった`creating`の行の片付け方（F-05 #59）
+# 決済：止まった`creating`・`pending`の行の片付け方（F-05 #59）
 
-Checkout Sessionの作成で、Stripe側に作成されたかどうかを確認できなくなった決済の行（`payments.status = 'creating'`）を、手作業で片付ける手順。
+Checkout Sessionの作成で、Stripe側に作成されたかどうかを確認できなくなった決済の行（`payments.status = 'creating'`）と、保存したSession IDのSessionがStripeで見つからない行（`pending`）を、手作業で片付ける手順。
 Stripe上のSession一覧を検索して自動で照合する処理は、後続のIssue（#91）で扱う（#59で合意）。それまではこの手順で対応する。
 
 - 担当：じま（F-05）。不在のときは、チームで担当を相談する
@@ -14,6 +14,7 @@ Stripe上のSession一覧を検索して自動で照合する処理は、後続�
 
 - 同じキーで送った内容が前回と違うとStripeが返した（`StripeIdempotencyMismatch`）
 - Sessionの有効期限（`expires_at`）をStripeが受け付けなかった（`StripeExpiresAtRejected`）
+- `pending`の行のSession IDで照会したら、Stripeが見つからないと返した（`resource_missing`。行は`pending`のまま。PR #100のレビュー）。作成時と別のアカウント・サンドボックスの鍵で照会している場合も、支払い済みのSessionが見つからなくなるため、`failed`にせず止める
 
 止まっている間、次のようになる。
 
@@ -29,6 +30,8 @@ Stripe上のSession一覧を検索して自動で照合する処理は、後続�
 ```
 checkout payment needs review: payment_id=<決済ID> reason=<例外の種類>
 payment settlement blocked: payment_id=<決済ID> reason=creating
+checkout payment needs review: payment_id=<決済ID> reason=session_not_found
+payment settlement blocked: payment_id=<決済ID> reason=session_not_found
 ```
 
 DBで行を確認する（開発環境の例。サービス名は実際の構成に読み替える）。
@@ -37,7 +40,7 @@ DBで行を確認する（開発環境の例。サービス名は実際の構成
 docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
 SELECT id, status, created_at, checkout_request->>'expires_at' AS expires_at
 FROM payments
-WHERE status = 'creating'
+WHERE status IN ('creating', 'pending')
 ORDER BY created_at;
 SQL
 ```
@@ -77,3 +80,22 @@ COMMIT;
 
 - 行が`creating`でなくなれば、購入ボタン・退会の再実行は通常どおり進む
 - 片付けた結果（決済ID・どの場合だったか・日時）は、照合の後続Issue（#91）にコメントする
+
+## 5. Sessionが見つからない`pending`の行（`reason=session_not_found`）
+
+行にはSession IDが保存されている。見つからない原因は、多くの場合、作成時と照会時の環境の違い（アカウント・サンドボックス・鍵）なので、まず環境を確かめる。
+
+1. バックエンドの`STRIPE_SECRET_KEY`が、行を作ったときと同じアカウント・サンドボックスの鍵かを確かめる（鍵の値は貼らず、ダッシュボードで鍵の末尾・サンドボックス名を見比べる）
+2. 鍵が違っていた場合は、**行は直さず**、鍵の設定を元に戻す。元の鍵で照会できれば、購入ボタン・決済の確認・退会の再実行が通常どおり進む
+3. 鍵が同じ場合は、そのアカウント・サンドボックスのダッシュボードで、行の`created_at`の前後のCheckout Sessionからmetadataの`payment_id`が決済IDと一致するものを探す（Session IDを貼らない）
+4. 見つからず、`expires_at`を過ぎていて、同じ時間帯にこのユーザーの支払いもないことを確かめられた場合だけ`failed`にする。確かめられない場合は`pending`のまま残して、チームに相談する
+
+```sql
+BEGIN;
+UPDATE payments SET status = 'failed' WHERE id = '<決済ID>' AND status = 'pending';
+-- 「UPDATE 1」と表示されたら COMMIT、それ以外なら ROLLBACK
+COMMIT;
+```
+
+- 行が`pending`でなくなれば、購入ボタン・退会の再実行は通常どおり進む
+- 片付けた結果は、1〜4章と同じく#91にコメントする

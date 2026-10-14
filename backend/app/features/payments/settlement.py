@@ -10,6 +10,7 @@
                  それでも確認できなければ PaymentSettlementBlocked（未確認のまま expired にしない）
       expired  → expired にする
       complete → 支払い済みなら paid の記録だけを残す（利用権限は付与しない。決済の確認の退会処理中と同じ）
+      見つからない → PaymentSettlementBlocked（環境の違いの可能性があるため、failed にしない。PR #100のレビュー）
   - Stripeに接続できない場合は StripeUnavailable をそのまま送出する（deleting のまま残し、再実行で再開）
   - 再実行しても安全。未完了の行がなければ何もしない
 
@@ -80,10 +81,12 @@ class PaymentSettlementService:
         try:
             session = await self._stripe.retrieve_checkout_session(session_id)
         except StripeSessionNotFound:
-            # 保存したIDのSessionがStripeにない（テストモードのデータ削除など）。Session作成と同じ扱い
-            logger.warning("payment settlement marked failed: session not found")
-            await self._mark(user_id, payment, "failed")
-            return
+            # 作成時と照会時でアカウント・サンドボックス・鍵が違うと、支払い済みのSessionでも見つからない。
+            # 環境の一致を確認できないため、failed にせず退会を止める（Session作成と同じ扱い。PR #100のレビュー）
+            logger.warning(
+                "payment settlement blocked: payment_id=%s reason=session_not_found", payment.id
+            )
+            raise PaymentSettlementBlocked from None
         self._check_owner(user_id, payment, session)
 
         if session.status == "open":
@@ -142,7 +145,5 @@ class PaymentSettlementService:
                 return
             if new_status == "paid":
                 await tx.mark_paid(current.id, now)
-            elif new_status == "expired":
-                await tx.mark_expired(current.id, now)
             else:
-                await tx.mark_failed(current.id)
+                await tx.mark_expired(current.id, now)

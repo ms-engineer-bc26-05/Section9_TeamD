@@ -216,15 +216,37 @@ async def test_completed_session_requires_confirmation(service, repo, stripe):
     assert row.status == "pending"
 
 
-async def test_missing_session_is_replaced(service, repo, stripe):
-    old_session_id = await start_pending(service, stripe)
-    del stripe.sessions[old_session_id]
+async def test_missing_session_stops_without_new_session(service, repo, stripe):
+    session_id = await start_pending(service, stripe)
+    del stripe.sessions[session_id]
 
-    started = await service.create_checkout(USER_A, "premium")
+    with pytest.raises(CheckoutNeedsReview):
+        await service.create_checkout(USER_A, "premium")
 
-    old_row, new_row = rows_of(repo)
-    assert old_row.status == "failed"
-    assert new_row.stripe_checkout_session_id == started.session_id
+    # 見つからないだけでは failed にせず、新しい行・Sessionも作らない（PR #100のレビュー）
+    [row] = rows_of(repo)
+    assert row.status == "pending"
+    assert row.stripe_checkout_session_id == session_id
+    assert len(stripe.create_calls) == 1
+
+
+async def test_session_in_other_environment_is_kept(service, repo, stripe):
+    session_id = await start_pending(service, stripe)
+    stripe.pay(session_id)
+
+    # 作成時と別のアカウント・サンドボックスの鍵で照会すると、支払い済みでも見つからない
+    other_stripe = FakeStripe()
+    with pytest.raises(CheckoutNeedsReview):
+        await CheckoutService(repo, other_stripe, SETTINGS).create_checkout(USER_A, "premium")
+
+    [row] = rows_of(repo)
+    assert row.status == "pending"
+    assert other_stripe.create_calls == []
+
+    # 元の環境に戻すと、支払い済みのSessionの確認へ進める
+    with pytest.raises(PaymentConfirmationRequired) as exc_info:
+        await service.create_checkout(USER_A, "premium")
+    assert exc_info.value.session_id == session_id
 
 
 # --- creating の行がある（Q-34の案） ---------------------------------------------
