@@ -12,8 +12,10 @@ from starlette.exceptions import HTTPException
 
 from app.core.errors import INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
 from app.core.exceptions import (
-    AccountDeletingError, AuthenticationRequiredError,
-    AuthServiceUnavailableError, DatabaseUnavailableError,
+    AccountDeletingError,
+    AuthenticationRequiredError,
+    AuthServiceUnavailableError,
+    DatabaseUnavailableError,
 )
 from app.features.memos.read_cursor import InvalidMemoCursor
 from app.features.memos.read_service import MemoNotFound

@@ -7,10 +7,9 @@ from cryptography.fernet import Fernet
 
 from app.features.memos.payload import decrypt_memo
 from app.features.memos.read_cursor import MemoCursor, decode_cursor
+from app.features.memos.read_repository import MemoReadRepository, OwnedMemo
 from app.features.memos.read_schemas import MemoDetailResponse, MemoListItem, MemoListResponse
 from app.features.memos.repository import StoredMemo
-
-from app.features.memos.read_repository import MemoReadRepository, OwnedMemo
 
 
 class MemoNotFound(Exception):

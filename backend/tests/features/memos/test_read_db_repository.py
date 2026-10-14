@@ -15,7 +15,7 @@ from app.core.database import make_database_url
 from app.features.memos.models import ApprovedMemo
 from app.features.memos.read_cursor import MemoCursor
 from app.features.memos.read_db_repository import SqlAlchemyMemoReadRepository
-from app.features.memos.read_service import MemoReadService, MemoNotFound, delete_memo
+from app.features.memos.read_service import MemoNotFound, MemoReadService, delete_memo
 from app.features.users.models import User
 from tests.features.memos.test_read_router import make_row
 
@@ -79,6 +79,29 @@ async def test_database_pagination_orders_ties_and_excludes_other_owner(database
     await repo.delete_owned(owner, first[-1].id)
     second = await repo.list_owned(owner, cursor, 10)
     assert [row.id for row in second] == [row.id for row in expected[10:]]
+
+
+async def test_database_pagination_across_different_timestamps(database):
+    engine, factory, (owner, other) = database
+    cipher = Fernet(Fernet.generate_key())
+    now = datetime.now(UTC)
+    rows = [
+        make_row(cipher, user_id=owner, created_at=now - timedelta(minutes=index // 4))
+        for index in range(23)
+    ]
+    await seed(factory, list(reversed(rows)))
+    service = MemoReadService(SqlAlchemyMemoReadRepository(factory), cipher)
+    expected = sorted(rows, key=lambda row: (row.created_at, row.id), reverse=True)
+
+    first = await service.list(owner, None)
+    second = await service.list(owner, first.next_cursor)
+    third = await service.list(owner, second.next_cursor)
+
+    assert [len(page.memos) for page in (first, second, third)] == [10, 10, 3]
+    assert [memo.memo_id for page in (first, second, third) for memo in page.memos] == [
+        row.id for row in expected
+    ]
+    assert third.next_cursor is None
 
 
 async def test_delete_failure_rolls_back_and_retry_succeeds(database):

@@ -7,7 +7,6 @@ import pytest
 from app.features.memos.read_repository import MemoReadRepository
 from app.features.memos.read_service import MemoNotFound, delete_memo, get_owned_memo
 
-
 USER_ID = UUID(int=1)
 OTHER_USER_ID = UUID(int=2)
 MEMO_ID = UUID(int=3)

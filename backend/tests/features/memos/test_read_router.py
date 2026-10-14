@@ -14,8 +14,10 @@ from fastapi.testclient import TestClient
 
 from app.core.errors import register_exception_handlers
 from app.core.exceptions import (
-    AccountDeletingError, AuthenticationRequiredError,
-    AuthServiceUnavailableError, DatabaseUnavailableError,
+    AccountDeletingError,
+    AuthenticationRequiredError,
+    AuthServiceUnavailableError,
+    DatabaseUnavailableError,
 )
 from app.features.auth.dependencies import get_current_user
 from app.features.memos.crypto import encrypt_payload
@@ -153,7 +155,18 @@ def test_invalid_cursor_is_safe_422(setup, cursor):
     app, client, repo, cipher = setup
     response = client.get(BASE, params={"cursor": cursor})
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    expected_reason = (
+        "文字数が上限を超えています。"
+        if len(cursor) > 512
+        else "入力値が正しくありません。"
+    )
+    assert response.json() == {
+        "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "入力内容を確認してください。",
+            "details": [{"field": "cursor", "reason": expected_reason}],
+        }
+    }
     assert repo.list_calls == []
 
 
