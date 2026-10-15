@@ -28,6 +28,20 @@ async def get_user_by_firebase_uid(
     return result.scalar_one_or_none()
 
 
+async def get_user_status(
+    session: AsyncSession,
+    user_id: UUID,
+) -> str | None:
+    """内部ユーザーの状態（'active' / 'deleting'）を返す。存在しなければ None。
+
+    状態の取得だけを行う。セッションの終了・commitは呼び出し元で行う。
+    利用回数制限（#92）で、相談開始の回数を加算した後の再確認に使う。
+    """
+    statement = select(User.status).where(User.id == user_id)
+    result = await session.execute(statement)
+    return result.scalar_one_or_none()
+
+
 async def get_or_create_user(
     session: AsyncSession,
     firebase_uid: str,
