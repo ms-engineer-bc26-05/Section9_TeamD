@@ -17,11 +17,15 @@
   応答後に相談が残っているかを確認し直し、残っていなければ書き込まずに404とする
 - 破棄は、その相談の登録を外すだけで、相談の中身には触れない。ロック中の例外で中身を
   控えへ戻しても（ST-19）、登録には戻らないため、破棄した相談は復活しない
+- 退会処理の破棄（discard_withdrawn_user）では、そのユーザーを記録し、以後の相談開始を拒否する。
+  破棄の後に予約を取られて相談が登録されるのを防ぐため（#96）。
+  新しい相談の登録時の破棄（discard_user）では記録しない
 
 相談の開始（I-03Bで決定）：
 - 開始はAIの応答後に登録するため、ユーザー単位で「開始処理中」の予約を持つ
 - 開始処理中に同じユーザーから2つ目の開始が届いたら ConsultationBusy（409。二重送信の扱い）
 - 開始処理中にユーザー単位の破棄（退会）が呼ばれたら予約を取り消し、AIの応答後も登録しない
+- 退会処理で破棄したユーザーからの開始は、予約をとらずに ConsultationNotFound（404）とする（#96）
 """
 
 from collections.abc import AsyncIterator, Iterator
@@ -73,10 +77,20 @@ class ConsultationStore:
         self._states: dict[UUID, ConsultationState] = {}
         # 相談の開始処理中のユーザーと、その予約
         self._starting: dict[UUID, StartReservation] = {}
+        # 退会処理で破棄したユーザー。以後の相談開始を受け付けない
+        # （usersは物理削除され、UUIDは再利用されないため、記録は消さない）
+        self._withdrawn_users: set[UUID] = set()
 
     @contextmanager
     def reserve_start(self, user_id: UUID) -> Iterator[StartReservation]:
-        """相談の開始処理中の予約をとる。同じユーザーが開始処理中なら ConsultationBusy"""
+        """相談の開始処理中の予約をとる。
+
+        - 退会処理で破棄したユーザーなら ConsultationNotFound
+          （開始処理中に予約を取り消された場合と同じ扱い）
+        - 同じユーザーが開始処理中なら ConsultationBusy
+        """
+        if user_id in self._withdrawn_users:
+            raise ConsultationNotFound
         if user_id in self._starting:
             raise ConsultationBusy
         reservation = StartReservation(self, user_id)
@@ -143,12 +157,23 @@ class ConsultationStore:
     def discard_user(self, user_id: UUID) -> None:
         """そのユーザーの一時状態をすべて破棄し、開始処理中の予約も取り消す。
 
+        新しい相談の登録時（replace_user_consultations）にも呼ぶため、ユーザーの記録はしない。
         対象がない・すでに破棄済みの場合も、正常に終了する（冪等）。
         """
         self._starting.pop(user_id, None)
         for consultation_id, state in list(self._states.items()):
             if state.user_id == user_id:
                 del self._states[consultation_id]
+
+    def discard_withdrawn_user(self, user_id: UUID) -> None:
+        """退会処理（F-06）用。そのユーザーを記録したうえで、一時状態と開始処理中の予約を破棄する。
+
+        記録したユーザーからの相談開始は、以後 reserve_start で拒否する（#96）。
+        新しい相談の登録時の破棄（replace_user_consultations）では呼ばない。
+        対象がない・すでに破棄済みの場合も、正常に終了する（冪等）。
+        """
+        self._withdrawn_users.add(user_id)
+        self.discard_user(user_id)
 
     def exists(self, user_id: UUID, consultation_id: UUID) -> bool:
         return self._find(user_id, consultation_id) is not None

@@ -9,6 +9,8 @@ from alembic import context
 from app.core import config as app_config
 from app.core.database import Base, make_database_url
 from app.features.users.models import User
+from app.features.memos.models import ApprovedMemo
+from app.features.payments.models import PaymentRow, PlanRow, UserEntitlementRow
 
 
 # this is the Alembic Config object, which provides

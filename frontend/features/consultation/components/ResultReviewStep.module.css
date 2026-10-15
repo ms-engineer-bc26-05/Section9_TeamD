@@ -1,0 +1,246 @@
+.page {
+  min-height: 100dvh;
+  padding: 24px 16px 40px;
+  color: #493e38;
+  background: #f7f3ee;
+}
+
+.panel {
+  width: min(100%, 430px);
+  margin: 0 auto;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: center;
+  min-height: 48px;
+}
+
+.headerSpacer {
+  width: 56px;
+}
+
+.headerTitle {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cancelButton {
+  min-width: 56px;
+  min-height: 44px;
+  padding: 0;
+  color: #81766f;
+  font: inherit;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.cancelButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.helpText {
+  margin: 12px 0 20px;
+  color: #81766f;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.resultList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resultCard {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  min-height: 108px;
+  overflow: hidden;
+  background: #fffdfc;
+  border: 1px solid #d8d0c8;
+  border-radius: 18px;
+}
+
+.fieldLabel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.warmCard .fieldLabel {
+  background: #f2ddd6;
+}
+
+.greenCard .fieldLabel {
+  background: #e3e7d8;
+}
+
+.inputArea {
+  display: flex;
+  min-width: 0;
+  padding: 12px 14px 9px;
+  flex-direction: column;
+}
+
+.textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 58px;
+  padding: 0;
+  color: #493e38;
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  resize: vertical;
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.textarea:focus-visible {
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px rgb(217 137 120 / 28%);
+}
+
+.textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.textarea[aria-invalid="true"] {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #b94d45;
+}
+
+.inputMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  color: #81766f;
+  font-size: 0.6875rem;
+}
+
+.editLabel {
+  font-weight: 600;
+}
+
+.characterCount {
+  font-variant-numeric: tabular-nums;
+}
+
+.errorMessage {
+  margin: 0 8px;
+  color: #a33e37;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.primaryButton {
+  width: 100%;
+  min-height: 58px;
+  padding: 14px 20px;
+  color: #fff;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  background: #d98978;
+  border: 0;
+  border-radius: 16px;
+  box-shadow: 0 8px 18px rgb(165 102 89 / 18%);
+  cursor: pointer;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #cf7c6b;
+}
+
+.primaryButton:focus-visible,
+.cancelButton:focus-visible {
+  outline: 3px solid rgb(118 91 79 / 35%);
+  outline-offset: 3px;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.notices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #81766f;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.notices p {
+  margin: 0;
+}
+
+.importantNotice {
+  font-size: 0.6875rem;
+}
+
+.loadingMessage {
+  margin: -8px 0 0;
+  color: #81766f;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.supportText {
+  margin: 40px 0 0;
+  color: #81766f;
+  font-size: 0.6875rem;
+  text-align: center;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (min-width: 640px) {
+  .page {
+    padding-top: 36px;
+  }
+
+  .panel {
+    padding: 0 20px 28px;
+  }
+}
