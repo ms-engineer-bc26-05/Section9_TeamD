@@ -2,16 +2,18 @@
 
 from fastapi import APIRouter, Depends, Response
 from fastapi.security import HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_session
 from app.core.exceptions import AuthenticationRequiredError
 from app.features.auth.dependencies import bearer, get_current_user
-from app.features.auth.schemas import CurrentUser
 from app.features.auth.service import register_or_get_user
 from app.features.users.deletion_http import DeletionRoute
 from app.features.users.deletion_service import delete_account, get_deletion_service
 from app.features.users.schemas import UserNoticeUpdate, UserResponse
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_session
+from app.features.auth.schemas import CurrentUser
 from app.features.users.service import update_user_notice
 
 router = APIRouter(prefix="/users", tags=["users"])

@@ -1,86 +1,139 @@
-# Issue #60: account deletion and recovery
+# Issue #60：退会処理と手動復旧
 
-## Implementation plan for Issue discussion
+## 排他と認証の方針
 
-The proposed UID-scoped lock is shared by initial registration and deletion.
-It covers Firebase revalidation and all deletion steps, but does not hold a DB
-transaction during external calls. Registration revalidates after acquiring the
-lock, so a registration delayed until after deletion cannot recreate the user.
-Normal API authentication is unchanged. Initial registration now verifies twice;
-external verification budgets must include these calls.
+初回登録と退会はFirebase UID単位のロックを共有する。
+ロックは再検証から処理完了まで保持するが、外部通信中にDBトランザクションは保持しない。
+退会後に遅れて進んだ初回登録も、ロック取得後の再検証で拒否する。通常APIの認証は変更しない。
 
-This plan still needs to be posted to Issue #60 before formal review. No external
-verification or Firebase permission changes have been performed by this work.
+初回登録・退会とも、1回目は`check_revoked=False`で署名・有効期限等を検証し、
+ロックのキーとなるUIDを得る。2回目はロック取得後に`check_revoked=True`で
+失効・無効化等を確認する。1回目の成功だけではDB処理へ進まない。
+同じトークンの検証結果のUIDが異なる場合も拒否する。
+証明書取得・SDK再試行もあるため、検証回数とHTTP送信回数は同じとは限らない。
+外部検証の上限には実際の送信試行を含める。
 
-## Order and public behavior
+具体的な排他方法と変更範囲は#60にも共有し、正式レビューで確認する。
+今回の修正による実接続・Firebase権限変更は行っていない。
 
-1. Authenticate the caller, acquire the UID lock, and revalidate.
-2. Lock the users row. A creating payment blocks with 409 without changing active.
-   Otherwise commit deleting. A previous deleting state is resumable.
-3. Delete owned memos and commit, then discard owned consultations.
-4. Settle payments using payments/public.py. A blocked settlement returns 409
-   and leaves deleting. Connection failures return 503; other failures return 500.
-5. Delete Redis usage, then delete the Firebase user (absence is success).
-6. Delete Redis usage again BEFORE removing the recovery anchor in users.
-7. Lock the user, recheck there are no creating/pending payments, then delete
-   entitlements, payments, and users in one transaction. Return bodyless 204 only
-   after commit. Never infer successful deletion from 401.
+## 処理順序と公開APIの動作
 
-Concurrent DELETE returns ACCOUNT_DELETION_IN_PROGRESS only while another DELETE
-is executing. A failed request releases the lock and can be retried. If Firebase
-is already removed, the API can return 401 and manual recovery is required.
+1. 本人のトークンを検証し、UIDロックを取得して再検証する。
+2. users行をロックする。creatingの決済があればactiveのまま409で停止する。
+   それ以外はdeletingを確定する。前回失敗で残ったdeletingは再実行できる。
+3. 本人のメモを削除・確定し、一時相談を破棄する。
+4. `payments/public.py`で決済を照合する。決済状態による停止は409、
+   接続障害は503、その他の失敗は500とし、deletingを残す。
+5. Redisキーを削除し、Firebaseユーザーを削除する。不在は成功扱いとする。
+6. 復旧の手掛かりとなるusers行を消す前に、Redisキーを再削除する。
+7. ユーザー行をロックし、creating・pendingがないことを再確認する。
+   利用権限・決済記録・usersを同一トランザクションで削除し、
+   commit成功後だけ204・本文なしを返す。
 
-## Recovery runbook
+`ACCOUNT_DELETION_IN_PROGRESS`は別のDELETEが実行中の場合だけ返す。
+失敗した処理はロックを解放する。ただしFirebase削除済みでは401となり得るため、
+本人によるAPI再実行ではなく手動復旧が必要になる。401を退会完了とは扱わない。
+500ログには例外種別だけを記録し、例外本文・トレースバック・ID・トークンは出さない。
 
-Owner: Moe (#60); reviewer: Jima. This is NOT a bulk deletion tool.
+## 手動復旧の手順
 
-- Obtain human approval for the exact environment and one synthetic account.
-- Stop ALL API processes and other account-writing jobs before recovery. The
-  process-local lock does not coordinate a separate command or multiple replicas.
-- Verify target DB, Redis, Firebase project, and the application's Stripe sandbox
-  configuration against the approved environment. Do not display credentials.
-- Use separately approved credentials with Firebase user read/delete permissions.
-  Never reuse or recreate the removed Issue #47 key without new approval.
-- Plan and approve external request counts, deadline, cost ceiling, and stop
-  conditions in the Issue before executing. This command does not enforce a
-  request/cost budget and is NOT approved for live execution by unit tests.
-- Run `python -m manual_checks.recover_account --approved --api-stopped
-  --project <approved-project-id>` with the project's configured runtime.
-  Enter only the approved internal UUID in the hidden prompt.
-- It requires a deleting DB row AND a confirmed absent Firebase user. A network
-  or permissions error is never treated as absence. It repeats the mandatory
-  cleanup, including payment settlement and final Redis deletion.
-- On STOP, retain deleting, investigate without printing data, and seek approval
-  before another run. On PASS, restart the API after confirming the outcome.
+担当：もえ（#60）。確認担当：じまさん。一括削除ツールではない。
 
-## Constraints and handoff
+- 対象環境と架空の1アカウントを特定し、人間の承認を得る。
+- すべてのAPIプロセスと、アカウントを書き換える関連ジョブを停止する。
+  プロセス内ロックでは別コマンド・複数インスタンスとの排他はできない。
+- DB・Redis・Firebaseプロジェクト・Stripeテスト環境が承認対象と一致することを確認する。
+  認証情報の値は表示しない。
+- Firebaseユーザーの取得・削除権限を持つ、別途承認された認証情報を使う。
+  削除済みの#47の鍵を、新たな承認なしに再利用・再発行しない。
+- 外部リクエスト数・時間・費用上限・停止条件をIssueへ記録し、実行前に承認を得る。
+  このコマンド自体にはリクエスト数・費用の上限制御がない。
+  単体テストの成功は実環境での復旧実行の承認ではない。
+- プロジェクトの実行環境で次のコマンドを使う。承認前は実行しない。
 
-- Single API process/event loop only (current run.py workers=1). No multi-instance
-  guarantee. Review this design before changing deployment topology.
-- Redis keys recreated by a concurrent usage request can remain if its own
-  cleanup fails. They contain internal user ID in the key, count and period only,
-  and expire within USAGE_PERIOD_SECONDS from recreation (default 30 days).
-  Mandatory deletion failures never produce 204.
-- Router registration in main.py remains #53 responsibility; the users router
-  already has /users prefix. Frontend handling and resume flow belong to #61.
-- Shared API/DB/test design documents are not edited until ownership/order is
-  agreed. New Redis error code USAGE_UNAVAILABLE is a proposal for review.
-- Firebase live calls, Stripe live calls, frontend integration, operational
-  recovery and production deployment are unverified. Recovery flags are operator
-  acknowledgements, not proof that the API is stopped.
+```bash
+python -m manual_checks.recover_account --approved --api-stopped --project <approved-project-id>
+```
 
-## Local verification (2026-10-14)
+- 確認時に`RECOVER`を入力し、続く非表示入力には承認された内部ユーザーUUIDだけを入力する。
+- DBがdeletingで、Firebaseユーザーの不在を明示確認してから進む。
+  通信障害・権限不足を不在扱いにしない。決済照合・最終Redis削除を含む必須処理を再実行する。
+- `STOP`ではdeletingを残し、データを出力せず調査し、再実行の承認を得る。
+  `PASS`では結果を確認したうえでAPIを再開する。
+- 決済行の手動整理が必要な場合はじまさんへ相談し、[payments.md](payments.md)に従う。
+  確認できない決済を推測で変更しない。
 
-- `python -m pytest -q -p no:cacheprovider`: 830 passed, 21 skipped,
-  14 deprecation warnings. RUN_DB_TESTS=1 used a disposable PostgreSQL 17
-  container on an internal-only network, with no published ports.
-- The 21 skipped tests require Redis. Firebase and Stripe were mocked; no
-  credentials or real account data were used.
-- Deletion DB cases cover owner isolation, creating/pending barriers, rollback,
-  recovery, and an HTTP-to-DB deletion with external dependencies replaced.
-- Concurrency tests cover delayed registration, overlapping DELETE, cancellation
-  and lock release. Failure tests confirm that required cleanup cannot be skipped.
-- Ruff 0.16.10 with the fetched PR #81 configuration: lint and format checks pass
-  for the 12 changed Python files. No project dependencies were changed.
-- Container/frontend builds and live services were not tested. The recovery
-  service is tested, but the operator CLI has not been exercised against services.
+## 制約と引き継ぎ
+
+- 単一APIプロセス・単一イベントループ限定（現在の`run.py`はworkers=1）。
+  複数インスタンスへの変更前に排他方法を見直す。
+- 同じUIDの初回登録は、退会がロックを解放するまで待機する。
+  外部サービスが遅い場合、初回登録の応答も遅れる。
+- 並行処理で再作成されたRedisキーの後始末も失敗した場合、内部ユーザーIDを含むキー・
+  回数・期間IDが残る可能性がある。再作成から`USAGE_PERIOD_SECONDS`内（既定30日）で失効する。
+  必須の削除に失敗した場合は204を返さない。
+- 退会にはRedisの設定・接続が必要。`REDIS_URL`未設定では削除処理が
+  `UsageStoreUnavailable`となり、503 `USAGE_UNAVAILABLE`で停止する。
+  利用回数判定のフェイルオープンを退会時の削除へ適用しない。
+- `main.py`へのRouter登録は#53。users Routerには`/users`のprefixがある。
+  画面の動作・再開導線は#61へ引き継ぐ。
+- API・DB・テスト設計書は担当・編集順を合意してから更新する。
+  PR #101ではじまさんからAPI設計書6.9等を#54の反映と合わせて10/16〜17頃に更新する申し出がある。
+  担当・順番の返答と記録を残し、このPRでは共有設計書を変更しない。
+- Firebase・Stripe・Redisの実接続、フロント結合、復旧コマンドの実運用、本番配置は未確認。
+  復旧フラグは実施者の確認表明であり、API停止を自動検証するものではない。
+
+## レビュー修正後のローカル確認（2026-10-15、未コミット）
+
+- 既存Dockerイメージに不足していたStripe SDK 15.6.1を、承認済みの一時ディレクトリへ
+  `pip install --no-cache-dir --no-deps --target ... stripe==15.6.1`で導入した。
+  リポジトリの依存設定・ロックファイルは変更していない。
+- 外部通信なし（`--network none`）、読み取り専用、書き込み可能な`/tmp`のコンテナで
+  `python -m pytest -q -rs -p no:cacheprovider`を実行した。
+  結果は819 passed、42 skipped、非推奨警告14件。
+  スキップは実DB用21件・Redis用21件。この時点ではDB・Redis未接続。
+- 初回検証は`check_revoked=False`、ロック取得後は`True`であること、どちらの検証で
+  認証障害が起きてもDB処理に進まないこと、ロック取得後のUID不一致拒否を確認した。
+  想定外エラーのログは例外型名のみとし、例外本文・トークンを含まないことを確認した。
+- 初回の対象テストでは、旧検証フラグを期待する既存HTTPテストが1件失敗した。
+  初回・ロック取得後の両方を検査するテストへ更新し、上記全体テストで成功を確認した。
+- Ruff 0.16.10・取得済みPR #81設定で変更Pythonファイル8件を検査した。
+  Lintは5件成功、`auth/service.py`・`users/router.py`・`users/test_router.py`に
+  既存のimport順の指摘（I001）が各1件残る。3件とも取得済みdevelopの元ファイルでも再現した。
+  Formatterは6件成功、`auth/service.py`・`users/test_router.py`に既存整形の指摘が残る。
+  無関係な一括整形を避けるレビュー方針に従い維持しているため、全件成功とは扱わない。
+- `git diff --check`は成功。コンテナ・フロントビルド、外部サービス実接続、
+  復旧CLIの実運用は未実施。共有設計書は変更していない。
+
+### 一時PostgreSQL・Redisでの追加確認（2026-10-15）
+
+- 人間の承認後、今回専用の内部ネットワークにPostgreSQL 17とRedis 7を起動した。
+  ホストへポート公開せず、PostgreSQLのデータはtmpfs、Redisは永続化なし。
+  共有DB・実データ・Firebase・Stripeには接続していない。
+- 空の一時DBに`python -m alembic upgrade head`を実行し、既存3マイグレーションが成功。
+- `RUN_DB_TESTS=1`・`REQUIRE_REDIS_TESTS=true`と専用接続先を指定して
+  `python -m pytest -q -rs -p no:cacheprovider`を実行した。
+  **862 passed、スキップなし、非推奨警告14件**。
+- `test_deletion_db.py`にHTTPから実DB・実Redisまでの結合テストを1件追加した。
+  本人のキーの初回削除、Firebase削除を模した処理中に再作成したキーの再削除、
+  他人のキー・内部ユーザーを残すこと、本人のDB削除確定後の204・本文なしを確認した。
+  Firebase認証・削除、決済照合、一時相談破棄はこのテストでは模擬処理。
+- 追加テストファイルのLint・Formatterは成功。既存整形を維持するファイルの指摘は上記のとおり。
+- 検証後、一時コンテナ2個と専用ネットワークを削除し、コンテナが残っていないことを確認した。
+  一時Stripe SDK・Ruff環境は残している。依存設定・ロックファイルは変更していない。
+
+## 過去のローカル確認（2026-10-14、ddf445b）
+
+以下はレビュー修正前の記録であり、今回の修正後の確認結果とは区別する。
+
+- `python -m pytest -q -p no:cacheprovider`：830 passed、21 skipped、非推奨警告14件。
+  `RUN_DB_TESTS=1`で一時PostgreSQL 17を使用。専用の内部ネットワークでポート公開なし。
+- スキップ21件はRedis接続が必要なテスト。Firebase・Stripeは模擬処理。
+  認証情報・実アカウントデータは使用していない。
+- 退会DBテストでは所有者分離、creating・pending時の停止、rollback、復旧、
+  外部サービスを差し替えたHTTPからDBまでの削除を確認した。
+- 遅延した初回登録、並行DELETE、キャンセル、ロック解放、必須処理の失敗時の停止を確認した。
+- Ruff 0.16.10と取得済みPR #81の設定で変更Pythonファイル12件のLint・Formatterが成功。
+  依存設定は変更していない。
+- コンテナ・フロントビルドと実接続は未実施。復旧サービスはテストしたが、
+  運用CLIを実サービスへ接続して実行していない。

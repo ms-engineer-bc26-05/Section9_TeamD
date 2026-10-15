@@ -1,6 +1,6 @@
 """認証処理のテスト。Firebase・DBへは接続しない。"""
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 from uuid import uuid4
 
 import pytest
@@ -191,11 +191,10 @@ async def test_register_or_get_user_returns_user_and_commits(monkeypatch, is_new
     }
     assert created is is_new
     assert verify.await_count == 2
-    verify.assert_awaited_with(
-        service.verify_token,
-        "dummy-token",
-        check_revoked=True,
-    )
+    assert verify.await_args_list == [
+        call(service.verify_token, "dummy-token", check_revoked=False),
+        call(service.verify_token, "dummy-token", check_revoked=True),
+    ]
     factory.assert_called_once_with()
     session.begin.assert_called_once_with()
     transaction.__aenter__.assert_awaited_once()
@@ -293,8 +292,11 @@ async def test_register_or_get_user_commit_failure_does_not_return_success(
         (AuthServiceUnavailableError("Dummy secret"), service.AuthServiceUnavailableError),
     ],
 )
-async def test_register_verification_failure_does_not_open_db(monkeypatch, error, expected_error):
-    verify = AsyncMock(side_effect=error)
+@pytest.mark.parametrize("stage", [0, 1])
+async def test_register_verification_failure_does_not_open_db(
+    monkeypatch, error, expected_error, stage
+):
+    verify = AsyncMock(side_effect=["dummy-firebase-uid"] * stage + [error])
     factory = Mock()
     get_or_create = AsyncMock()
 
@@ -305,10 +307,12 @@ async def test_register_verification_failure_does_not_open_db(monkeypatch, error
     with pytest.raises(expected_error) as caught:
         await service.register_or_get_user("dummy-token")
 
-    verify.assert_awaited_once_with(
-        service.verify_token,
-        "dummy-token",
-        check_revoked=True,
+    assert (
+        verify.await_args_list
+        == [
+            call(service.verify_token, "dummy-token", check_revoked=False),
+            call(service.verify_token, "dummy-token", check_revoked=True),
+        ][: stage + 1]
     )
     factory.assert_not_called()
     get_or_create.assert_not_awaited()

@@ -4,8 +4,20 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.integrations.firebase import deletion
+from app.features.users.deletion_service import verify_deletion_token
+from app.integrations.firebase import client, deletion
 from app.integrations.firebase.client import AuthServiceUnavailableError
+
+
+@pytest.mark.parametrize("check_revoked", [False, True])
+async def test_deletion_verifier_passes_revocation_flag(monkeypatch, check_revoked):
+    verify = Mock(return_value="synthetic-uid")
+    monkeypatch.setattr(client, "verify_token", verify)
+    assert (
+        await verify_deletion_token("synthetic-token", check_revoked=check_revoked)
+        == "synthetic-uid"
+    )
+    verify.assert_called_once_with("synthetic-token", check_revoked=check_revoked)
 
 
 @pytest.mark.parametrize("operation", ["delete_user", "user_is_absent"])

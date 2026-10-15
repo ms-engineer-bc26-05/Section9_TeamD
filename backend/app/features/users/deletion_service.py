@@ -28,10 +28,10 @@ class DeletionService:
         self.verify = verify
 
     async def delete(self, token):
-        uid = await self.verify(token)
+        uid = await self.verify(token, check_revoked=False)
         async with lifecycle_lock(uid, deletion=True):
             # Recheck after waiting for registration or other lifecycle work.
-            if await self.verify(token) != uid:
+            if await self.verify(token, check_revoked=True) != uid:
                 raise AuthenticationRequiredError
             await self._run(uid)
 
@@ -53,9 +53,9 @@ class DeletionService:
         await self.repository.finish(user_id)
 
 
-async def verify_deletion_token(token):
+async def verify_deletion_token(token, *, check_revoked=True):
     try:
-        return await to_thread(client.verify_token, token, check_revoked=True)
+        return await to_thread(client.verify_token, token, check_revoked=check_revoked)
     except client.InvalidTokenError:
         raise AuthenticationRequiredError from None
     except client.AuthServiceUnavailableError:

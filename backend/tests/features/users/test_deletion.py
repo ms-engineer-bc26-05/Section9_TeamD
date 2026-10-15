@@ -1,7 +1,7 @@
 """Synthetic deletion tests; no external services or shared database."""
 
 import asyncio
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 from uuid import uuid4
 
 import pytest
@@ -57,6 +57,10 @@ def setup():
 async def test_order_and_success(setup):
     service, events = setup
     await service.delete("synthetic-token")
+    assert service.verify.await_args_list == [
+        call("synthetic-token", check_revoked=False),
+        call("synthetic-token", check_revoked=True),
+    ]
     assert events == [
         "verify",
         "verify",
@@ -98,6 +102,32 @@ async def test_final_redis_failure_never_finishes(setup):
     service.repository.finish.assert_not_awaited()
 
 
+@pytest.mark.parametrize("stage", [0, 1])
+@pytest.mark.parametrize("error", [AuthenticationRequiredError, AuthServiceUnavailableError])
+async def test_verification_failure_never_starts_deletion(setup, stage, error):
+    service, _ = setup
+    service.verify.side_effect = ["synthetic-uid"] * stage + [error()]
+    with pytest.raises(error):
+        await service.delete("synthetic-token")
+    assert (
+        service.verify.await_args_list
+        == [
+            call("synthetic-token", check_revoked=False),
+            call("synthetic-token", check_revoked=True),
+        ][: stage + 1]
+    )
+    service.repository.begin.assert_not_awaited()
+    service.remove_firebase.assert_not_awaited()
+
+
+async def test_changed_uid_after_lock_never_starts_deletion(setup):
+    service, _ = setup
+    service.verify.side_effect = ["synthetic-uid", "synthetic-other"]
+    with pytest.raises(AuthenticationRequiredError):
+        await service.delete("synthetic-token")
+    service.repository.begin.assert_not_awaited()
+
+
 async def test_parallel_delete_rejected_and_lock_released(setup):
     service, _ = setup
     entered, release = asyncio.Event(), asyncio.Event()
@@ -120,12 +150,11 @@ async def test_parallel_delete_rejected_and_lock_released(setup):
 
 async def test_delayed_registration_revalidates_before_db(monkeypatch):
     verified = asyncio.Event()
-    calls = 0
+    checks = []
 
     async def verify(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
+        checks.append(kwargs["check_revoked"])
+        if len(checks) == 1:
             verified.set()
             return "synthetic-uid"
         raise InvalidTokenError
@@ -138,7 +167,7 @@ async def test_delayed_registration_revalidates_before_db(monkeypatch):
         await verified.wait()
     with pytest.raises(AuthenticationRequiredError):
         await task
-    assert calls == 2
+    assert checks == [False, True]
     factory.assert_not_called()
 
 
@@ -226,6 +255,12 @@ def test_http_errors_are_fixed(error, status, code, caplog):
     assert response.json()["error"]["code"] == code
     assert "synthetic-secret" not in response.text + caplog.text
     assert "synthetic-token" not in response.text + caplog.text
+    if status == 500:
+        records = [r for r in caplog.records if r.name.endswith("deletion_http")]
+        assert len(records) == 1
+        assert records[0].getMessage() == "account deletion failed: RuntimeError"
+        assert records[0].exc_info is None
+        assert "RuntimeError" not in response.text
     if status == 401:
         assert response.headers["www-authenticate"] == "Bearer"
 

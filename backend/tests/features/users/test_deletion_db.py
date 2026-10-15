@@ -8,6 +8,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi import FastAPI
+from redis.asyncio import Redis
 from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -16,6 +17,7 @@ from app.core.database import make_database_url
 from app.core.errors import register_exception_handlers
 from app.features.memos.models import ApprovedMemo
 from app.features.payments.models import PaymentRow, PlanRow, UserEntitlementRow
+from app.features.usage.limiter import UsageLimiter, usage_key
 from app.features.users.deletion_repository import DeletionBlocked, DeletionRepository
 from app.features.users.deletion_service import DeletionService, get_deletion_service
 from app.features.users.models import User
@@ -212,3 +214,52 @@ async def test_http_to_database_success_is_committed(db):
     async with factory() as session:
         assert await session.get(User, owner) is None
         assert await session.get(User, other) is not None
+
+
+@pytest.mark.skipif(not os.environ.get("REDIS_URL"), reason="Requires disposable Redis")
+async def test_http_deletion_clears_real_redis_twice_and_preserves_other_user(db):
+    _, factory, owner, other = db
+    redis = Redis.from_url(os.environ["REDIS_URL"], decode_responses=True)
+    limiter = UsageLimiter(redis, 60)
+    owner_key, other_key = usage_key(owner), usage_key(other)
+
+    async def remove_firebase(uid):
+        assert uid == f"synthetic-{owner}"
+        assert await redis.exists(owner_key) == 0
+        # Simulate an in-flight operation recreating usage after the first deletion.
+        await redis.hset(owner_key, mapping={"count": "1", "period_id": "synthetic"})
+        await redis.expire(owner_key, 60)
+
+    try:
+        for key in (owner_key, other_key):
+            await redis.hset(key, mapping={"count": "1", "period_id": "synthetic"})
+            await redis.expire(key, 60)
+        service = DeletionService(
+            DeletionRepository(factory),
+            AsyncMock(),
+            AsyncMock(),
+            limiter.delete_user_usage,
+            remove_firebase,
+            AsyncMock(return_value=True),
+            AsyncMock(return_value=f"synthetic-{owner}"),
+        )
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.include_router(router)
+        app.dependency_overrides[get_deletion_service] = lambda: service
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.delete(
+                "/users/me", headers={"Authorization": "Bearer synthetic-token"}
+            )
+        assert response.status_code == 204
+        assert response.content == b""
+        assert await redis.exists(owner_key) == 0
+        assert await redis.hgetall(other_key) == {"count": "1", "period_id": "synthetic"}
+        async with factory() as session:
+            assert await session.get(User, owner) is None
+            assert await session.get(User, other) is not None
+    finally:
+        await redis.delete(owner_key, other_key)
+        await redis.aclose()

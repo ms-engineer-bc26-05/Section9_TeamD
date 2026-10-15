@@ -50,8 +50,8 @@ class DeletionRoute(APIRoute):
             except UsageStoreUnavailable:
                 status, code = 503, "USAGE_UNAVAILABLE"
                 message = "利用状況を確認できませんでした。時間をおいて再度お試しください。"
-            except Exception:
-                logger.error("account deletion failed")
+            except Exception as exc:
+                logger.error("account deletion failed: %s", type(exc).__name__)
                 status, code, message = 500, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MESSAGE
             return JSONResponse(
                 status_code=status, content={"error": {"code": code, "message": message}}
