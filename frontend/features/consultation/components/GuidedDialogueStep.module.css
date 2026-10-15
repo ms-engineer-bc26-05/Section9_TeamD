@@ -1,0 +1,347 @@
+.page {
+  min-height: 100svh;
+  padding: 28px 20px 38px;
+  color: #493e38;
+  background: #f7f3ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif;
+}
+
+.panel {
+  width: min(100%, 390px);
+  margin: 0 auto;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+}
+
+.headerSpacer {
+  width: 44px;
+  height: 44px;
+}
+
+.headerTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cancelButton {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin-right: -4px;
+  color: #81766f;
+  font: inherit;
+  font-size: 0.6875rem;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+}
+
+.cancelButton:hover:not(:disabled) {
+  background: #ede6df;
+}
+
+.cancelButton:focus-visible,
+.skipButton:focus-visible,
+.answerInput:focus-visible,
+.sendButton:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: 3px;
+}
+
+.cancelButton:disabled,
+.skipButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: 0;
+  margin: 25px 0 0;
+  color: #81766f;
+  font-size: 0.625rem;
+  list-style: none;
+}
+
+.steps li {
+  position: relative;
+  min-width: 0;
+  padding-top: 25px;
+  text-align: center;
+}
+
+.steps li::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  content: "";
+  background: #e5ded7;
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+.steps li:not(:last-child)::after {
+  position: absolute;
+  top: 7px;
+  left: calc(50% + 8px);
+  width: calc(100% - 16px);
+  height: 3px;
+  content: "";
+  background: #d8d0c8;
+}
+
+.steps .completedStep::before,
+.steps .currentStep::before {
+  background: #d98978;
+}
+
+.steps .completedStep:not(:last-child)::after {
+  background: #d98978;
+}
+
+.emotionTag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 16px;
+  margin: 30px 6px 0;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  background: #f2ddd6;
+  border-radius: 999px;
+}
+
+.dialogue {
+  display: grid;
+  gap: 22px;
+  margin-top: 20px;
+}
+
+.aiBubble,
+.userBubble {
+  padding: 18px;
+  border-radius: 18px;
+}
+
+.aiBubble {
+  width: min(88%, 300px);
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+}
+
+.userBubble {
+  width: min(72%, 250px);
+  margin-left: auto;
+  background: #f2ddd6;
+}
+
+.aiBubble p,
+.userBubble p,
+.historyTopic {
+  margin: 0;
+}
+
+.aiBubble p,
+.userBubble p {
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.historyGroup {
+  display: grid;
+  gap: 6px;
+}
+
+.historyTopic {
+  margin-right: 8px;
+  color: #81766f;
+  font-size: 0.625rem;
+  text-align: right;
+}
+
+.topicLabel {
+  color: #9a5d51;
+  font-size: 0.6875rem !important;
+  font-weight: 700;
+}
+
+.aiQuestion {
+  margin-top: 10px !important;
+}
+
+.questionHint {
+  margin-top: 14px !important;
+  color: #81766f;
+  font-size: 0.6875rem !important;
+}
+
+.skipButton {
+  display: block;
+  min-height: 40px;
+  padding: 8px 22px;
+  margin: 28px auto 0;
+  color: #81766f;
+  font: inherit;
+  font-size: 0.6875rem;
+  cursor: pointer;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 999px;
+}
+
+.skipButton:hover:not(:disabled) {
+  color: #493e38;
+  border-color: #b9afa7;
+}
+
+.answerForm {
+  margin-top: 28px;
+}
+
+.answerLabel {
+  display: block;
+  margin: 0 16px 8px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.answerWrapper {
+  position: relative;
+}
+
+.answerInput {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 86px;
+  padding: 15px 64px 15px 18px;
+  color: #493e38;
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  resize: vertical;
+  background: #ffffff;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 20px;
+}
+
+.answerInput::placeholder {
+  color: #81766f;
+  opacity: 1;
+}
+
+.answerInput:focus-visible {
+  border-color: #d98978;
+}
+
+.answerInput[aria-invalid="true"] {
+  border-color: #c96f60;
+}
+
+.answerInput:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.sendButton {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  color: #ffffff;
+  font: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+  background: #d98978;
+  border: 0;
+  border-radius: 50%;
+  place-items: center;
+  transform: translateY(-50%);
+}
+
+.sendButton:hover:not(:disabled) {
+  background: #c96f60;
+}
+
+.sendButton:disabled {
+  color: #81766f;
+  cursor: not-allowed;
+  background: #e5ded7;
+}
+
+.answerMeta {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 8px 14px 0;
+  color: #81766f;
+  font-size: 0.625rem;
+  line-height: 1.45;
+}
+
+.answerHelp,
+.characterCount {
+  margin: 0;
+}
+
+.characterCount {
+  flex: 0 0 auto;
+}
+
+.errorMessage,
+.loadingMessage {
+  margin: 10px 14px 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.errorMessage {
+  color: #9a4135;
+}
+
+.loadingMessage {
+  color: #81766f;
+  text-align: center;
+}
+
+.supportText {
+  margin: 34px 0 0;
+  color: #81766f;
+  font-size: 0.625rem;
+  text-align: center;
+}
+
+@media (max-width: 360px) {
+  .page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .steps {
+    font-size: 0.5625rem;
+  }
+
+  .aiBubble {
+    width: 92%;
+  }
+
+  .userBubble {
+    width: 78%;
+  }
+}

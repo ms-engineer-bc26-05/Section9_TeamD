@@ -1,0 +1,354 @@
+.page {
+  min-height: 100svh;
+  padding: 28px 26px 38px;
+  color: #493e38;
+  background: #f7f3ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif;
+}
+
+.panel {
+  width: min(100%, 390px);
+  margin: 0 auto;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+}
+
+.headerButton,
+.cancelButton,
+.reselectButton {
+  padding: 0;
+  color: #493e38;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+}
+
+.headerButton,
+.cancelButton {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.headerButton {
+  display: grid;
+  margin-left: -8px;
+  place-items: center;
+}
+
+.backIcon {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.headerTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cancelButton {
+  margin-right: -4px;
+  color: #81766f;
+  font-size: 0.6875rem;
+}
+
+.headerButton:hover:not(:disabled),
+.cancelButton:hover:not(:disabled),
+.reselectButton:hover:not(:disabled) {
+  background: #ede6df;
+}
+
+.headerButton:focus-visible,
+.cancelButton:focus-visible,
+.reselectButton:focus-visible,
+.textarea:focus-visible,
+.checkbox:focus-visible + .optionCard,
+.primaryButton:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: 3px;
+}
+
+.headerButton:disabled,
+.cancelButton:disabled,
+.reselectButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 0;
+  margin: 25px 0 0;
+  color: #81766f;
+  font-size: 0.625rem;
+  list-style: none;
+}
+
+.steps li {
+  position: relative;
+  padding-top: 25px;
+  text-align: center;
+}
+
+.steps li::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  content: "";
+  background: #e5ded7;
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+.steps li:not(:last-child)::after {
+  position: absolute;
+  top: 7px;
+  left: calc(50% + 8px);
+  width: calc(100% - 16px);
+  height: 3px;
+  content: "";
+  background: #d8d0c8;
+}
+
+.steps .completedStep::before,
+.steps .currentStep::before {
+  background: #d98978;
+}
+
+.steps .completedStep:not(:last-child)::after {
+  background: #d98978;
+}
+
+.emotionSummary {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 31px;
+}
+
+.emotionTag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 18px;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  background: #f2ddd6;
+  border-radius: 999px;
+}
+
+.reselectButton {
+  min-height: 36px;
+  padding: 6px 10px;
+  color: #81766f;
+  font-size: 0.6875rem;
+}
+
+.title {
+  margin: 38px 0 0;
+  font-size: 1.375rem;
+  line-height: 1.36;
+}
+
+.helpText {
+  margin: 16px 0 26px;
+  color: #81766f;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.form {
+  margin: 0;
+}
+
+.textareaWrapper {
+  position: relative;
+}
+
+.textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 190px;
+  padding: 26px 18px 46px;
+  color: #493e38;
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  resize: vertical;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 18px;
+}
+
+.textarea::placeholder {
+  color: #81766f;
+  opacity: 1;
+}
+
+.textarea:focus-visible {
+  border-color: #d98978;
+}
+
+.textarea[aria-invalid="true"] {
+  border-color: #c96f60;
+}
+
+.textarea:disabled {
+  cursor: not-allowed;
+  background: #ede8e3;
+  opacity: 0.7;
+}
+
+.characterCount {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  color: #81766f;
+  font-size: 0.6875rem;
+}
+
+.cannotVerbalizeOption {
+  display: block;
+  margin-top: 20px;
+  cursor: pointer;
+}
+
+.checkbox {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.optionCard {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 10px 16px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 16px;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.cannotVerbalizeOption:hover .optionCard {
+  border-color: #b9afa7;
+}
+
+.checkbox:checked + .optionCard {
+  background: #f2ddd6;
+  border-color: #d98978;
+}
+
+.checkbox:disabled + .optionCard {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.checkMark {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #b9afa7;
+  border-radius: 50%;
+}
+
+.checkbox:checked + .optionCard .checkMark {
+  background: #d98978;
+  border-color: #d98978;
+  box-shadow: inset 0 0 0 3px #fffdfc;
+}
+
+.errorMessage {
+  margin: 10px 0 0;
+  color: #9a4135;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.primaryButton {
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 20px;
+  margin-top: 34px;
+  color: #ffffff;
+  background: #d98978;
+  border: 2px solid #d98978;
+  border-radius: 16px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #c96f60;
+  border-color: #c96f60;
+}
+
+.primaryButton:disabled {
+  color: #81766f;
+  cursor: not-allowed;
+  background: #e5ded7;
+  border-color: #e5ded7;
+}
+
+.loadingMessage {
+  margin: 14px 0 0;
+  color: #81766f;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.supportText {
+  margin: 42px 0 0;
+  color: #81766f;
+  font-size: 0.625rem;
+  text-align: center;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 360px) {
+  .page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optionCard {
+    transition: none;
+  }
+}
