@@ -113,11 +113,15 @@ class FakeDbResult:
     def scalar_one_or_none(self):
         return self._value
 
+    def scalar_one(self):
+        return self._value
+
 
 class FakeDbSession:
-    """users.status を読むだけの偽物のセッション（DBへは接続しない）。
+    """1回読むだけの偽物のセッション（DBへは接続しない）。
 
-    status にDBの値（'active' / 'deleting' / None）を、error に execute で起こす例外を指定する。
+    status にDBから読める値（users.status の 'active' / 'deleting' / None、
+    利用権限の有無の True / False など）を、error に execute で起こす例外を指定する。
     開いた・閉じた・commitしたかを記録する。
     """
 
