@@ -22,7 +22,15 @@ vi.mock("@/lib/billing", () => billing);
 import { ApiError } from "@/lib/apiClient";
 import { usePlanStatus } from "@/lib/usePlanStatus";
 
-const USAGE = { can_start_consultation: true, consultation_resets_at: null };
+const USAGE = {
+  plan_code: "free",
+  consultation_count: 1,
+  consultation_limit: 3,
+  can_start_consultation: true,
+  consultation_resets_at: null,
+  memo_count: 2,
+  memo_limit: 10,
+};
 
 beforeEach(() => {
   handleAuthFailure.mockReset().mockResolvedValue(false);

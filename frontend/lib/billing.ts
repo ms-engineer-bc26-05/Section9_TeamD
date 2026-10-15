@@ -1,8 +1,9 @@
 /**
  * 利用状況・プラン・一回払いのAPI呼び出し(F-04 / #58)
  *
- * - 契約: Issue #59(F-05)のコメントのAPI契約。code名の「仮」はF-05のPRで確定する
- * - 仮のcode名は BILLING_ERROR_CODES に集約する(変わったらここだけ直す)
+ * - 契約: Issue #59(F-05)のAPI契約。マージ済みのバックエンド(payments/http_errors.py)と
+ *   code名が一致していることを確認済み
+ * - code名は BILLING_ERROR_CODES に集約する(変わったらここだけ直す)
  * - NEXT_PUBLIC_BILLING_MOCK=true のとき、実APIを呼ばずモックで動く(F-05マージ前の開発用)
  * - 認証・/api/v1の付与・エラー変換は apiClient に任せる
  */
@@ -16,10 +17,20 @@ export type PlanCode = "free" | "premium";
 // GET /payments/me
 export type PlanResponse = { plan_code: PlanCode };
 
-// GET /usage(#57)。項目は仮。API設計書6.7・PR #90に合わせて確定する
+// GET /usage(#57)。backend/app/features/usage/schemas.py の UsageView に合わせている
+// null の意味:
+//  - consultation_count     : Redisから取得できず、回数が分からない
+//  - consultation_limit     : 無制限
+//  - consultation_resets_at : まだ使っていない・無制限・回数が分からない
+//  - memo_limit             : 無制限
 export type UsageResponse = {
+  plan_code: PlanCode;
+  consultation_count: number | null;
+  consultation_limit: number | null;
   can_start_consultation: boolean;
   consultation_resets_at: string | null;
+  memo_count: number;
+  memo_limit: number | null;
 };
 
 // POST /payments/checkout-session の200
@@ -37,7 +48,7 @@ export type ConfirmResult = {
   status: "paid" | "pending" | "expired" | "not_found";
 };
 
-// ---------- 仮のcode名(F-05のPRで確定) ----------
+// ---------- エラーコード名(バックエンドの実装と一致を確認済み) ----------
 
 export const BILLING_ERROR_CODES = {
   ALREADY_PAID: "ALREADY_PAID",
@@ -144,7 +155,16 @@ async function fetchCurrentPlanMock(): Promise<PlanResponse> {
 }
 
 async function fetchUsageMock(): Promise<UsageResponse> {
-  return { can_start_consultation: true, consultation_resets_at: null };
+  const plan = readMockPlan();
+  return {
+    plan_code: plan,
+    consultation_count: 1,
+    consultation_limit: plan === "premium" ? 30 : 3,
+    can_start_consultation: true,
+    consultation_resets_at: null,
+    memo_count: 2,
+    memo_limit: plan === "premium" ? 100 : 10,
+  };
 }
 
 // ---------- 公開関数 ----------
