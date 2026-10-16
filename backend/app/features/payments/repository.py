@@ -19,6 +19,8 @@ from datetime import datetime
 from typing import Literal, Protocol
 from uuid import UUID
 
+from app.features.plans.public import PlanCode
+
 PaymentStatus = Literal["creating", "pending", "paid", "expired", "failed"]
 UNFINISHED_STATUSES: tuple[PaymentStatus, ...] = ("creating", "pending")
 
@@ -98,8 +100,11 @@ class PaymentTransaction(Protocol):
         require_active が True で status が active でない場合は UserNotActive を送出する。
         """
 
-    async def has_paid_entitlement(self, user_id: UUID, now: datetime) -> bool:
-        """現在有効な有料の利用権限があるか（権限の行がない場合は False。DB障害は例外）"""
+    async def current_plan(self, user_id: UUID, now: datetime) -> PlanCode:
+        """利用中のプラン（plans/public.py の get_current_plan を、このトランザクションで呼ぶ。#95）
+
+        GET /usage と同じ判定。利用権限の行がない場合は free。DB障害は例外（無料と推測しない）。
+        """
 
     async def find_plan(self, code: str) -> Plan | None: ...
 
@@ -125,7 +130,7 @@ class PaymentTransaction(Protocol):
     async def grant_entitlement(self, user_id: UUID, plan_id: UUID, now: datetime) -> None:
         """有料の利用権限を付与する（status は active、valid_until は NULL。#59）
 
-        plans/public.py（F-03）ができたら、そこの権限付与の関数へ移す。
+        plans/public.py の grant_paid_entitlement を、このトランザクションで呼ぶ（#95）。
         """
 
     async def mark_entitlement_applied(self, payment_id: UUID, applied_at: datetime) -> None:
