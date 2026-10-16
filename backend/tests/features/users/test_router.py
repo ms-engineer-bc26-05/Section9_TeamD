@@ -1,6 +1,6 @@
 """ユーザーAPIのテスト。Firebase・DBへは接続しない。"""
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 from uuid import UUID
 
 import pytest
@@ -367,11 +367,13 @@ async def test_update_notice_returns_safe_error(
         assert response.headers["www-authenticate"] == "Bearer"
 
 
-async def test_register_permission_denied_returns_503(monkeypatch, caplog):
+@pytest.mark.parametrize("stage", [0, 1])
+async def test_register_permission_denied_returns_503(monkeypatch, caplog, stage):
     marker = "DUMMY_PERMISSION_ERROR"
     firebase_app = Mock()
     verify = Mock(
-        side_effect=firebase_exceptions.PermissionDeniedError(marker)
+        side_effect=[{"uid": "dummy-firebase-uid"}] * stage
+        + [firebase_exceptions.PermissionDeniedError(marker)]
     )
     factory = Mock(side_effect=AssertionError("DB must not be called"))
 
@@ -410,7 +412,9 @@ async def test_register_permission_denied_returns_503(monkeypatch, caplog):
     assert marker not in caplog.text
     assert "dummy-token" not in response.text
     assert "dummy-token" not in caplog.text
-    verify.assert_called_once_with(
-        "dummy-token", app=firebase_app, check_revoked=True
-    )
+    expected_calls = [
+        call("dummy-token", app=firebase_app, check_revoked=False),
+        call("dummy-token", app=firebase_app, check_revoked=True),
+    ]
+    assert verify.call_args_list == expected_calls[: stage + 1]
     factory.assert_not_called()
