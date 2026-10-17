@@ -38,6 +38,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-120b}
       OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-30}
+      AI_RETRY_MAX_FIRST_ATTEMPT_SECONDS: ${AI_RETRY_MAX_FIRST_ATTEMPT_SECONDS:-25}
       # Stripe Checkoutをキャンセルしたことを画面側で区別できる公開URL
       CHECKOUT_CANCEL_URL: ${CHECKOUT_CANCEL_URL:-http://localhost:3000/plan?checkout=cancelled}
       # 利用回数制限（Issue #57）。.env に書かない場合はコードの既定値を使う

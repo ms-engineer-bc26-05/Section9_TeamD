@@ -184,7 +184,8 @@ export function ResultReviewStep({
 
           {isSubmitting ? (
             <p className={styles.loadingMessage} role="status">
-              編集内容を確認しています…
+              編集内容を確認しています。通常より時間がかかることがあります。
+              そのままお待ちください。
             </p>
           ) : null}
         </form>

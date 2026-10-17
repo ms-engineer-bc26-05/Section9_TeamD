@@ -197,7 +197,8 @@ export function EmotionDetailStep({
 
           {isSubmitting ? (
             <p className={styles.loadingMessage} role="status">
-              気持ちを整理しています…
+              気持ちを整理しています。通常より時間がかかることがあります。
+              そのままお待ちください。
             </p>
           ) : null}
         </form>

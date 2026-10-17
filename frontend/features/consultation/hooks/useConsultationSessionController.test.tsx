@@ -133,6 +133,48 @@ describe("useConsultationSessionController", () => {
     expect(result.current.state.currentTopic).toBe("true_feeling");
   });
 
+  it("処理中のGETはバックエンドのAI再試行を含む60秒まで待つ", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const api = createApi();
+      vi.mocked(api.start).mockResolvedValue({
+        consultation_id: "c1",
+        status: "emotion_selection",
+      });
+      vi.mocked(api.get).mockRejectedValue(
+        new ApiError("conflict", { code: "CONSULTATION_BUSY" }),
+      );
+      const { result } = renderHook(() => useConsultationSessionController(api));
+
+      await act(async () => {
+        await result.current.startConsultation(startRequest);
+      });
+
+      let settled = false;
+      let checking: Promise<boolean> | null = null;
+      act(() => {
+        checking = result.current.checkCurrentState();
+        void checking.then(() => {
+          settled = true;
+        });
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(36_000);
+      });
+      expect(settled).toBe(false);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(24_000);
+      });
+      await expect(checking).resolves.toBe(false);
+      expect(result.current.state.errorCode).toBe("CONSULTATION_BUSY");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("扱い方APIがstatusだけを返しても送信済みの選択を保存確認へ引き継ぐ", async () => {
     const api = createApi();
     vi.mocked(api.start).mockResolvedValue({

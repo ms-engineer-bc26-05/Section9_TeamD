@@ -47,7 +47,7 @@ type RecoveryReadResult<T> =
   | { type: "failed"; error: unknown };
 
 const RECOVERY_POLL_INTERVAL_MS = 1_000;
-const RECOVERY_POLL_TIMEOUT_MS = 35_000;
+const RECOVERY_POLL_TIMEOUT_MS = 60_000;
 
 function waitForRecoveryRetry(
   delayMs: number,
