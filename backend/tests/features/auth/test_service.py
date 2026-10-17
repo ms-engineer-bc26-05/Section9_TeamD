@@ -1,19 +1,16 @@
 """認証処理のテスト。Firebase・DBへは接続しない。"""
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.features.auth import service
-
 from app.integrations.firebase.client import (
     AuthServiceUnavailableError,
     InvalidTokenError,
 )
-
-from sqlalchemy.exc import IntegrityError, OperationalError
-
 
 
 @pytest.fixture
@@ -30,9 +27,7 @@ def auth_mocks(monkeypatch):
 
     monkeypatch.setattr(service, "to_thread", thread)
     monkeypatch.setattr(service, "get_user_by_firebase_uid", lookup)
-    monkeypatch.setattr(
-        service, "get_session_factory", Mock(return_value=factory)
-    )
+    monkeypatch.setattr(service, "get_session_factory", Mock(return_value=factory))
 
     return user, lookup, thread, session, context, factory
 
@@ -62,9 +57,7 @@ async def test_authenticate_returns_internal_uuid_and_closes_session(auth_mocks)
         ("unexpected", RuntimeError),
     ],
 )
-async def test_unavailable_user_is_rejected_and_session_closed(
-    auth_mocks, status, expected_error
-):
+async def test_unavailable_user_is_rejected_and_session_closed(auth_mocks, status, expected_error):
     user, lookup, _, session, context, _ = auth_mocks
 
     if status is None:
@@ -166,9 +159,7 @@ async def test_integrity_error_is_not_converted(auth_mocks):
     ("is_new", "has_seen_notice"),
     [(True, False), (False, True)],
 )
-async def test_register_or_get_user_returns_user_and_commits(
-    monkeypatch, is_new, has_seen_notice
-):
+async def test_register_or_get_user_returns_user_and_commits(monkeypatch, is_new, has_seen_notice):
     user = Mock(
         id=uuid4(),
         status="active",
@@ -190,9 +181,7 @@ async def test_register_or_get_user_returns_user_and_commits(
 
     monkeypatch.setattr(service, "to_thread", verify)
     monkeypatch.setattr(service, "get_or_create_user", get_or_create)
-    monkeypatch.setattr(
-        service, "get_session_factory", Mock(return_value=factory)
-    )
+    monkeypatch.setattr(service, "get_session_factory", Mock(return_value=factory))
 
     response, created = await service.register_or_get_user("dummy-token")
 
@@ -201,11 +190,11 @@ async def test_register_or_get_user_returns_user_and_commits(
         "has_seen_notice": has_seen_notice,
     }
     assert created is is_new
-    verify.assert_awaited_once_with(
-        service.verify_token,
-        "dummy-token",
-        check_revoked=True,
-    )
+    assert verify.await_count == 2
+    assert verify.await_args_list == [
+        call(service.verify_token, "dummy-token", check_revoked=False),
+        call(service.verify_token, "dummy-token", check_revoked=True),
+    ]
     factory.assert_called_once_with()
     session.begin.assert_called_once_with()
     transaction.__aenter__.assert_awaited_once()
@@ -221,9 +210,7 @@ async def test_register_or_get_user_returns_user_and_commits(
         ("unexpected", RuntimeError),
     ],
 )
-async def test_register_or_get_user_rejects_unavailable_user(
-    monkeypatch, status, expected_error
-):
+async def test_register_or_get_user_rejects_unavailable_user(monkeypatch, status, expected_error):
     user = Mock(id=uuid4(), status=status, has_seen_notice=False)
     verify = AsyncMock(return_value="dummy-firebase-uid")
     get_or_create = AsyncMock(return_value=(user, False))
@@ -241,9 +228,7 @@ async def test_register_or_get_user_rejects_unavailable_user(
 
     monkeypatch.setattr(service, "to_thread", verify)
     monkeypatch.setattr(service, "get_or_create_user", get_or_create)
-    monkeypatch.setattr(
-        service, "get_session_factory", Mock(return_value=factory)
-    )
+    monkeypatch.setattr(service, "get_session_factory", Mock(return_value=factory))
 
     with pytest.raises(expected_error) as caught:
         await service.register_or_get_user("dummy-token")
@@ -285,9 +270,7 @@ async def test_register_or_get_user_commit_failure_does_not_return_success(
 
     monkeypatch.setattr(service, "to_thread", verify)
     monkeypatch.setattr(service, "get_or_create_user", get_or_create)
-    monkeypatch.setattr(
-        service, "get_session_factory", Mock(return_value=factory)
-    )
+    monkeypatch.setattr(service, "get_session_factory", Mock(return_value=factory))
 
     with pytest.raises(service.DatabaseUnavailableError) as caught:
         await service.register_or_get_user("dummy-token")
@@ -309,10 +292,11 @@ async def test_register_or_get_user_commit_failure_does_not_return_success(
         (AuthServiceUnavailableError("Dummy secret"), service.AuthServiceUnavailableError),
     ],
 )
+@pytest.mark.parametrize("stage", [0, 1])
 async def test_register_verification_failure_does_not_open_db(
-    monkeypatch, error, expected_error
+    monkeypatch, error, expected_error, stage
 ):
-    verify = AsyncMock(side_effect=error)
+    verify = AsyncMock(side_effect=["dummy-firebase-uid"] * stage + [error])
     factory = Mock()
     get_or_create = AsyncMock()
 
@@ -323,10 +307,12 @@ async def test_register_verification_failure_does_not_open_db(
     with pytest.raises(expected_error) as caught:
         await service.register_or_get_user("dummy-token")
 
-    verify.assert_awaited_once_with(
-        service.verify_token,
-        "dummy-token",
-        check_revoked=True,
+    assert (
+        verify.await_args_list
+        == [
+            call(service.verify_token, "dummy-token", check_revoked=False),
+            call(service.verify_token, "dummy-token", check_revoked=True),
+        ][: stage + 1]
     )
     factory.assert_not_called()
     get_or_create.assert_not_awaited()
