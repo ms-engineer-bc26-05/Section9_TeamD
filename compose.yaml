@@ -6,6 +6,11 @@ services:
     environment:
       # ブラウザから直接FastAPIを呼ぶため、PC側のURL（localhost）を指定する
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # Firebase Web SDKの公開設定（実際の値はコミットしない .env から渡す）
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:-}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID:-}
       # Windowsでもファイルの変更を検知できるよう、定期的に確認する
       WATCHPACK_POLLING: "true"
     volumes:
@@ -27,6 +32,14 @@ services:
       DATABASE_URL: ${DATABASE_URL:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
       REDIS_URL: ${REDIS_URL:?.envがありません。READMEの手順で.env.exampleをコピーしてください}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Firebase Admin SDK。JSON鍵は compose.firebase.yaml で読み取り専用マウントする
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      # AI相談。APIキーはコミットしない .env から渡す
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-120b}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-30}
+      # Stripe Checkoutをキャンセルしたことを画面側で区別できる公開URL
+      CHECKOUT_CANCEL_URL: ${CHECKOUT_CANCEL_URL:-http://localhost:3000/plan?checkout=cancelled}
       # 利用回数制限（Issue #57）。.env に書かない場合はコードの既定値を使う
       USAGE_FREE_CONSULTATION_LIMIT: ${USAGE_FREE_CONSULTATION_LIMIT:-3}
       USAGE_PREMIUM_CONSULTATION_LIMIT: ${USAGE_PREMIUM_CONSULTATION_LIMIT:-30}
@@ -37,6 +50,8 @@ services:
       REDIS_COMMAND_TIMEOUT_SECONDS: ${REDIS_COMMAND_TIMEOUT_SECONDS:-0.5}
       # 自動リロードの有無（縦断確認時は .env で false にする）
       BACKEND_RELOAD: ${BACKEND_RELOAD:-true}
+      # 承認済み整理メモの暗号化鍵。未設定・不正な場合は保存せず500を返す
+      MEMO_ENCRYPTION_KEY: ${MEMO_ENCRYPTION_KEY:-}
       # Windowsでもファイルの変更を検知できるよう、定期的に確認する
       WATCHFILES_FORCE_POLLING: "true"
     volumes:

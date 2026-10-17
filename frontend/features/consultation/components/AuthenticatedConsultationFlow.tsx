@@ -2,6 +2,8 @@
 
 import { useCallback } from "react";
 
+import { useAuth } from "@/components/AuthProvider";
+
 import { authenticatedConsultationApi } from "../api/authenticatedConsultationApi";
 import {
   authenticatedConsultationMemoApi,
@@ -33,11 +35,21 @@ export function AuthenticatedConsultationFlow({
   onOpenPlan,
   onSaveCompleted,
 }: AuthenticatedConsultationFlowProps) {
+  const { handleAuthFailure } = useAuth();
+  const handleApiError = useCallback(
+    (error: unknown) => {
+      void handleAuthFailure(error);
+    },
+    [handleAuthFailure],
+  );
   const {
     state: memoSaveState,
     save: saveMemo,
     reset: resetMemoSave,
-  } = useConsultationMemoSave(authenticatedConsultationMemoApi);
+  } = useConsultationMemoSave(
+    authenticatedConsultationMemoApi,
+    handleApiError,
+  );
 
   const handleSaveRequested = useCallback(
     async (request: ConsultationSaveRequest) => {
@@ -69,6 +81,7 @@ export function AuthenticatedConsultationFlow({
       onOpenPlan={onOpenPlan}
       onSaveRequested={(request) => void handleSaveRequested(request)}
       onResetSaveState={resetMemoSave}
+      onApiError={handleApiError}
     />
   );
 }
