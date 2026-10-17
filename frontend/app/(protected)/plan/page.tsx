@@ -18,7 +18,7 @@ export default function PlanPage() {
 
   return (
     <main>
-      <h1>利用回数・プラン</h1>
+      <h1>プラン</h1>
 
       {phase === "loading" && <p role="status">読み込み中です。</p>}
 
@@ -39,9 +39,14 @@ export default function PlanPage() {
       />
 
       {showPurchase && (
-        <section aria-label="有料プランについて">
-          <h2>有料プランについて</h2>
-          <p>有料プランでは、相談できる回数が増えます。必要なときだけ、ご検討ください。</p>
+        <section aria-label="プランの違い">
+          <h2>プランの違いを確認</h2>
+          <h3>有料プラン</h3>
+          <ul>
+            <li>相談できる回数が増えます</li>
+            <li>保存できるメモの件数が増えます</li>
+          </ul>
+          <p>必要なときだけ、ご検討ください。</p>
           <p>テスト環境のため、実際の請求は発生しません。</p>
           <button
             type="button"
@@ -50,6 +55,10 @@ export default function PlanPage() {
           >
             購入手続きへ進む
           </button>
+          <p>
+            決済結果を確認してから反映します。確認できない場合は成功として扱いません。
+          </p>
+          <p>キャンセル時はプランを更新しません。</p>
           <p>
             お支払い後に反映されない場合は、
             <button type="button" onClick={() => void confirm()}>
