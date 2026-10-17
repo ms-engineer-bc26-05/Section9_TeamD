@@ -5,6 +5,7 @@ import { useMemoList } from "../hooks/useMemoList";
 import { MemoListScreen } from "./MemoListScreen";
 
 interface MemoListContainerProps {
+  /** レンダーごとに参照が変わらないMemoApiを渡す。 */
   api: MemoApi;
   notice?: string | null;
   onOpenMemo: (memoId: string) => void;
@@ -21,8 +22,12 @@ export function MemoListContainer({
 
   return (
     <MemoListScreen
-      {...state}
+      memos={state.memos}
       hasNextPage={state.nextCursor !== null}
+      isInitialLoading={state.isInitialLoading}
+      isLoadingMore={state.isLoadingMore}
+      initialError={state.initialError}
+      loadMoreError={state.loadMoreError}
       notice={notice}
       onOpenMemo={onOpenMemo}
       onStartConsultation={onStartConsultation}

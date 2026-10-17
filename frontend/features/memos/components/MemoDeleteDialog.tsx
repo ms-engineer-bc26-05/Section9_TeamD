@@ -79,9 +79,7 @@ export function MemoDeleteDialog({
         <button
           type="button"
           className={styles.dangerButton}
-          disabled={
-            isDeleting || isNotFound
-          }
+          disabled={isDeleting || isNotFound}
           onClick={onConfirm}
         >
           {isDeleting

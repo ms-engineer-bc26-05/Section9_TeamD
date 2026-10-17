@@ -47,7 +47,7 @@ describe("MemoListContainer", () => {
     expect(await screen.findByText(FIRST_MEMO.summary)).toBeInTheDocument();
     expect(screen.getByText("今は保留する")).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: /保存メモを開く/ }),
+      screen.getByRole("button", { name: new RegExp(FIRST_MEMO.summary) }),
     );
     expect(onOpenMemo).toHaveBeenCalledWith("memo-1");
   });

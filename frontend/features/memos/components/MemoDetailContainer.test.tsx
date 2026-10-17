@@ -87,6 +87,37 @@ describe("MemoDetailContainer", () => {
     await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("memo-1"));
   });
 
+  it("削除処理中の連続操作ではAPIを一度だけ呼ぶ", async () => {
+    const api = createApi();
+    let resolveDelete: (() => void) | undefined;
+    vi.mocked(api.delete).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+    const onDeleted = vi.fn();
+
+    render(
+      <MemoDetailContainer
+        memoId="memo-1"
+        api={api}
+        onBackToList={vi.fn()}
+        onDeleted={onDeleted}
+      />,
+    );
+
+    await screen.findByText("架空の出来事");
+    await userEvent.click(screen.getByRole("button", { name: "このメモを削除" }));
+    await userEvent.dblClick(screen.getByRole("button", { name: "削除する" }));
+
+    expect(api.delete).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "削除中…" })).toBeDisabled();
+
+    resolveDelete?.();
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("memo-1"));
+  });
+
   it("通信失敗後の再試行404だけを削除済みとして扱う", async () => {
     const api = createApi();
     vi.mocked(api.delete)
@@ -113,6 +144,37 @@ describe("MemoDetailContainer", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "もう一度削除" }));
     await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("memo-1"));
+  });
+
+  it("削除結果不明後にキャンセルした場合は次の操作を再試行扱いにしない", async () => {
+    const api = createApi();
+    vi.mocked(api.delete)
+      .mockRejectedValueOnce({ kind: "network" })
+      .mockRejectedValueOnce({ kind: "not_found", code: "MEMO_NOT_FOUND" });
+    const onDeleted = vi.fn();
+
+    render(
+      <MemoDetailContainer
+        memoId="memo-1"
+        api={api}
+        onBackToList={vi.fn()}
+        onDeleted={onDeleted}
+      />,
+    );
+
+    await screen.findByText("架空の出来事");
+    await userEvent.click(screen.getByRole("button", { name: "このメモを削除" }));
+    await userEvent.click(screen.getByRole("button", { name: "削除する" }));
+    expect(
+      await screen.findByText(/削除結果を確認できませんでした/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "キャンセル" }));
+    await userEvent.click(screen.getByRole("button", { name: "このメモを削除" }));
+    await userEvent.click(screen.getByRole("button", { name: "削除する" }));
+
+    expect(await screen.findByText("このメモは表示できません。")).toBeInTheDocument();
+    expect(onDeleted).not.toHaveBeenCalled();
   });
 
   it("最初の削除操作の404は削除成功とみなさない", async () => {

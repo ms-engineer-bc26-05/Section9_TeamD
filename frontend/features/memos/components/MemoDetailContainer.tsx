@@ -6,6 +6,7 @@ import { MemoDetailScreen } from "./MemoDetailScreen";
 
 interface MemoDetailContainerProps {
   memoId: string;
+  /** レンダーごとに参照が変わらないMemoApiを渡す。 */
   api: MemoApi;
   onBackToList: () => void;
   onDeleted: (memoId: string) => void;

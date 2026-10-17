@@ -84,7 +84,6 @@ export function MemoListScreen({
                   type="button"
                   className={styles.card}
                   onClick={() => onOpenMemo(memo.memo_id)}
-                  aria-label={`${formatMemoCreatedAt(memo.created_at)}の保存メモを開く`}
                 >
                   <time dateTime={memo.created_at} className={styles.date}>
                     {formatMemoCreatedAt(memo.created_at)}

@@ -6,6 +6,8 @@ export const MEMO_HANDLING_LABELS: Record<MemoHandling, string> = {
   not_tell: "伝えない",
 };
 
+export const MEMO_DELETED_NOTICE = "メモを削除しました。";
+
 const MEMO_DATE_FORMATTER = new Intl.DateTimeFormat("ja-JP", {
   timeZone: "Asia/Tokyo",
   year: "numeric",

@@ -39,6 +39,7 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
   });
   const loadRequest = useRef<AbortController | null>(null);
   const deleteOutcomeUnknown = useRef(false);
+  const deleteInFlight = useRef(false);
 
   const load = useCallback(async () => {
     loadRequest.current?.abort();
@@ -60,6 +61,7 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
 
   useEffect(() => {
     deleteOutcomeUnknown.current = false;
+    deleteInFlight.current = false;
     setDeleteState({ status: "idle", error: null });
     void load();
     return () => loadRequest.current?.abort();
@@ -70,10 +72,13 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
   }, []);
 
   const cancelDelete = useCallback(() => {
+    deleteOutcomeUnknown.current = false;
     setDeleteState({ status: "idle", error: null });
   }, []);
 
   const confirmDelete = useCallback(async () => {
+    if (deleteInFlight.current) return;
+    deleteInFlight.current = true;
     setDeleteState({ status: "deleting", error: null });
     try {
       await api.delete(memoId);
@@ -99,6 +104,8 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
         return;
       }
       setDeleteState({ status: "error", error: failure.code });
+    } finally {
+      deleteInFlight.current = false;
     }
   }, [api, memoId, onDeleted]);
 
