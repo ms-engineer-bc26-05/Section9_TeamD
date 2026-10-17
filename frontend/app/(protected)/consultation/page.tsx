@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { AuthenticatedConsultationFlow } from "@/features/consultation/components/AuthenticatedConsultationFlow";
 import type { ConsultationFlowLimits } from "@/features/consultation/components/ConsultationFlow";
+import styles from "./page.module.css";
 
 const LIMITS: ConsultationFlowLimits = {
   startDetail: 2000,
@@ -23,12 +24,26 @@ export default function ConsultationPage() {
 
   if (saveCompleted) {
     return (
-      <main>
-        <h1>整理メモを保存しました</h1>
-        <p>保存が完了しました。</p>
-        <button type="button" onClick={() => router.replace("/home")}>
-          ホームへ戻る
-        </button>
+      <main className={styles.completionPage}>
+        <section
+          className={styles.completionPanel}
+          aria-labelledby="save-completed-title"
+        >
+          <span className={styles.completionIcon} aria-hidden="true">
+            ✓
+          </span>
+          <h1 id="save-completed-title" className={styles.completionTitle}>
+            整理メモを保存しました
+          </h1>
+          <p className={styles.completionMessage}>保存が完了しました。</p>
+          <button
+            className={styles.returnHomeButton}
+            type="button"
+            onClick={() => router.replace("/home")}
+          >
+            ホームへ戻る
+          </button>
+        </section>
       </main>
     );
   }
