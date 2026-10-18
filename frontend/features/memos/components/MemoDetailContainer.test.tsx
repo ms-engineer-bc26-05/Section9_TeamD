@@ -229,6 +229,27 @@ describe("MemoDetailContainer", () => {
     expect(onBackToList).toHaveBeenCalledOnce();
   });
 
+  it("APIエラーを共通認証処理へ通知する", async () => {
+    const api = createApi();
+    const error = { kind: "forbidden", code: "ACCOUNT_DELETING" };
+    const onApiError = vi.fn();
+    vi.mocked(api.detail).mockRejectedValue(error);
+
+    render(
+      <MemoDetailContainer
+        memoId="memo-1"
+        api={api}
+        onBackToList={vi.fn()}
+        onDeleted={vi.fn()}
+        onApiError={onApiError}
+      />,
+    );
+
+    await screen.findByText(/保存メモを読み込めませんでした/);
+    expect(onApiError).toHaveBeenCalledOnce();
+    expect(onApiError).toHaveBeenCalledWith(error);
+  });
+
   it("削除500では詳細を残して再試行できる", async () => {
     const api = createApi();
     vi.mocked(api.delete)

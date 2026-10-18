@@ -11,8 +11,18 @@
 }
 
 .heading {
-  margin: 0 0 24px;
+  margin: 20px 0 24px;
   font-size: 1.5rem;
+}
+
+.backButton {
+  border: 0;
+  background: transparent;
+  color: #843d31;
+  padding: 8px 0;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .successNotice,
@@ -60,6 +70,7 @@
 }
 
 .card:focus-visible,
+.backButton:focus-visible,
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible {
   outline: 3px solid #7d4f45;

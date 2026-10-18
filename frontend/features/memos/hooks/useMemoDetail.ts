@@ -25,9 +25,15 @@ interface UseMemoDetailOptions {
   memoId: string;
   api: MemoApi;
   onDeleted: (memoId: string) => void;
+  onApiError?: (error: unknown) => void;
 }
 
-export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) {
+export function useMemoDetail({
+  memoId,
+  api,
+  onDeleted,
+  onApiError,
+}: UseMemoDetailOptions) {
   const [loadState, setLoadState] = useState<MemoDetailLoadState>({
     status: "loading",
     memo: null,
@@ -53,11 +59,12 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
       setLoadState({ status: "ready", memo, error: null });
     } catch (error) {
       if (controller.signal.aborted) return;
+      onApiError?.(error);
       const failure = toMemoApiFailure(error);
       if (failure.type === "aborted") return;
       setLoadState({ status: "error", memo: null, error: failure.code });
     }
-  }, [api, memoId]);
+  }, [api, memoId, onApiError]);
 
   useEffect(() => {
     deleteOutcomeUnknown.current = false;
@@ -85,6 +92,7 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
       deleteOutcomeUnknown.current = false;
       onDeleted(memoId);
     } catch (error) {
+      onApiError?.(error);
       const failure = toMemoApiFailure(error);
       if (failure.type === "aborted") {
         setDeleteState({ status: "idle", error: null });
@@ -107,7 +115,7 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
     } finally {
       deleteInFlight.current = false;
     }
-  }, [api, memoId, onDeleted]);
+  }, [api, memoId, onApiError, onDeleted]);
 
   return {
     loadState,

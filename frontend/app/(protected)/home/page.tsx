@@ -16,6 +16,9 @@ export default function HomePage() {
           <Link className={styles.startButton} href="/notice">
             相談を始める
           </Link>
+          <Link className={styles.memoButton} href="/memos">
+            保存メモを見る
+          </Link>
           <p className={styles.reassurance}>
             うまく言葉にできなくても大丈夫です
           </p>

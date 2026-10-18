@@ -10,6 +10,7 @@ interface MemoDetailContainerProps {
   api: MemoApi;
   onBackToList: () => void;
   onDeleted: (memoId: string) => void;
+  onApiError?: (error: unknown) => void;
 }
 
 export function MemoDetailContainer({
@@ -17,8 +18,9 @@ export function MemoDetailContainer({
   api,
   onBackToList,
   onDeleted,
+  onApiError,
 }: MemoDetailContainerProps) {
-  const detail = useMemoDetail({ memoId, api, onDeleted });
+  const detail = useMemoDetail({ memoId, api, onDeleted, onApiError });
 
   return (
     <MemoDetailScreen

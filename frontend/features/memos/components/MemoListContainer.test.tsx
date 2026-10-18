@@ -39,6 +39,7 @@ describe("MemoListContainer", () => {
     render(
       <MemoListContainer
         api={api}
+        onBackHome={vi.fn()}
         onOpenMemo={onOpenMemo}
         onStartConsultation={vi.fn()}
       />,
@@ -60,6 +61,7 @@ describe("MemoListContainer", () => {
     render(
       <MemoListContainer
         api={api}
+        onBackHome={vi.fn()}
         onOpenMemo={vi.fn()}
         onStartConsultation={onStartConsultation}
       />,
@@ -82,6 +84,7 @@ describe("MemoListContainer", () => {
     render(
       <MemoListContainer
         api={api}
+        onBackHome={vi.fn()}
         onOpenMemo={vi.fn()}
         onStartConsultation={vi.fn()}
       />,
@@ -112,6 +115,7 @@ describe("MemoListContainer", () => {
     render(
       <MemoListContainer
         api={api}
+        onBackHome={vi.fn()}
         onOpenMemo={vi.fn()}
         onStartConsultation={vi.fn()}
       />,
@@ -124,6 +128,27 @@ describe("MemoListContainer", () => {
     await waitFor(() =>
       expect(screen.getByText(FIRST_MEMO.summary)).toBeInTheDocument(),
     );
+  });
+
+  it("APIエラーを共通認証処理へ通知する", async () => {
+    const api = createApi();
+    const error = { kind: "unauthenticated" };
+    const onApiError = vi.fn();
+    vi.mocked(api.list).mockRejectedValue(error);
+
+    render(
+      <MemoListContainer
+        api={api}
+        onBackHome={vi.fn()}
+        onOpenMemo={vi.fn()}
+        onStartConsultation={vi.fn()}
+        onApiError={onApiError}
+      />,
+    );
+
+    await screen.findByText("ログインしてください。");
+    expect(onApiError).toHaveBeenCalledOnce();
+    expect(onApiError).toHaveBeenCalledWith(error);
   });
 
   it("追加取得中はもっと見るを無効にして二重取得を防ぐ", async () => {
@@ -144,6 +169,7 @@ describe("MemoListContainer", () => {
     render(
       <MemoListContainer
         api={api}
+        onBackHome={vi.fn()}
         onOpenMemo={vi.fn()}
         onStartConsultation={vi.fn()}
       />,
