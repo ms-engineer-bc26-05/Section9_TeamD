@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useAuth } from "@/components/AuthProvider";
 import { AuthenticatedConsultationFlow } from "@/features/consultation/components/AuthenticatedConsultationFlow";
 import type { ConsultationFlowLimits } from "@/features/consultation/components/ConsultationFlow";
 import styles from "./page.module.css";
@@ -20,7 +21,18 @@ const LIMITS: ConsultationFlowLimits = {
 
 export default function ConsultationPage() {
   const router = useRouter();
+  const { profile } = useAuth();
   const [saveCompleted, setSaveCompleted] = useState(false);
+
+  useEffect(() => {
+    if (profile && !profile.has_seen_notice) {
+      router.replace("/notice");
+    }
+  }, [profile, router]);
+
+  if (!profile?.has_seen_notice) {
+    return null;
+  }
 
   if (saveCompleted) {
     return (

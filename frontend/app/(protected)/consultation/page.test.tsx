@@ -1,14 +1,19 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { pushMock, replaceMock } = vi.hoisted(() => ({
+const { pushMock, replaceMock, useAuthMock } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   replaceMock: vi.fn(),
+  useAuthMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock, replace: replaceMock }),
+}));
+
+vi.mock("@/components/AuthProvider", () => ({
+  useAuth: useAuthMock,
 }));
 
 vi.mock(
@@ -48,9 +53,25 @@ import ConsultationPage from "./page";
 beforeEach(() => {
   pushMock.mockReset();
   replaceMock.mockReset();
+  useAuthMock.mockReset().mockReturnValue({
+    profile: { user_id: "uuid-1", has_seen_notice: true },
+  });
 });
 
 describe("ConsultationPage", () => {
+  it("利用前注意が未確認なら相談フローを表示せず注意画面へ戻す", async () => {
+    useAuthMock.mockReturnValue({
+      profile: { user_id: "uuid-1", has_seen_notice: false },
+    });
+
+    render(<ConsultationPage />);
+
+    expect(
+      screen.queryByRole("button", { name: "保存成功" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/notice"));
+  });
+
   it("利用前注意から相談画面へ入り、戻る操作で注意画面へ戻る", async () => {
     render(<ConsultationPage />);
 
