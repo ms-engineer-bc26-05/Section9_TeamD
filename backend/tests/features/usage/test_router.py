@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.core.errors import register_exception_handlers
 from app.core.exceptions import DatabaseUnavailableError
+from app.features.auth.schemas import CurrentUser
 from app.features.memos.public import MemoDatabaseError
 from app.features.usage import memos as usage_memos
 from app.features.usage.limiter import get_usage_limiter
@@ -132,8 +133,14 @@ def test_premium_plan_with_limit():
     assert (body["consultation_limit"], body["can_start_consultation"]) == (30, True)
 
 
+@pytest.mark.asyncio
+async def test_current_user_id_uses_internal_user_id():
+    current_user = CurrentUser(user_id=USER)
+
+    assert await get_current_user_id(current_user) == USER
+
+
 def test_requires_authentication():
-    # I-01に置き換えるまでの仮の認証は、常に401
     response = make_client(authenticated=False).get(URL)
 
     assert response.status_code == 401

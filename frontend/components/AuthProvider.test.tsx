@@ -7,6 +7,8 @@ const { postMock, signOutMock } = vi.hoisted(() => ({
 }));
 
 let emitUser: (user: { uid: string } | null) => void = () => {};
+let handleAuthFailureFromContext: (error: unknown) => Promise<boolean> =
+  async () => false;
 
 vi.mock("firebase/auth", () => ({
   onAuthStateChanged: (
@@ -30,7 +32,14 @@ import { AuthProvider, useAuth } from "@/components/AuthProvider";
 import { ApiError } from "@/lib/apiClient";
 
 function Probe() {
-  const { profile, profileStatus, profileErrorKind, signInNotice } = useAuth();
+  const {
+    profile,
+    profileStatus,
+    profileErrorKind,
+    signInNotice,
+    handleAuthFailure,
+  } = useAuth();
+  handleAuthFailureFromContext = handleAuthFailure;
   return (
     <div>
       <p data-testid="status">{profileStatus}</p>
@@ -53,6 +62,7 @@ function renderAndLogin() {
 beforeEach(() => {
   postMock.mockReset();
   signOutMock.mockReset().mockResolvedValue(undefined);
+  handleAuthFailureFromContext = async () => false;
 });
 
 describe("AuthProvider", () => {
@@ -116,6 +126,32 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("status")).toHaveTextContent("error"),
     );
     expect(screen.getByTestId("error")).toHaveTextContent("network");
+    expect(signOutMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "保存件数上限の403",
+      new ApiError("forbidden", {
+        status: 403,
+        code: "MEMO_LIMIT_EXCEEDED",
+      }),
+    ],
+    ["通信失敗", new ApiError("network")],
+    ["意図的なキャンセル", new ApiError("aborted")],
+  ])("%sは認証失敗として扱わずログアウトしない", async (_name, error) => {
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    let handled = true;
+    await act(async () => {
+      handled = await handleAuthFailureFromContext(error);
+    });
+
+    expect(handled).toBe(false);
     expect(signOutMock).not.toHaveBeenCalled();
   });
 });

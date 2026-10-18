@@ -29,6 +29,7 @@ const RESULT_FIELD_LABELS: Record<ResultField, string> = {
 interface ResultReviewStepProps {
   result: ConsultationResult;
   fieldMaxLength: number;
+  emotionMaxLength: number;
   isSubmitting: boolean;
   onApprove: (changes: UpdateConsultationResultRequest) => void;
   onCancel: () => void;
@@ -37,6 +38,7 @@ interface ResultReviewStepProps {
 export function ResultReviewStep({
   result,
   fieldMaxLength,
+  emotionMaxLength,
   isSubmitting,
   onApprove,
   onCancel,
@@ -118,6 +120,8 @@ export function ResultReviewStep({
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.resultList}>
             {RESULT_FIELDS.map((field, index) => {
+              const maxLength =
+                field === "emotion" ? emotionMaxLength : fieldMaxLength;
               const hasError = emptyFields.includes(field);
               const inputId = `consultation-result-${field}`;
               const errorId = `${inputId}-error`;
@@ -138,7 +142,7 @@ export function ResultReviewStep({
                         id={inputId}
                         className={styles.textarea}
                         value={draft[field]}
-                        maxLength={fieldMaxLength}
+                        maxLength={maxLength}
                         rows={3}
                         aria-invalid={hasError}
                         aria-describedby={hasError ? `${countId} ${errorId}` : countId}
@@ -150,7 +154,7 @@ export function ResultReviewStep({
                           編集
                         </span>
                         <output id={countId} className={styles.characterCount}>
-                          {draft[field].length} / {fieldMaxLength}
+                          {draft[field].length} / {maxLength}
                         </output>
                       </div>
                     </div>
@@ -180,7 +184,8 @@ export function ResultReviewStep({
 
           {isSubmitting ? (
             <p className={styles.loadingMessage} role="status">
-              編集内容を確認しています…
+              編集内容を確認しています。通常より時間がかかることがあります。
+              そのままお待ちください。
             </p>
           ) : null}
         </form>

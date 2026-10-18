@@ -1,0 +1,67 @@
+.completionPage {
+  display: grid;
+  min-height: 100svh;
+  padding: 32px 26px 52px;
+  box-sizing: border-box;
+  color: #493e38;
+  background: #f7f3ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif;
+  place-items: center;
+}
+
+.completionPanel {
+  width: min(100%, 390px);
+  text-align: center;
+}
+
+.completionIcon {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
+  color: #ffffff;
+  background: #d98978;
+  border-radius: 50%;
+  font-size: 1.75rem;
+  font-weight: 700;
+  place-items: center;
+}
+
+.completionTitle {
+  margin: 28px 0 0;
+  font-size: 1.5rem;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.completionMessage {
+  margin: 14px 0 0;
+  color: #81766f;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.returnHomeButton {
+  width: min(100%, 320px);
+  min-height: 58px;
+  padding: 10px 20px;
+  margin-top: 36px;
+  color: #ffffff;
+  background: #d98978;
+  border: 2px solid #d98978;
+  border-radius: 16px;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.returnHomeButton:hover {
+  background: #c96f60;
+  border-color: #c96f60;
+}
+
+.returnHomeButton:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: 3px;
+}
