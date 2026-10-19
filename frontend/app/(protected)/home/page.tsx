@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { UsageOverview } from "@/components/plan/UsageOverview";
 import styles from "./home.module.css";
 
 export default function HomePage() {
@@ -20,6 +21,7 @@ export default function HomePage() {
             うまく言葉にできなくても大丈夫です
           </p>
         </section>
+        <UsageOverview />
       </div>
     </main>
   );
