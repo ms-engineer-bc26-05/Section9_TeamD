@@ -46,6 +46,7 @@ describe("NoticePage", () => {
     await userEvent.click(screen.getByRole("button", { name: "同意して進む" }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(pushMock).toHaveBeenCalledWith("/consultation");
     expect(patchMock).toHaveBeenCalledWith("/users/me", { has_seen_notice: true });
     expect(setHasSeenNoticeMock).toHaveBeenCalledWith(true);
   });
@@ -65,6 +66,7 @@ describe("NoticePage", () => {
     await userEvent.click(screen.getByRole("button", { name: "確認して進む" }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(pushMock).toHaveBeenCalledWith("/consultation");
     expect(patchMock).not.toHaveBeenCalled();
   });
 

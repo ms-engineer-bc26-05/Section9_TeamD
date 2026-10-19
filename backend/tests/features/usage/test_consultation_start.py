@@ -11,6 +11,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 
 from app.core.errors import register_exception_handlers
 from app.features.consultations import service as consultation_service
@@ -24,10 +25,11 @@ from app.features.usage.exceptions import AccountDeleting
 from app.features.usage.limiter import UsageLimiter, usage_key
 from app.features.usage.service import UsageService
 from app.features.usage.settings import PlanCode
-from app.features.usage.users import PendingUserStatusChecker, UserStatus
+from app.features.usage.users import DbUserStatusChecker, UserStatus
 from app.integrations.openrouter.client import AIClientError, get_ai_client
 from tests.features.consultations import fakes as ai_fakes
 from tests.features.usage.fakes import (
+    FakeDbSession,
     FakeLimiter,
     FakeMemoCounter,
     FakePlanResolver,
@@ -313,12 +315,83 @@ async def test_refund_is_not_repeated_after_key_deleted():
     assert limiter.count == 0  # 削除後に、さらに1回減らしていない
 
 
-def test_default_user_status_checker_blocks_start():
-    # 本物の状態確認につなぐまでは、誤って結合しても確認なしで開始できない
-    h = Harness(FakeLimiter(count=0), users=PendingUserStatusChecker())
+# ---------------------------------------------------------------------------
+# DBからの状態の再取得（#92。users/service.py の get_user_status へ接続）
+# ---------------------------------------------------------------------------
 
-    assert h.start().status_code == 503
+
+def db_harness(session: FakeDbSession, count: int = 0) -> Harness:
+    return Harness(FakeLimiter(count=count), users=DbUserStatusChecker(session.factory))
+
+
+def test_db_active_user_can_start():
+    session = FakeDbSession("active")
+    h = db_harness(session)
+    h.ai.push(ai_fakes.first_question())
+
+    assert h.start().status_code == 201
+    assert h.limiter.count == 1
+    # 加算した後に、DBから状態を1回取り直している
+    assert len(session.statements) == 1
+    assert (session.closed, session.commits) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    ("db_status", "status_code", "code"),
+    [
+        ("deleting", 403, "ACCOUNT_DELETING"),
+        (None, 401, "UNAUTHORIZED"),  # 退会完了で内部ユーザーの行がない
+    ],
+)
+def test_db_not_active_user_cannot_start(db_status, status_code, code):
+    # 加算後の再取得で退会処理中・退会完了と分かった場合は、AIを呼ばず、キーを丸ごと削除する
+    h = db_harness(FakeDbSession(db_status), count=2)
+
+    response = h.start()
+
+    assert response.status_code == status_code
+    assert error_code(response) == code
+    assert h.ai.calls == []
+    assert h.limiter.delete_calls == 1
     assert h.limiter.count == 0
+
+
+def test_db_connection_failure_refunds_and_returns_503():
+    # DBに接続できず状態を確認できない場合は、加算した1回を戻して503
+    error = OperationalError("SELECT", {}, ConnectionRefusedError("DUMMY_DB_ERROR_MARKER"))
+    h = db_harness(FakeDbSession(error=error), count=1)
+
+    response = h.start()
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {"code": "DB_UNAVAILABLE", "message": "データベースに接続できませんでした。"}
+    }
+    assert "DUMMY_DB_ERROR_MARKER" not in response.text
+    assert h.ai.calls == []
+    assert h.limiter.count == 1  # 加算した1回を戻した
+    assert h.limiter.delete_calls == 0  # ユーザーがいない扱いにはしない
+
+
+@pytest.mark.parametrize(
+    "session",
+    [
+        FakeDbSession("unexpected"),
+        FakeDbSession(error=RuntimeError("DUMMY_ERROR")),
+    ],
+)
+async def test_db_unexpected_error_refunds_and_propagates(session):
+    # 接続障害以外の例外は上へ送る（共通の500）。加算した1回は戻し、キーは削除しない
+    limiter = FakeLimiter(count=1)
+    usage = UsageService(limiter, FakePlanResolver(), FakeMemoCounter(), make_settings())
+    gate = ConsultationStartGate(usage, DbUserStatusChecker(session.factory))
+
+    with pytest.raises(RuntimeError):
+        async with gate.consultation_start(uuid4()):
+            pytest.fail("状態を確認できないのに相談開始へ進んだ")
+
+    assert limiter.count == 1
+    assert limiter.delete_calls == 0
 
 
 # ---------------------------------------------------------------------------

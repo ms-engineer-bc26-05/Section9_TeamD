@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Self
 from uuid import UUID
 
 from app.features.usage.exceptions import PlanUnavailable, UserStatusUnavailable
@@ -103,6 +104,55 @@ class FakeUserStatusChecker:
         if self.status is None:
             raise UserStatusUnavailable
         return self.status
+
+
+class FakeDbResult:
+    def __init__(self, value) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+    def scalar_one(self):
+        return self._value
+
+
+class FakeDbSession:
+    """1回読むだけの偽物のセッション（DBへは接続しない）。
+
+    status にDBから読める値（users.status の 'active' / 'deleting' / None、
+    利用権限の有無の True / False など）を、error に execute で起こす例外を指定する。
+    開いた・閉じた・commitしたかを記録する。
+    """
+
+    def __init__(self, status: str | None = "active", error: BaseException | None = None) -> None:
+        self.status = status
+        self.error = error
+        self.statements: list = []
+        self.opened = 0
+        self.closed = 0
+        self.commits = 0
+
+    def factory(self):
+        """get_session_factory の代わり（呼ぶと sessionmaker の代わりを返す）"""
+        return lambda: self
+
+    async def __aenter__(self) -> Self:
+        self.opened += 1
+        return self
+
+    async def __aexit__(self, *exc_info) -> bool:
+        self.closed += 1
+        return False
+
+    async def execute(self, statement) -> FakeDbResult:
+        self.statements.append(statement)
+        if self.error is not None:
+            raise self.error
+        return FakeDbResult(self.status)
+
+    async def commit(self) -> None:
+        self.commits += 1
 
 
 class _NoopTicket:

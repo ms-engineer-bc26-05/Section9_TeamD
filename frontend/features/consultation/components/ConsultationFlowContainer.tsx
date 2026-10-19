@@ -41,6 +41,7 @@ interface ConsultationFlowContainerProps {
   onOpenPlan: () => void;
   onSaveRequested: (request: ConsultationSaveRequest) => void;
   onResetSaveState?: () => void;
+  onApiError?: (error: unknown) => void;
 }
 
 /**
@@ -56,8 +57,9 @@ export function ConsultationFlowContainer({
   onOpenPlan,
   onSaveRequested,
   onResetSaveState = NOOP,
+  onApiError,
 }: ConsultationFlowContainerProps) {
-  const controller = useConsultationSessionController(api);
+  const controller = useConsultationSessionController(api, onApiError);
   const [selectedEmotion, setSelectedEmotion] =
     useState<EmotionCategory | null>(null);
   const [guidedHistory, setGuidedHistory] = useState<

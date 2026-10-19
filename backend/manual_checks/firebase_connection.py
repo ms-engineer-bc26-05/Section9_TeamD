@@ -15,12 +15,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
-from fastapi import FastAPI
+import requests
 from cachecontrol.adapter import CacheControlAdapter
+from fastapi import FastAPI
 from firebase_admin import exceptions as firebase_exceptions
 from google.auth import exceptions as google_auth_exceptions
 from httpx import ASGITransport, AsyncClient
-import requests
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.response import HTTPResponse
 from urllib3.util.retry import Retry
@@ -29,7 +29,6 @@ from app.core.errors import register_exception_handlers
 from app.features.auth import service as auth_service
 from app.features.users import router as users_router
 from app.integrations.firebase import client as firebase_client
-
 
 MAX_HTTP_ATTEMPTS = 10
 MAX_PROBE_SECONDS = 60
@@ -93,11 +92,18 @@ def sign_in(api_key, password):
         logging.disable(previous_disable)
 
 
-def guided_probe(*, allowed_only=False):
-    cases = ("allowed",) if allowed_only else ("denied", "allowed", "disabled")
+def guided_probe(*, allowed_only=False, negative_only=False):
+    if allowed_only and negative_only:
+        raise ValueError("Conflicting modes")
+    cases = (
+        ("denied", "disabled")
+        if negative_only
+        else (("allowed",) if allowed_only else ("denied", "allowed", "disabled"))
+    )
     print(
         "Dedicated test user must be enabled. Grant ONLY firebaseauth.users.get before starting."
-        if allowed_only else "Dedicated test user only. Start with NO service-account roles."
+        if allowed_only
+        else "Dedicated test user only. Start with NO service-account roles."
     )
     if input(f"Type READY to start {cases[0]} verification: ") != "READY":
         return False
@@ -106,17 +112,22 @@ def guided_probe(*, allowed_only=False):
     if not api_key or not password:
         return False
     token = None
+    deadline = 0.0
     try:
         for index, case in enumerate(cases):
             if index and case == "allowed":
                 print("Pause: grant ONLY firebaseauth.users.get and wait for IAM propagation.")
             elif case == "disabled":
+                if negative_only:
+                    print("Pause: grant ONLY firebaseauth.users.get and wait for IAM propagation.")
                 print("Pause: disable ONLY the dedicated test user in the console; keep its role.")
             if index:
                 if input("Type READY after the manual step (anything else stops): ") != "READY":
                     return False
                 if time.monotonic() >= deadline:
-                    print("STOP: token lifetime exceeded. Do not restart without reviewing the run count.")
+                    print(
+                        "STOP: token lifetime exceeded. Do not restart without reviewing the run count."
+                    )
                     return False
             budget = None
             stage = "GUARD"
@@ -132,7 +143,11 @@ def guided_probe(*, allowed_only=False):
                 category = "UNEXPECTED_ERROR"
                 if isinstance(error, SignInFailure):
                     candidate = error.args[0] if error.args else None
-                    if candidate in ("SIGN_IN_HTTP_REJECTED", "SIGN_IN_TRANSPORT_FAILED", "SIGN_IN_RESPONSE_INVALID"):
+                    if candidate in (
+                        "SIGN_IN_HTTP_REJECTED",
+                        "SIGN_IN_TRANSPORT_FAILED",
+                        "SIGN_IN_RESPONSE_INVALID",
+                    ):
                         category = candidate
                 elif isinstance(error, ProbeLimitReached):
                     category = "LIMIT_OR_GUARD_STOP"
@@ -143,12 +158,58 @@ def guided_probe(*, allowed_only=False):
                 attempts = str(budget["attempts"]) if budget is not None else "UNKNOWN"
                 print("HTTP attempts: " + attempts + "/" + str(MAX_HTTP_ATTEMPTS))
                 return False
-            print(f"{case}: {'PASS' if success else 'FAIL'}; HTTP attempts: {budget['attempts']}/{MAX_HTTP_ATTEMPTS}")
+            print(
+                f"{case}: {'PASS' if success else 'FAIL'}; HTTP attempts: {budget['attempts']}/{MAX_HTTP_ATTEMPTS}"
+            )
             if not success:
                 return False
         return True
     finally:
         token = api_key = password = None
+
+
+def negative_only_self_test():
+    module = sys.modules[__name__]
+    scenarios = (
+        ([True, True], ["READY", "READY"], 300, True),
+        ([], ["STOP"], 300, False),
+        ([False], ["READY"], 300, False),
+        ([True, False], ["READY", "READY"], 300, False),
+        ([True], ["READY", "STOP"], 300, False),
+        ([True], ["READY", "READY"], -1, False),
+        ([RuntimeError("DUMMY_SECRET")], ["READY"], 300, False),
+        ([ProbeLimitReached()], ["READY"], 300, False),
+        ([KeyboardInterrupt()], ["READY"], 300, False),
+        ([True, ProbeLimitReached()], ["READY", "READY"], 300, False),
+    )
+    for results, confirmations, lifetime, expected in scenarios:
+        output = io.StringIO()
+        with (
+            patch("builtins.input", side_effect=confirmations),
+            patch.object(module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]),
+            patch.object(
+                module, "sign_in", return_value=("DUMMY_TOKEN", time.monotonic() + lifetime)
+            ) as login,
+            patch.object(module, "probe", AsyncMock(side_effect=results)) as check,
+            redirect_stdout(output),
+        ):
+            if guided_probe(negative_only=True) is not expected:
+                return False
+        if login.call_count != (0 if confirmations[0] == "STOP" else 1):
+            return False
+        if [call.args for call in check.await_args_list] != [
+            (case, "DUMMY_TOKEN") for case in ("denied", "disabled")[: len(results)]
+        ]:
+            return False
+        rendered = output.getvalue()
+        if any(
+            secret in rendered
+            for secret in ("DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN", "DUMMY_SECRET", "allowed:")
+        ):
+            return False
+        if expected and "grant ONLY firebaseauth.users.get" not in rendered:
+            return False
+    return True
 
 
 def allowed_only_self_test():
@@ -167,30 +228,37 @@ def allowed_only_self_test():
         stages = []
 
         @contextmanager
-        def fake_limits():
+        def fake_limits(stages=stages):
             stages.append("GUARD_START")
             try:
                 yield {"attempts": 2}
             finally:
                 stages.append("GUARD_END")
 
-        def login_once(*args):
+        def login_once(*args, stages=stages, failure_stage=failure_stage, result=result):
             stages.append("SIGN_IN")
             if failure_stage == "SIGN_IN":
                 raise result
             return "DUMMY_TOKEN", time.monotonic() + 300
 
-        async def probe_once(case, token):
+        async def probe_once(
+            case, token, stages=stages, failure_stage=failure_stage, result=result
+        ):
             stages.append("TOKEN_PROBE")
             if failure_stage == "TOKEN_PROBE":
                 raise result
             return result
 
-        with patch("builtins.input", return_value=confirmation) as confirm, patch.object(
-            module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]
-        ) as hidden, patch.object(module, "live_limits", fake_limits), patch.object(
-            module, "sign_in", side_effect=login_once
-        ) as login, patch.object(module, "probe", AsyncMock(side_effect=probe_once)) as check, redirect_stdout(output):
+        with (
+            patch("builtins.input", return_value=confirmation) as confirm,
+            patch.object(
+                module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]
+            ) as hidden,
+            patch.object(module, "live_limits", fake_limits),
+            patch.object(module, "sign_in", side_effect=login_once) as login,
+            patch.object(module, "probe", AsyncMock(side_effect=probe_once)) as check,
+            redirect_stdout(output),
+        ):
             actual = guided_probe(allowed_only=True)
         if actual is not (confirmation == "READY" and failure_stage is None and result is True):
             return False
@@ -210,7 +278,10 @@ def allowed_only_self_test():
         if stages != expected_stages + ["GUARD_END"] or login.call_count != 1:
             return False
         rendered = output.getvalue()
-        if any(secret in rendered for secret in ("DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN", "DUMMY_SECRET")):
+        if any(
+            secret in rendered
+            for secret in ("DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN", "DUMMY_SECRET")
+        ):
             return False
         if "denied:" in rendered or "disabled:" in rendered or "2/10" not in rendered:
             return False
@@ -252,14 +323,20 @@ def guided_self_test():
                 if expected:
                     return False
                 category = (
-                    "SIGN_IN_TRANSPORT_FAILED" if status is None else
-                    "SIGN_IN_HTTP_REJECTED" if status != 200 else "SIGN_IN_RESPONSE_INVALID"
+                    "SIGN_IN_TRANSPORT_FAILED"
+                    if status is None
+                    else "SIGN_IN_HTTP_REJECTED"
+                    if status != 200
+                    else "SIGN_IN_RESPONSE_INVALID"
                 )
                 if error.args != (category,):
                     return False
         if logging.root.manager.disable != previous_disable or session.trust_env is not False:
             return False
-        if session.post.call_count != 1 or session.post.call_args.kwargs["allow_redirects"] is not False:
+        if (
+            session.post.call_count != 1
+            or session.post.call_args.kwargs["allow_redirects"] is not False
+        ):
             return False
 
     for results, confirmations, expected in (
@@ -269,22 +346,28 @@ def guided_self_test():
         ([True], ["READY", "STOP"], False),
     ):
         output = io.StringIO()
-        with patch("builtins.input", side_effect=confirmations), patch.object(
-            module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]
-        ), patch.object(
-            module, "sign_in", return_value=("DUMMY_TOKEN", time.monotonic() + 300)
-        ) as login, patch.object(
-            module, "probe", AsyncMock(side_effect=results)
-        ) as check, redirect_stdout(output):
+        with (
+            patch("builtins.input", side_effect=confirmations),
+            patch.object(module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]),
+            patch.object(
+                module, "sign_in", return_value=("DUMMY_TOKEN", time.monotonic() + 300)
+            ) as login,
+            patch.object(module, "probe", AsyncMock(side_effect=results)) as check,
+            redirect_stdout(output),
+        ):
             if guided_probe() is not expected:
                 return False
         if login.call_count != 1 or check.await_count != len(results):
             return False
-        if [call.args[0] for call in check.await_args_list] != ["denied", "allowed", "disabled"][:len(results)]:
+        if [call.args[0] for call in check.await_args_list] != ["denied", "allowed", "disabled"][
+            : len(results)
+        ]:
             return False
         if any(call.args[1] != "DUMMY_TOKEN" for call in check.await_args_list):
             return False
-        if any(secret in output.getvalue() for secret in ("DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN")):
+        if any(
+            secret in output.getvalue() for secret in ("DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN")
+        ):
             return False
     for failed_stage, error, category in (
         ("SIGN_IN", SignInFailure("SIGN_IN_HTTP_REJECTED"), "SIGN_IN_HTTP_REJECTED"),
@@ -302,21 +385,35 @@ def guided_self_test():
         def fake_limits():
             yield {"attempts": 2}
 
-        with patch("builtins.input", return_value="READY"), patch.object(
-            module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]
-        ), patch.object(module, "live_limits", fake_limits), patch.object(
-            module, "sign_in", side_effect=error if failed_stage == "SIGN_IN" else None,
-            return_value=("DUMMY_TOKEN", time.monotonic() + 300),
-        ), patch.object(module, "probe", AsyncMock(side_effect=error)) as check, redirect_stdout(output):
+        with (
+            patch("builtins.input", return_value="READY"),
+            patch.object(module, "hidden_input", side_effect=["DUMMY_KEY", "DUMMY_PASSWORD"]),
+            patch.object(module, "live_limits", fake_limits),
+            patch.object(
+                module,
+                "sign_in",
+                side_effect=error if failed_stage == "SIGN_IN" else None,
+                return_value=("DUMMY_TOKEN", time.monotonic() + 300),
+            ),
+            patch.object(module, "probe", AsyncMock(side_effect=error)) as check,
+            redirect_stdout(output),
+        ):
             if guided_probe():
                 return False
         rendered = output.getvalue()
-        if any(secret in rendered for secret in ("DUMMY_SECRET", "DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN")):
+        if any(
+            secret in rendered
+            for secret in ("DUMMY_SECRET", "DUMMY_KEY", "DUMMY_PASSWORD", "DUMMY_TOKEN")
+        ):
             return False
-        if any(expected not in rendered for expected in (
-            "DIAGNOSTIC STAGE: " + failed_stage, "DIAGNOSTIC FAILURE: " + category,
-            "HTTP attempts: 2/10",
-        )):
+        if any(
+            expected not in rendered
+            for expected in (
+                "DIAGNOSTIC STAGE: " + failed_stage,
+                "DIAGNOSTIC FAILURE: " + category,
+                "HTTP attempts: 2/10",
+            )
+        ):
             return False
         if check.await_count != (0 if failed_stage == "SIGN_IN" else 1):
             return False
@@ -499,8 +596,10 @@ async def probe(case, token):
         if case == "allowed":
             valid = (
                 response.status_code == 201
-                and response.json() == {
-                    "user_id": str(user.id), "has_seen_notice": False,
+                and response.json()
+                == {
+                    "user_id": str(user.id),
+                    "has_seen_notice": False,
                 }
                 and not outcome["permission_denied"]
                 and get_factory.call_count == 1
@@ -515,7 +614,8 @@ async def probe(case, token):
             valid = (
                 outcome["permission_denied"]
                 and response.status_code == 503
-                and response.json() == {
+                and response.json()
+                == {
                     "error": {
                         "code": "AUTH_UNAVAILABLE",
                         "message": "認証サービスを利用できません。時間をおいて再度お試しください。",
@@ -531,7 +631,8 @@ async def probe(case, token):
             valid = (
                 outcome["user_disabled"]
                 and response.status_code == 401
-                and response.json() == {
+                and response.json()
+                == {
                     "error": {
                         "code": "UNAUTHORIZED",
                         "message": "ログインしてください。",
@@ -552,7 +653,9 @@ async def probe(case, token):
         }
         log_safe = all(
             record.getMessage() in allowed_messages
-            and not record.exc_info and not record.exc_text and not record.stack_info
+            and not record.exc_info
+            and not record.exc_text
+            and not record.stack_info
             for record in logs.records
         )
         secret_values = (token, outcome["uid"], os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
@@ -560,7 +663,11 @@ async def probe(case, token):
         success = valid and log_safe and body_safe
         if not success:
             print("DIAGNOSTIC SDK: " + outcome["sdk"])
-            status = str(response.status_code) if response.status_code in (201, 401, 403, 500, 503) else "OTHER"
+            status = (
+                str(response.status_code)
+                if response.status_code in (201, 401, 403, 500, 503)
+                else "OTHER"
+            )
             print("DIAGNOSTIC HTTP: " + status)
             db_called = bool(get_factory.call_count or factory.call_count or lookup.call_count)
             print("DIAGNOSTIC DB: " + ("CALLED" if db_called else "NOT_CALLED"))
@@ -589,16 +696,22 @@ async def self_test():
         ("denied", {"uid": "dummy-firebase-uid"}, False),
     ]
     for case, result, expected in scenarios:
-        sdk = Mock(side_effect=result) if isinstance(result, Exception) else Mock(return_value=result)
-        with patch.object(firebase_client, "get_firebase_app", return_value=Mock()), patch.object(
-            firebase_client.auth, "verify_id_token", sdk
+        sdk = (
+            Mock(side_effect=result) if isinstance(result, Exception) else Mock(return_value=result)
+        )
+        with (
+            patch.object(firebase_client, "get_firebase_app", return_value=Mock()),
+            patch.object(firebase_client.auth, "verify_id_token", sdk),
         ):
             output = io.StringIO()
             with redirect_stdout(output):
                 actual = await probe(case, "dummy-token")
             if actual is not expected:
                 return False
-            if any(secret in output.getvalue() for secret in ("dummy-token", "dummy-firebase-uid", "DUMMY_PRIVATE_ERROR")):
+            if any(
+                secret in output.getvalue()
+                for secret in ("dummy-token", "dummy-firebase-uid", "DUMMY_PRIVATE_ERROR")
+            ):
                 return False
             if expected and output.getvalue():
                 return False
@@ -613,35 +726,51 @@ async def self_test():
         (RuntimeError, "OTHER_ERROR"),
     ):
         output = io.StringIO()
-        with patch.object(firebase_client, "get_firebase_app", return_value=Mock()), patch.object(
-            firebase_client.auth, "verify_id_token", side_effect=error_type("DUMMY_PRIVATE_ERROR")
-        ), redirect_stdout(output):
+        with (
+            patch.object(firebase_client, "get_firebase_app", return_value=Mock()),
+            patch.object(
+                firebase_client.auth,
+                "verify_id_token",
+                side_effect=error_type("DUMMY_PRIVATE_ERROR"),
+            ),
+            redirect_stdout(output),
+        ):
             if await probe("denied", "dummy-token"):
                 return False
         rendered = output.getvalue()
-        if any(secret in rendered for secret in ("DUMMY_PRIVATE_ERROR", "dummy-token", "Traceback")):
+        if any(
+            secret in rendered for secret in ("DUMMY_PRIVATE_ERROR", "dummy-token", "Traceback")
+        ):
             return False
-        if any(line not in rendered.splitlines() for line in (
-            "DIAGNOSTIC SDK: " + category,
-            "DIAGNOSTIC HTTP: 503",
-            "DIAGNOSTIC DB: NOT_CALLED",
-            "DIAGNOSTIC CASE: FAIL",
-            "DIAGNOSTIC LOG: PASS",
-            "DIAGNOSTIC BODY: PASS",
-        )):
+        if any(
+            line not in rendered.splitlines()
+            for line in (
+                "DIAGNOSTIC SDK: " + category,
+                "DIAGNOSTIC HTTP: 503",
+                "DIAGNOSTIC DB: NOT_CALLED",
+                "DIAGNOSTIC CASE: FAIL",
+                "DIAGNOSTIC LOG: PASS",
+                "DIAGNOSTIC BODY: PASS",
+            )
+        ):
             return False
 
     def unsafe_sdk(*args, **kwargs):
         logging.getLogger("probe.self_test").warning("DUMMY_PRIVATE_ERROR")
         return {"uid": "dummy-firebase-uid"}
 
-    with patch.object(firebase_client, "get_firebase_app", return_value=Mock()), patch.object(
-        firebase_client.auth, "verify_id_token", side_effect=unsafe_sdk
+    with (
+        patch.object(firebase_client, "get_firebase_app", return_value=Mock()),
+        patch.object(firebase_client.auth, "verify_id_token", side_effect=unsafe_sdk),
     ):
         output = io.StringIO()
         with redirect_stdout(output):
             actual = await probe("allowed", "dummy-token")
-        if actual or "DIAGNOSTIC LOG: FAIL" not in output.getvalue() or "DUMMY_PRIVATE_ERROR" in output.getvalue():
+        if (
+            actual
+            or "DIAGNOSTIC LOG: FAIL" not in output.getvalue()
+            or "DUMMY_PRIVATE_ERROR" in output.getvalue()
+        ):
             return False
     return True
 
@@ -651,15 +780,29 @@ def main():
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--self-test", action="store_true")
     modes.add_argument("--guided", action="store_true")
-    modes.add_argument("--allowed-only", action="store_true", help="Sign in privately, run allowed once, then exit")
+    modes.add_argument(
+        "--negative-only", action="store_true", help="Run denied then disabled once (#93)"
+    )
+    modes.add_argument(
+        "--allowed-only", action="store_true", help="Sign in privately, run allowed once, then exit"
+    )
     modes.add_argument("--case", choices=("allowed", "denied", "disabled"))
-    parser.add_argument("--approved", action="store_true", help="Confirm the documented live plan is approved")
+    parser.add_argument(
+        "--approved", action="store_true", help="Confirm the documented live plan is approved"
+    )
     args = parser.parse_args()
     if not certificate_cache_preflight():
-        print("STOP: certificate cache preflight failed; check writable temporary storage. No live request sent.")
+        print(
+            "STOP: certificate cache preflight failed; check writable temporary storage. No live request sent."
+        )
         return 2
     if args.self_test:
-        success = allowed_only_self_test() and guided_self_test() and asyncio.run(self_test())
+        success = (
+            negative_only_self_test()
+            and allowed_only_self_test()
+            and guided_self_test()
+            and asyncio.run(self_test())
+        )
     else:
         if not args.approved or not sys.stdin.isatty():
             print("STOP: live approval and an interactive terminal are required.")
@@ -671,8 +814,8 @@ def main():
         ):
             print("STOP: check the approved project and credential configuration.")
             return 2
-        if args.guided or args.allowed_only:
-            success = guided_probe(allowed_only=args.allowed_only)
+        if args.guided or args.allowed_only or args.negative_only:
+            success = guided_probe(allowed_only=args.allowed_only, negative_only=args.negative_only)
         else:
             token = hidden_input("Test user ID token (hidden): ").strip()
             if not token or token == "dummy-token":

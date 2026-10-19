@@ -1,46 +1,40 @@
 """利用回数制限の設定値（Issue #57）。
 
-- 上限値・期間・Redisのタイムアウトは、コードへ固定せず環境変数から読み込む
+- 期間・Redisのタイムアウトは、コードへ固定せず環境変数から読み込む
 - 設定値は共通の config.py ではなく、この機能の中で読み込む（他Issueとの競合を避けるため）
-- 上限値に "unlimited" を指定した場合だけ「無制限」（APIでは null）として扱う。
-  値の読み込みに失敗した場合を無制限とみなさないよう、不正な値は起動時にエラーにする
-- #59の決定により、設定値とプランの判定は将来 backend/app/features/plans/ へ移す
-  （F-05で plans/ ができた後、後続のIssueで移す。他の機能は plans/public.py だけを使う）
+- プランごとの上限値は、#59の決定により plans/ へ移した（#92）。ここでは plans/public.py から読み込み、
+  UsageSettings.limits_for で今までどおり使えるようにしている
+  （PlanCode・PlanLimits もこのモジュールからimportできる。memos/limits.py などの呼び出し元は変えていない）
 """
 
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 from functools import lru_cache
 
-UNLIMITED = "unlimited"
+from app.features.plans.public import (
+    UNLIMITED,
+    PlanCode,
+    PlanLimits,
+    load_plan_settings,
+)
 
-# 既定値（#57 質問①・#59で決定した値。有料プランの値はMVPテスト用の暫定値）
-DEFAULT_FREE_CONSULTATION_LIMIT = "3"
-DEFAULT_PREMIUM_CONSULTATION_LIMIT = "30"  # #59で決定（暫定値）
-DEFAULT_FREE_MEMO_LIMIT = "10"  # API設計6.8.1の仮の値
-DEFAULT_PREMIUM_MEMO_LIMIT = "100"  # #59で決定（暫定値）
+# 移動前と同じ場所からもimportできるようにする（呼び出し元を変えないため）
+__all__ = [
+    "UNLIMITED",
+    "PlanCode",
+    "PlanLimits",
+    "UsageSettings",
+    "get_usage_settings",
+    "load_usage_settings",
+]
+
+# 期間の既定値（#57 質問①）
 DEFAULT_PERIOD_SECONDS = str(30 * 24 * 60 * 60)  # 30日
 
 # Redisのタイムアウト（秒）。Issue #57で待ち時間を実測して決定（質問⑧）
 DEFAULT_REDIS_CONNECT_TIMEOUT_SECONDS = "0.5"
 DEFAULT_REDIS_COMMAND_TIMEOUT_SECONDS = "0.5"
-
-
-class PlanCode(StrEnum):
-    """プランの識別子（API設計6.8.1の plan_code）"""
-
-    FREE = "free"
-    PREMIUM = "premium"
-
-
-@dataclass(frozen=True)
-class PlanLimits:
-    """プランごとの上限。None は「無制限」"""
-
-    consultation_limit: int | None
-    memo_limit: int | None
 
 
 @dataclass(frozen=True)
@@ -53,19 +47,6 @@ class UsageSettings:
 
     def limits_for(self, plan_code: PlanCode) -> PlanLimits:
         return self.plan_limits[plan_code]
-
-
-def _parse_limit(name: str, value: str) -> int | None:
-    value = value.strip()
-    if value == UNLIMITED:
-        return None
-    try:
-        limit = int(value)
-    except ValueError:
-        raise ValueError(f"{name} は0以上の整数か {UNLIMITED} を指定してください") from None
-    if limit < 0:
-        raise ValueError(f"{name} は0以上の整数か {UNLIMITED} を指定してください")
-    return limit
 
 
 def _parse_positive_int(name: str, value: str) -> int:
@@ -98,29 +79,8 @@ def load_usage_settings(env: Mapping[str, str] | None = None) -> UsageSettings:
     def get(name: str, default: str) -> str:
         return env.get(name, default)
 
-    plan_limits = {
-        PlanCode.FREE: PlanLimits(
-            consultation_limit=_parse_limit(
-                "USAGE_FREE_CONSULTATION_LIMIT",
-                get("USAGE_FREE_CONSULTATION_LIMIT", DEFAULT_FREE_CONSULTATION_LIMIT),
-            ),
-            memo_limit=_parse_limit(
-                "USAGE_FREE_MEMO_LIMIT", get("USAGE_FREE_MEMO_LIMIT", DEFAULT_FREE_MEMO_LIMIT)
-            ),
-        ),
-        PlanCode.PREMIUM: PlanLimits(
-            consultation_limit=_parse_limit(
-                "USAGE_PREMIUM_CONSULTATION_LIMIT",
-                get("USAGE_PREMIUM_CONSULTATION_LIMIT", DEFAULT_PREMIUM_CONSULTATION_LIMIT),
-            ),
-            memo_limit=_parse_limit(
-                "USAGE_PREMIUM_MEMO_LIMIT",
-                get("USAGE_PREMIUM_MEMO_LIMIT", DEFAULT_PREMIUM_MEMO_LIMIT),
-            ),
-        ),
-    }
     return UsageSettings(
-        plan_limits=plan_limits,
+        plan_limits=load_plan_settings(env).plan_limits,
         period_seconds=_parse_positive_int(
             "USAGE_PERIOD_SECONDS", get("USAGE_PERIOD_SECONDS", DEFAULT_PERIOD_SECONDS)
         ),

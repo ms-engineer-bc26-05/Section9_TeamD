@@ -564,8 +564,9 @@ def test_delete_after_ttl_returns_204(client, store, user_id, clock):
 
 
 def test_delete_requires_authentication(ai):
-    # 認証依存を差し替えない場合は、I-01へ置き換えるまで常に401
+    # 認証依存を差し替えない場合は、Bearerトークンがないため401
     app = FastAPI()
+    register_exception_handlers(app)
     app.include_router(router)
     response = TestClient(app).delete(f"{BASE}/{uuid4()}")
 

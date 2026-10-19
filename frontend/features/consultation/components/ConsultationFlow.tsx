@@ -41,6 +41,7 @@ export interface ConsultationFlowLimits {
   emotionDetail: number;
   guidedAnswer: number;
   resultField: number;
+  resultEmotion: number;
   saveReason: number;
 }
 
@@ -233,6 +234,7 @@ export function ConsultationFlow({
         <ResultReviewStep
           result={state.result}
           fieldMaxLength={limits.resultField}
+          emotionMaxLength={limits.resultEmotion}
           isSubmitting={isSubmitting}
           onApprove={actions.onApproveResult}
           onCancel={actions.onCancel}

@@ -37,12 +37,20 @@
   処理中に更新前の状態を返すと、画面が「回答は届かなかった」と判断して送り直し、
   処理が終わった後に古い回答が次の項目へ記録されてしまうため
 - 処理中はAIの応答待ちを含むが、AIの呼び出しにはタイムアウト（既定30秒）があるため、ずっとは続かない
+
+AI呼び出しの再試行（I-07 #54。詳細は ai_retry.py）：
+- AIの呼び出しまたは出力の検証に失敗した場合、条件を満たせば1回だけ再試行する
+- サーバーが指定した進め方と違う出力（要約・質問・整理完了の指定違い）も、出力の不正として再試行する
+- 再試行の前後で相談（または開始の予約）がまだ有効かを確認し、破棄されていれば再試行せず404とする
+- 再試行してもロック・TTLは途中で切れない（ロックに有効期限はなく、TTLはAIの待ち時間を含めない）
 """
 
+import logging
 from typing import Literal
 from uuid import UUID, uuid4
 
-from app.features.consultations import prompts
+from app.features.consultations import ai_retry, prompts
+from app.features.consultations.ai_retry import AIRetryPolicy, failure_kind
 from app.features.consultations.ai_schemas import (
     EMOTION,
     EVENT_DIALOGUE,
@@ -79,6 +87,8 @@ from app.features.consultations.schemas import (
 from app.features.consultations.state import ConsultationState, utc_now
 from app.features.consultations.store import ConsultationStore
 from app.integrations.openrouter.client import AIClientError, OpenRouterClient
+
+logger = logging.getLogger(__name__)
 
 # 上限値（設計書6.3.1・6.3.2）
 QUESTION_LIMIT = 3
@@ -121,28 +131,80 @@ def _require_status(state: ConsultationState, *allowed: ConsultationStatus) -> N
         raise ConsultationStateConflict
 
 
+def _check_progress(output, expected_next_action: str | None) -> None:
+    """サーバーが指定した進め方（next_action）と違う出力を、出力の不正とする。
+
+    安全案内（kind="safety"）は進め方を持たないため確認しない。
+    """
+    if expected_next_action is None or output.kind is AIOutputKind.SAFETY:
+        return
+    if output.next_action != expected_next_action:
+        raise AIOutputInvalid("指定と異なる進め方が返されました")
+
+
 class ConsultationService:
-    def __init__(self, store: ConsultationStore, ai_client: OpenRouterClient) -> None:
+    def __init__(
+        self,
+        store: ConsultationStore,
+        ai_client: OpenRouterClient,
+        retry_policy: AIRetryPolicy | None = None,
+    ) -> None:
         self._store = store
         self._ai = ai_client
+        self._retry = retry_policy if retry_policy is not None else ai_retry.get_ai_retry_policy()
 
-    async def _call_ai(self, definition, state, stage, history, *, still_active=None, **progress):
-        """AIを呼び出して出力を検証する。
+    async def _call_ai(
+        self,
+        definition,
+        state,
+        stage,
+        history,
+        *,
+        still_active=None,
+        expected_next_action: str | None = None,
+        **progress,
+    ):
+        """AIを呼び出して出力を検証する。条件を満たせば1回だけ再試行する（I-07 #54）。
 
+        expected_next_action を指定すると、その進め方と違う出力を不正（再試行の対象）とする。
         AIの呼び出し・検証に失敗した場合でも、応答待ちの間に相談が破棄されていたら、
         502ではなく404（ConsultationNotFound）とする（Issue #50⑧）。
         still_active には、相談がまだ有効かを返す関数を渡す（省略時は登録の有無で判定）。
         """
         model, schema, schema_name = definition
         messages = prompts.build_messages(stage, state.theme, history, **progress)
-        try:
-            result = await self._ai.complete_json(messages, schema, schema_name)
-            return parse_ai_output(model, result.content)
-        except (AIClientError, AIOutputInvalid):
-            active = still_active() if still_active is not None else self._is_registered(state)
-            if not active:
-                raise ConsultationNotFound from None
-            raise
+
+        def is_active() -> bool:
+            return still_active() if still_active is not None else self._is_registered(state)
+
+        attempt = 1
+        while True:
+            started = self._retry.clock()
+            try:
+                result = await self._ai.complete_json(messages, schema, schema_name)
+                output = parse_ai_output(model, result.content)
+                _check_progress(output, expected_next_action)
+                return output
+            except (AIClientError, AIOutputInvalid) as exc:
+                if not is_active():
+                    raise ConsultationNotFound from None
+                wait = self._retry.wait_before_retry(
+                    exc, attempt, self._retry.clock() - started
+                )
+                if wait is None:
+                    raise
+                # 失敗の種類と試行回数だけを記録する（入力・AIの出力・エラー本文は残さない）
+                logger.info(
+                    "AI呼び出しを再試行します schema=%s reason=%s attempt=%s",
+                    schema_name,
+                    failure_kind(exc),
+                    attempt + 1,
+                )
+            await self._retry.sleep(wait)
+            # 待っている間に破棄された相談のために、AIを呼ばない
+            if not is_active():
+                raise ConsultationNotFound
+            attempt += 1
 
     def _is_registered(self, state: ConsultationState) -> bool:
         return self._store.exists(state.user_id, state.consultation_id)
@@ -250,6 +312,8 @@ class ConsultationService:
                 [*state.messages, new_turn],
                 answer_count=answer_count,
                 event_must_summarize=must_summarize,
+                # 上限に達したのに要約が返らない場合は、AIの出力不正として回数を増やさない
+                expected_next_action="summarize" if must_summarize else None,
             )
             self._ensure_still_exists(state)
 
@@ -257,10 +321,6 @@ class ConsultationService:
                 _apply_safety(state)
                 state.touch()
                 return state
-
-            if must_summarize and output.next_action != "summarize":
-                # 上限に達したのに要約が返らない場合は、AIの出力不正として回数を増やさない
-                raise AIOutputInvalid("指定と異なる進め方が返されました")
 
             # AIの呼び出しが成功した時点で回数を確定する
             if action == "answer":
@@ -330,14 +390,13 @@ class ConsultationService:
                 PromptStage.EVENT_ASK_MORE,
                 state.messages,
                 answer_count=state.question_count,
+                # 追加の質問を求めたのに質問が返らない場合は、AIの出力不正として扱う
+                expected_next_action="ask",
             )
             self._ensure_still_exists(state)
 
             if output.kind is AIOutputKind.SAFETY:
                 _apply_safety(state)
-            elif output.next_action != "ask":
-                # 追加の質問を求めたのに質問が返らない場合は、AIの出力不正として扱う
-                raise AIOutputInvalid("追加の質問がありません")
             else:
                 state.ai_understanding = output.ai_understanding
                 state.ai_question = output.ai_question
@@ -432,6 +491,7 @@ class ConsultationService:
                 guided_turn_count=answered,
                 guided_next_topic=next_topic,
                 guided_complete=completes,
+                expected_next_action="complete" if completes else "ask",
             )
             self._ensure_still_exists(state)
 
@@ -439,10 +499,6 @@ class ConsultationService:
                 _apply_safety(state)
                 state.touch()
                 return state
-
-            expected = "complete" if completes else "ask"
-            if output.next_action != expected:
-                raise AIOutputInvalid("指定と異なる進め方が返されました")
 
             state.guided_turn_count = answered
             if skipped:
