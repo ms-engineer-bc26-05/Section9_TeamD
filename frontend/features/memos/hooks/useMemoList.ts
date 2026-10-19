@@ -34,6 +34,11 @@ export function useMemoList(
   const [state, setState] = useState<MemoListState>(INITIAL_STATE);
   const initialRequest = useRef<AbortController | null>(null);
   const loadingMore = useRef(false);
+  const onApiErrorRef = useRef(onApiError);
+
+  useEffect(() => {
+    onApiErrorRef.current = onApiError;
+  }, [onApiError]);
 
   const loadInitial = useCallback(async () => {
     initialRequest.current?.abort();
@@ -54,16 +59,16 @@ export function useMemoList(
       });
     } catch (error) {
       if (controller.signal.aborted) return;
-      onApiError?.(error);
       const failure = toMemoApiFailure(error);
       if (failure.type === "aborted") return;
+      onApiErrorRef.current?.(error);
       setState((current) => ({
         ...current,
         isInitialLoading: false,
         initialError: failure.code,
       }));
     }
-  }, [api, onApiError]);
+  }, [api]);
 
   useEffect(() => {
     void loadInitial();
@@ -91,17 +96,20 @@ export function useMemoList(
       }));
       loadingMore.current = false;
     } catch (error) {
-      onApiError?.(error);
       const failure = toMemoApiFailure(error);
       loadingMore.current = false;
-      if (failure.type === "aborted") return;
+      if (failure.type === "aborted") {
+        setState((current) => ({ ...current, isLoadingMore: false }));
+        return;
+      }
+      onApiErrorRef.current?.(error);
       setState((current) => ({
         ...current,
         isLoadingMore: false,
         loadMoreError: failure.code,
       }));
     }
-  }, [api, onApiError, state.nextCursor]);
+  }, [api, state.nextCursor]);
 
   return {
     state,

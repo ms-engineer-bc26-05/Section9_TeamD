@@ -46,6 +46,11 @@ export function useMemoDetail({
   const loadRequest = useRef<AbortController | null>(null);
   const deleteOutcomeUnknown = useRef(false);
   const deleteInFlight = useRef(false);
+  const onApiErrorRef = useRef(onApiError);
+
+  useEffect(() => {
+    onApiErrorRef.current = onApiError;
+  }, [onApiError]);
 
   const load = useCallback(async () => {
     loadRequest.current?.abort();
@@ -59,12 +64,12 @@ export function useMemoDetail({
       setLoadState({ status: "ready", memo, error: null });
     } catch (error) {
       if (controller.signal.aborted) return;
-      onApiError?.(error);
       const failure = toMemoApiFailure(error);
       if (failure.type === "aborted") return;
+      onApiErrorRef.current?.(error);
       setLoadState({ status: "error", memo: null, error: failure.code });
     }
-  }, [api, memoId, onApiError]);
+  }, [api, memoId]);
 
   useEffect(() => {
     deleteOutcomeUnknown.current = false;
@@ -92,12 +97,12 @@ export function useMemoDetail({
       deleteOutcomeUnknown.current = false;
       onDeleted(memoId);
     } catch (error) {
-      onApiError?.(error);
       const failure = toMemoApiFailure(error);
       if (failure.type === "aborted") {
         setDeleteState({ status: "idle", error: null });
         return;
       }
+      onApiErrorRef.current?.(error);
       if (
         failure.code === "MEMO_NOT_FOUND" &&
         deleteOutcomeUnknown.current
@@ -115,7 +120,7 @@ export function useMemoDetail({
     } finally {
       deleteInFlight.current = false;
     }
-  }, [api, memoId, onApiError, onDeleted]);
+  }, [api, memoId, onDeleted]);
 
   return {
     loadState,
