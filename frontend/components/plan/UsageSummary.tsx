@@ -50,7 +50,12 @@ export function UsageSummary({ plan, usage }: Props) {
         <>
           <p>{consultationText(usage)}</p>
           {usage.can_start_consultation ? (
-            resetDate && <p>{`この期間の回数は、${resetDate}にリセットされます。`}</p>
+            <>
+              <p>相談を始められます。</p>
+              {resetDate && (
+                <p>{`この期間の回数は、${resetDate}にリセットされます。`}</p>
+              )}
+            </>
           ) : (
             <p>
               {`この期間の相談回数の上限に達しました。${

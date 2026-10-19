@@ -86,4 +86,21 @@ describe("UsageSummary", () => {
 
     expect(screen.getByText("利用状況を取得できませんでした。")).toBeTruthy();
   });
+
+  it("相談を開始できるときは、開始できると表示する", () => {
+    render(<UsageSummary plan="free" usage={base} />);
+
+    expect(screen.getByText("相談を始められます。")).toBeTruthy();
+  });
+
+  it("上限に達したときは、開始できるとは表示しない", () => {
+    render(
+      <UsageSummary
+        plan="free"
+        usage={{ ...base, consultation_count: 3, can_start_consultation: false }}
+      />,
+    );
+
+    expect(screen.queryByText("相談を始められます。")).toBeNull();
+  });
 });

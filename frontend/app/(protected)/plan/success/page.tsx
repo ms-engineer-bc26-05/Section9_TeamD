@@ -9,9 +9,8 @@ import { usePlanStatus } from "@/lib/usePlanStatus";
 // Stripe Checkoutからの戻り先(成功URL)。URLの session_id で決済を確認する(F-04 / #58)
 // 最終的なプラン表示は UI-012(/plan)で行う
 function SuccessContent({ sessionId }: { sessionId: string }) {
-  const { plan, phase, errorKind, startCheckout, confirm } = usePlanStatus({
-    confirmSessionId: sessionId,
-  });
+  const { plan, phase, errorKind, startCheckout, confirm, retry } =
+    usePlanStatus({ confirmSessionId: sessionId });
 
   // 有料表示にするのは、決済の確認とプランの再取得が終わってから
   const done = phase === "idle" && plan === "premium";
@@ -29,12 +28,13 @@ function SuccessContent({ sessionId }: { sessionId: string }) {
         <p role="alert">決済を確認できませんでした。プラン画面でご確認ください。</p>
       )}
 
+      {/* 再試行は、同じ session_id での確認をやり直す */}
       <PhaseMessage
         phase={phase}
         errorKind={errorKind}
         onConfirm={() => void confirm(sessionId)}
         onPurchase={() => void startCheckout()}
-        onRetry={() => void confirm(sessionId)}
+        onRetry={() => void retry()}
       />
 
       <Link href="/plan">プラン画面へ</Link>

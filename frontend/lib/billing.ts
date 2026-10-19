@@ -41,7 +41,8 @@ export type CheckoutResult =
   | { type: "redirect"; checkoutUrl: string; sessionId: string }
   | { type: "already_paid" } // 409 ALREADY_PAID(仮) → プランを再取得して表示
   | { type: "in_progress" } // 409 CHECKOUT_IN_PROGRESS(仮) → 少し待って再試行
-  | { type: "confirmation_required" }; // 409 PAYMENT_CONFIRMATION_REQUIRED(仮) → confirmへ進む
+  // 409 PAYMENT_CONFIRMATION_REQUIRED → confirmへ進む。sessionId は error.session_id(なければ省略)
+  | { type: "confirmation_required"; sessionId?: string };
 
 // POST /payments/confirm の結果。404は画面側で扱いやすいよう not_found として返す
 export type ConfirmResult = {
@@ -55,6 +56,8 @@ export const BILLING_ERROR_CODES = {
   CHECKOUT_IN_PROGRESS: "CHECKOUT_IN_PROGRESS",
   PAYMENT_CONFIRMATION_REQUIRED: "PAYMENT_CONFIRMATION_REQUIRED",
   ACCOUNT_DELETING: "ACCOUNT_DELETING", // 403。確定済み
+  VALIDATION_ERROR: "VALIDATION_ERROR", // 422
+  PLAN_NOT_AVAILABLE: "PLAN_NOT_AVAILABLE", // 422。提供停止中のプラン
 } as const;
 
 // ---------- 実API ----------
@@ -80,7 +83,8 @@ async function createCheckoutSessionReal(
         case BILLING_ERROR_CODES.CHECKOUT_IN_PROGRESS:
           return { type: "in_progress" };
         case BILLING_ERROR_CODES.PAYMENT_CONFIRMATION_REQUIRED:
-          return { type: "confirmation_required" };
+          // session_id は apiClient が文字列のときだけ保持している
+          return { type: "confirmation_required", sessionId: error.sessionId };
       }
     }
     // 403 ACCOUNT_DELETING・422・503などは、呼び出し側が error.kind / error.code で分岐する

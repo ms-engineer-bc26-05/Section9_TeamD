@@ -5,7 +5,16 @@ type Props = {
   errorKind: PlanErrorKind | null;
   onConfirm: () => void; // 「決済を確認する」
   onPurchase: () => void; // 購入手続き(期限切れ・準備中のやり直し)
-  onRetry: () => void; // 通信失敗・サーバー障害の再試行
+  onRetry: () => void; // 直前に失敗した操作の再試行
+};
+
+// エラーの固定文言。内部コード・サーバーの文言は表示しない
+const ERROR_MESSAGES: Record<PlanErrorKind, string> = {
+  network: "通信できませんでした。接続を確認してもう一度お試しください。",
+  server: "サーバーで問題が発生しました。時間をおいてもう一度お試しください。",
+  validation:
+    "購入手続きを開始できませんでした。時間をおいてもう一度お試しください。",
+  plan_unavailable: "このプランは現在購入できません。",
 };
 
 // 決済の確認・購入手続きの途中状態を、利用者向けの文言で表示する(F-04 / #58)
@@ -64,19 +73,20 @@ export function PhaseMessage({
     case "not_found":
       return <p role="alert">確認できる決済がありません。</p>;
 
-    case "error":
+    case "error": {
+      const kind = errorKind ?? "server";
       return (
         <section aria-label="エラー">
-          <p role="alert">
-            {errorKind === "network"
-              ? "通信できませんでした。接続を確認してもう一度お試しください。"
-              : "サーバーで問題が発生しました。時間をおいてもう一度お試しください。"}
-          </p>
-          <button type="button" onClick={onRetry}>
-            再試行する
-          </button>
+          <p role="alert">{ERROR_MESSAGES[kind]}</p>
+          {/* 購入できないプランは、再試行しても変わらないので、ボタンを出さない */}
+          {kind !== "plan_unavailable" && (
+            <button type="button" onClick={onRetry}>
+              再試行する
+            </button>
+          )}
         </section>
       );
+    }
 
     default:
       return null;

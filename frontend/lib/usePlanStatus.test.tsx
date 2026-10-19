@@ -8,6 +8,10 @@ const { handleAuthFailure, billing } = vi.hoisted(() => ({
     createCheckoutSession: vi.fn(),
     fetchCurrentPlan: vi.fn(),
     fetchUsage: vi.fn(),
+    BILLING_ERROR_CODES: {
+      VALIDATION_ERROR: "VALIDATION_ERROR",
+      PLAN_NOT_AVAILABLE: "PLAN_NOT_AVAILABLE",
+    },
   },
 }));
 
@@ -167,5 +171,123 @@ describe("usePlanStatus", () => {
     const second = renderHook(() => usePlanStatus());
     await waitFor(() => expect(second.result.current.phase).toBe("error"));
     expect(second.result.current.errorKind).toBe("server");
+  });
+
+  it("PAYMENT_CONFIRMATION_REQUIRED の session_id を、confirm へ渡す", async () => {
+    billing.createCheckoutSession.mockResolvedValue({
+      type: "confirmation_required",
+      sessionId: "cs_test_9",
+    });
+    billing.confirmPayment.mockResolvedValue({ status: "pending" });
+
+    const { result } = renderHook(() => usePlanStatus());
+    await waitFor(() => expect(result.current.phase).toBe("idle"));
+
+    await act(async () => {
+      await result.current.startCheckout();
+    });
+
+    expect(billing.confirmPayment).toHaveBeenCalledWith("cs_test_9");
+    expect(result.current.phase).toBe("pending");
+  });
+
+  it("購入の失敗後の再試行は、購入処理をやり直す(プランの再取得ではない)", async () => {
+    billing.createCheckoutSession
+      .mockRejectedValueOnce(new ApiError("server", { status: 503 }))
+      .mockResolvedValueOnce({ type: "in_progress" });
+
+    const { result } = renderHook(() => usePlanStatus());
+    await waitFor(() => expect(result.current.phase).toBe("idle"));
+
+    await act(async () => {
+      await result.current.startCheckout();
+    });
+    expect(result.current.phase).toBe("error");
+
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    expect(billing.createCheckoutSession).toHaveBeenCalledTimes(2);
+    expect(billing.fetchCurrentPlan).toHaveBeenCalledTimes(1);
+    expect(result.current.phase).toBe("in_progress");
+  });
+
+  it("成功URLでの決済確認の失敗後は、同じ session_id で確認をやり直す", async () => {
+    billing.confirmPayment
+      .mockRejectedValueOnce(new ApiError("network"))
+      .mockResolvedValueOnce({ status: "pending" });
+
+    const { result } = renderHook(() =>
+      usePlanStatus({ confirmSessionId: "cs_test_1" }),
+    );
+    await waitFor(() => expect(result.current.phase).toBe("error"));
+
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    expect(billing.confirmPayment).toHaveBeenNthCalledWith(2, "cs_test_1");
+    expect(result.current.phase).toBe("pending");
+  });
+
+  it("プラン画面での決済確認の失敗後は、session_id を省略して確認をやり直す", async () => {
+    billing.confirmPayment
+      .mockRejectedValueOnce(new ApiError("network"))
+      .mockResolvedValueOnce({ status: "pending" });
+
+    const { result } = renderHook(() => usePlanStatus());
+    await waitFor(() => expect(result.current.phase).toBe("idle"));
+
+    await act(async () => {
+      await result.current.confirm();
+    });
+    expect(result.current.phase).toBe("error");
+
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    expect(billing.confirmPayment).toHaveBeenNthCalledWith(2, undefined);
+    expect(result.current.phase).toBe("pending");
+  });
+
+  it("初回の取得の失敗後は、プランと利用状況を取得し直す", async () => {
+    billing.fetchCurrentPlan
+      .mockRejectedValueOnce(new ApiError("network"))
+      .mockResolvedValueOnce({ plan_code: "free" });
+
+    const { result } = renderHook(() => usePlanStatus());
+    await waitFor(() => expect(result.current.phase).toBe("error"));
+
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    await waitFor(() => expect(result.current.phase).toBe("idle"));
+    expect(billing.fetchCurrentPlan).toHaveBeenCalledTimes(2);
+    expect(result.current.plan).toBe("free");
+  });
+
+  it("422 は、内容に応じて validation と plan_unavailable に分ける", async () => {
+    billing.createCheckoutSession.mockRejectedValueOnce(
+      new ApiError("validation", { status: 422, code: "PLAN_NOT_AVAILABLE" }),
+    );
+    const first = renderHook(() => usePlanStatus());
+    await waitFor(() => expect(first.result.current.phase).toBe("idle"));
+    await act(async () => {
+      await first.result.current.startCheckout();
+    });
+    expect(first.result.current.errorKind).toBe("plan_unavailable");
+
+    billing.createCheckoutSession.mockRejectedValueOnce(
+      new ApiError("validation", { status: 422, code: "VALIDATION_ERROR" }),
+    );
+    const second = renderHook(() => usePlanStatus());
+    await waitFor(() => expect(second.result.current.phase).toBe("idle"));
+    await act(async () => {
+      await second.result.current.startCheckout();
+    });
+    expect(second.result.current.errorKind).toBe("validation");
   });
 });

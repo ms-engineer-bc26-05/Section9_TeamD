@@ -6,6 +6,7 @@
  * - plan は GET /payments/me の結果だけを入れる。confirm が paid を返し、
  *   プランを再取得するまで premium にならない(支払い確認前に有料表示へ切り替えない)
  * - confirmSessionId を渡すと、最初のプラン取得の代わりに confirm を実行する(成功URL用)
+ * - retry は、直前に失敗した操作をやり直す(購入・決済確認・プラン取得)
  * - 退会処理中(403 ACCOUNT_DELETING)・セッション切れ(401)は AuthProvider に任せる
  */
 
@@ -13,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { ApiError } from "@/lib/apiClient";
 import {
+  BILLING_ERROR_CODES,
   confirmPayment,
   createCheckoutSession,
   fetchCurrentPlan,
@@ -30,9 +32,13 @@ export type PlanPhase =
   | "expired" // 期限切れ → 再購入の導線
   | "not_found" // 確認できる決済がない(固定文言を出してプランは再取得済み)
   | "in_progress" // 決済画面を準備中 → 少し待って手動で再試行
-  | "error"; // 通信失敗・サーバー障害(errorKind で区別。再試行できる)
+  | "error"; // 失敗(errorKind で区別。plan_unavailable 以外は再試行できる)
 
-export type PlanErrorKind = "network" | "server";
+export type PlanErrorKind =
+  | "network" // 通信失敗
+  | "server" // サーバー障害・想定外
+  | "validation" // 422 VALIDATION_ERROR(購入手続きを開始できなかった)
+  | "plan_unavailable"; // 422 PLAN_NOT_AVAILABLE(このプランは購入できない)
 
 export type PlanState = {
   plan: PlanCode | null; // サーバーで確認できたプラン。取得前は null
@@ -41,8 +47,26 @@ export type PlanState = {
   errorKind: PlanErrorKind | null;
   startCheckout: () => Promise<void>; // 購入ボタン
   confirm: (sessionId?: string) => Promise<void>; // 省略時は「決済を確認する」ボタン
-  reload: () => Promise<void>; // 再取得・再試行
+  retry: () => Promise<void>; // 直前に失敗した操作をやり直す
 };
+
+// 直前に行った操作(retry でやり直す対象)
+type LastAction =
+  | { type: "load" }
+  | { type: "checkout" }
+  | { type: "confirm"; sessionId?: string };
+
+function toErrorKind(e: unknown): PlanErrorKind {
+  if (e instanceof ApiError) {
+    if (e.kind === "network") return "network";
+    if (e.kind === "validation") {
+      return e.code === BILLING_ERROR_CODES.PLAN_NOT_AVAILABLE
+        ? "plan_unavailable"
+        : "validation";
+    }
+  }
+  return "server";
+}
 
 export function usePlanStatus(options?: {
   confirmSessionId?: string;
@@ -67,15 +91,16 @@ export function usePlanStatus(options?: {
   // 購入ボタンの二重実行を防ぐ
   const startingRef = useRef(false);
 
+  // retry の対象。各操作の開始時に更新する
+  const lastActionRef = useRef<LastAction>({ type: "load" });
+
   const handleError = useCallback(
     async (e: unknown) => {
       if (e instanceof ApiError && e.kind === "aborted") return;
       // 退会処理中・セッション切れはログアウトされる
       if (await handleAuthFailure(e)) return;
       if (!aliveRef.current) return;
-      setErrorKind(
-        e instanceof ApiError && e.kind === "network" ? "network" : "server",
-      );
+      setErrorKind(toErrorKind(e));
       setPhase("error");
     },
     [handleAuthFailure],
@@ -84,6 +109,7 @@ export function usePlanStatus(options?: {
   // プランと利用状況を取得し、成功したら nextPhase に切り替える
   const loadPlan = useCallback(
     async (nextPhase: PlanPhase = "idle") => {
+      lastActionRef.current = { type: "load" };
       try {
         const [planRes, usageRes] = await Promise.all([
           fetchCurrentPlan(),
@@ -103,12 +129,13 @@ export function usePlanStatus(options?: {
 
   const confirm = useCallback(
     async (sessionId?: string) => {
+      lastActionRef.current = { type: "confirm", sessionId };
       setPhase("confirming");
       try {
         const result = await confirmPayment(sessionId);
         switch (result.status) {
           case "paid":
-            // プランを再取得できてから有料表示にする
+            // プランを再取得できてから有料表示にする(再取得に失敗したら再取得をやり直す)
             await loadPlan();
             return;
           case "pending":
@@ -131,6 +158,7 @@ export function usePlanStatus(options?: {
   const startCheckout = useCallback(async () => {
     if (startingRef.current) return;
     startingRef.current = true;
+    lastActionRef.current = { type: "checkout" };
     setPhase("starting");
     try {
       const result = await createCheckoutSession("premium");
@@ -146,8 +174,8 @@ export function usePlanStatus(options?: {
           if (aliveRef.current) setPhase("in_progress");
           return;
         case "confirmation_required":
-          // エラーにせず決済確認へ進む(session_idは省略し、サーバーが本人の未確認の決済を探す)
-          await confirm();
+          // エラーにせず決済確認へ進む。session_id があればそれで、なければ省略して確認する
+          await confirm(result.sessionId);
           return;
       }
     } catch (e) {
@@ -157,10 +185,22 @@ export function usePlanStatus(options?: {
     }
   }, [loadPlan, confirm, handleError]);
 
-  const reload = useCallback(async () => {
-    setPhase("loading");
-    await loadPlan();
-  }, [loadPlan]);
+  // 直前に失敗した操作をやり直す
+  const retry = useCallback(async () => {
+    const action = lastActionRef.current;
+    switch (action.type) {
+      case "checkout":
+        await startCheckout();
+        return;
+      case "confirm":
+        await confirm(action.sessionId);
+        return;
+      case "load":
+        setPhase("loading");
+        await loadPlan();
+        return;
+    }
+  }, [startCheckout, confirm, loadPlan]);
 
   // 内部ユーザーと紐付いてから取得する(AuthProviderのprofileStatusが ready になるまで待つ)
   const ready = profileStatus === "ready";
@@ -173,5 +213,5 @@ export function usePlanStatus(options?: {
     }
   }, [ready, confirmSessionId, confirm, loadPlan]);
 
-  return { plan, usage, phase, errorKind, startCheckout, confirm, reload };
+  return { plan, usage, phase, errorKind, startCheckout, confirm, retry };
 }

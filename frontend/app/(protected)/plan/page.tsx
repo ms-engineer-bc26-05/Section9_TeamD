@@ -1,14 +1,19 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { PhaseMessage } from "@/components/plan/PhaseMessage";
 import { UsageSummary } from "@/components/plan/UsageSummary";
 import { usePlanStatus } from "@/lib/usePlanStatus";
 
 // UI-012 利用回数・プラン画面(F-04 / #58)
-export default function PlanPage() {
-  const { plan, usage, phase, errorKind, startCheckout, confirm, reload } =
+function PlanContent() {
+  const { plan, usage, phase, errorKind, startCheckout, confirm, retry } =
     usePlanStatus();
+
+  // Stripe Checkoutのキャンセルから戻ったとき(キャンセルURLに ?checkout=cancelled を付ける)
+  const cancelled = useSearchParams().get("checkout") === "cancelled";
 
   // 購入の案内は、無料で、途中状態のメッセージが出ていないときだけ表示する
   // (pending・confirming では再購入を促さない)
@@ -30,12 +35,16 @@ export default function PlanPage() {
         <p>有料プランをご利用中です。</p>
       )}
 
+      {cancelled && phase === "idle" && (
+        <p role="status">手続きはキャンセルされました。プランは変更されていません。</p>
+      )}
+
       <PhaseMessage
         phase={phase}
         errorKind={errorKind}
         onConfirm={() => void confirm()}
         onPurchase={() => void startCheckout()}
-        onRetry={() => void reload()}
+        onRetry={() => void retry()}
       />
 
       {showPurchase && (
@@ -70,5 +79,14 @@ export default function PlanPage() {
 
       <Link href="/home">戻る</Link>
     </main>
+  );
+}
+
+// useSearchParams は、ビルド時の静的生成のためにSuspenseで包む必要がある
+export default function PlanPage() {
+  return (
+    <Suspense fallback={<p role="status">読み込み中です。</p>}>
+      <PlanContent />
+    </Suspense>
   );
 }

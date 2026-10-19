@@ -70,6 +70,28 @@ describe("PhaseMessage", () => {
     }
   });
 
+  it("422(validation)は、購入手続きを開始できなかったことを固定文言で伝える", () => {
+    const { onRetry } = setup("error", "validation");
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "購入手続きを開始できませんでした",
+    );
+    expect(document.body.textContent).not.toMatch(/VALIDATION_ERROR/);
+
+    fireEvent.click(screen.getByRole("button", { name: "再試行する" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("購入できないプラン(plan_unavailable)は、固定文言だけで再試行ボタンを出さない", () => {
+    setup("error", "plan_unavailable");
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "このプランは現在購入できません。",
+    );
+    expect(screen.queryByRole("button", { name: "再試行する" })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/PLAN_NOT_AVAILABLE/);
+  });
+
   it("idle・loading では何も表示しない", () => {
     setup("idle");
     expect(document.body.textContent).toBe("");
