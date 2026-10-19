@@ -6,3 +6,8 @@ body {
 body {
   min-width: 320px;
 }
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
