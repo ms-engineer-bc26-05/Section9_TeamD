@@ -46,10 +46,18 @@ export function MemoListScreen({
   return (
     <main className={styles.page}>
       <div className={styles.content}>
-        <button type="button" className={styles.backButton} onClick={onBackHome}>
-          ホームへ戻る
-        </button>
-        <h1 className={styles.heading}>保存メモ</h1>
+        <header className={styles.header}>
+          <button
+            type="button"
+            className={styles.backButton}
+            aria-label="ホームへ戻る"
+            onClick={onBackHome}
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1 className={styles.heading}>保存メモ</h1>
+          <span className={styles.headerSpacer} aria-hidden="true" />
+        </header>
 
         {notice !== null ? (
           <p className={styles.successNotice} role="status">

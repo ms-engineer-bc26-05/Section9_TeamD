@@ -28,6 +28,28 @@ function createApi(): MemoApi {
 }
 
 describe("MemoListContainer", () => {
+  it("戻る矢印をホームへ戻る操作として提供する", async () => {
+    const api = createApi();
+    vi.mocked(api.list).mockResolvedValue({ memos: [], next_cursor: null });
+    const onBackHome = vi.fn();
+
+    render(
+      <MemoListContainer
+        api={api}
+        onBackHome={onBackHome}
+        onOpenMemo={vi.fn()}
+        onStartConsultation={vi.fn()}
+      />,
+    );
+
+    const backButton = await screen.findByRole("button", {
+      name: "ホームへ戻る",
+    });
+    await userEvent.click(backButton);
+
+    expect(onBackHome).toHaveBeenCalledOnce();
+  });
+
   it("一覧を表示し、summaryを再加工せず詳細選択へ渡す", async () => {
     const api = createApi();
     vi.mocked(api.list).mockResolvedValue({
