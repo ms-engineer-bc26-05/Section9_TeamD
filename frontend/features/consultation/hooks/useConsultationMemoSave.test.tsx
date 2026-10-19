@@ -22,6 +22,31 @@ function createApi(): ConsultationMemoApi {
 }
 
 describe("useConsultationMemoSave", () => {
+  it("認証エラーを共通認証処理へ通知し、保存成功にしない", async () => {
+    const api = createApi();
+    const error = new ApiError("forbidden", {
+      status: 403,
+      code: "ACCOUNT_DELETING",
+    });
+    const onApiError = vi.fn();
+    vi.mocked(api.save).mockRejectedValue(error);
+    const { result } = renderHook(() =>
+      useConsultationMemoSave(api, onApiError),
+    );
+
+    let response: SavedConsultationMemo | null = savedMemo;
+    await act(async () => {
+      response = await result.current.save({
+        consultationId: "c1",
+        reason: null,
+      });
+    });
+
+    expect(response).toBeNull();
+    expect(onApiError).toHaveBeenCalledOnce();
+    expect(onApiError).toHaveBeenCalledWith(error);
+  });
+
   it("保存成功時に保存済みメモを返す", async () => {
     const api = createApi();
     vi.mocked(api.save).mockResolvedValue(savedMemo);

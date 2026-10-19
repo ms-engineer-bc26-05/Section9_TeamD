@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.errors import register_exception_handlers
+from app.features.auth.schemas import CurrentUser
 from app.features.consultations.router import get_current_user_id, router
 from app.features.consultations.store import ConsultationStore, get_consultation_store
 from app.integrations.openrouter.client import AIClientError, get_ai_client
@@ -51,6 +52,13 @@ def start(client, ai):
     response = client.post(BASE, json={"theme": "communication", "detail": "架空の相談本文"})
     assert response.status_code == 201
     return response.json()["consultation_id"]
+
+
+@pytest.mark.asyncio
+async def test_current_user_id_uses_internal_user_id():
+    current_user = CurrentUser(user_id=USER)
+
+    assert await get_current_user_id(current_user) == USER
 
 
 def test_full_normal_flow(client, ai):
@@ -275,8 +283,9 @@ def test_ai_failure_returns_502_without_content(client, ai, caplog, failure, cod
 
 
 def test_requires_authentication(ai):
-    # 認証依存を差し替えない場合は、I-01へ置き換えるまで常に401
+    # 認証依存を差し替えない場合は、Bearerトークンがないため401
     app = FastAPI()
+    register_exception_handlers(app)
     app.include_router(router)
     app.dependency_overrides[get_ai_client] = lambda: ai
     response = TestClient(app).post(BASE, json={"theme": "other", "detail": "架空の相談本文"})

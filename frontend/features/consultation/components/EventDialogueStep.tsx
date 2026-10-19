@@ -213,7 +213,8 @@ export function EventDialogueStep({
 
           {isSubmitting ? (
             <p className={styles.loadingMessage} role="status">
-              AIが内容を整理しています…
+              AIが内容を整理しています。通常より時間がかかることがあります。
+              そのままお待ちください。
             </p>
           ) : null}
         </form>

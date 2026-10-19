@@ -237,6 +237,14 @@
   border-color: #e5ded7;
 }
 
+.loadingMessage {
+  margin: 18px 0 0;
+  color: #6f625b;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  text-align: center;
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;

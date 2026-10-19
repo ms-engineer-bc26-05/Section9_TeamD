@@ -34,6 +34,56 @@ function createActions(): ConsultationFlowActions {
 }
 
 describe("ConsultationFlow", () => {
+  it("整理結果の文字数上限をAPI契約に合わせる", () => {
+    const actions = createActions();
+
+    render(
+      <ConsultationFlow
+        state={{
+          ...initialConsultationState,
+          consultationId: "c1",
+          status: "result_ready",
+          result: {
+            event_summary: "架空の出来事",
+            emotion: "架空の感情",
+            true_feeling: "架空の本音",
+            background: "",
+            wish: "架空の望み",
+            approved: false,
+          },
+        }}
+        draft={{
+          selectedEmotion: null,
+          guidedHistory: [],
+          guidedAnswer: "",
+          saveReason: "",
+          isReselectingHandling: false,
+        }}
+        limits={{
+          startDetail: 2000,
+          eventAnswer: 1000,
+          eventSummaryField: 500,
+          emotionDetail: 300,
+          guidedAnswer: 1000,
+          resultField: 500,
+          resultEmotion: 300,
+          saveReason: 500,
+        }}
+        actions={actions}
+        saveState={{ isSubmitting: false, errorCode: null }}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "感情" })).toHaveAttribute(
+      "maxlength",
+      "300",
+    );
+    expect(screen.getByRole("textbox", { name: "出来事" })).toHaveAttribute(
+      "maxlength",
+      "500",
+    );
+  });
+
   it("復旧が必要なときは再確認とホーム復帰の両方を表示する", async () => {
     const user = userEvent.setup();
     const actions = createActions();
@@ -59,6 +109,7 @@ describe("ConsultationFlow", () => {
           emotionDetail: 500,
           guidedAnswer: 500,
           resultField: 500,
+          resultEmotion: 300,
           saveReason: 500,
         }}
         actions={actions}
@@ -101,6 +152,7 @@ describe("ConsultationFlow", () => {
           emotionDetail: 500,
           guidedAnswer: 500,
           resultField: 500,
+          resultEmotion: 300,
           saveReason: 500,
         }}
         actions={actions}
@@ -147,6 +199,7 @@ describe("ConsultationFlow", () => {
           emotionDetail: 500,
           guidedAnswer: 500,
           resultField: 500,
+          resultEmotion: 300,
           saveReason: 500,
         }}
         actions={actions}
@@ -196,6 +249,7 @@ describe("ConsultationFlow", () => {
           emotionDetail: 500,
           guidedAnswer: 500,
           resultField: 500,
+          resultEmotion: 300,
           saveReason: 500,
         }}
         actions={actions}
@@ -251,6 +305,7 @@ describe("ConsultationFlow", () => {
           emotionDetail: 500,
           guidedAnswer: 500,
           resultField: 500,
+          resultEmotion: 300,
           saveReason: 500,
         }}
         actions={actions}
