@@ -25,9 +25,15 @@ interface UseMemoDetailOptions {
   memoId: string;
   api: MemoApi;
   onDeleted: (memoId: string) => void;
+  onApiError?: (error: unknown) => void;
 }
 
-export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) {
+export function useMemoDetail({
+  memoId,
+  api,
+  onDeleted,
+  onApiError,
+}: UseMemoDetailOptions) {
   const [loadState, setLoadState] = useState<MemoDetailLoadState>({
     status: "loading",
     memo: null,
@@ -40,6 +46,11 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
   const loadRequest = useRef<AbortController | null>(null);
   const deleteOutcomeUnknown = useRef(false);
   const deleteInFlight = useRef(false);
+  const onApiErrorRef = useRef(onApiError);
+
+  useEffect(() => {
+    onApiErrorRef.current = onApiError;
+  }, [onApiError]);
 
   const load = useCallback(async () => {
     loadRequest.current?.abort();
@@ -55,6 +66,7 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
       if (controller.signal.aborted) return;
       const failure = toMemoApiFailure(error);
       if (failure.type === "aborted") return;
+      onApiErrorRef.current?.(error);
       setLoadState({ status: "error", memo: null, error: failure.code });
     }
   }, [api, memoId]);
@@ -90,6 +102,7 @@ export function useMemoDetail({ memoId, api, onDeleted }: UseMemoDetailOptions) 
         setDeleteState({ status: "idle", error: null });
         return;
       }
+      onApiErrorRef.current?.(error);
       if (
         failure.code === "MEMO_NOT_FOUND" &&
         deleteOutcomeUnknown.current

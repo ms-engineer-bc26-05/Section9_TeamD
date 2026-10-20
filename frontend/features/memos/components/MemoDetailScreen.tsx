@@ -41,10 +41,18 @@ export function MemoDetailScreen({
   return (
     <main className={styles.page}>
       <div className={styles.content}>
-        <button type="button" className={styles.backButton} onClick={onBackToList}>
-          保存メモ一覧へ戻る
-        </button>
-        <h1 className={styles.heading}>保存メモ詳細</h1>
+        <header className={styles.header}>
+          <button
+            type="button"
+            className={styles.backButton}
+            aria-label="保存メモ一覧へ戻る"
+            onClick={onBackToList}
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1 className={styles.heading}>保存メモ詳細</h1>
+          <span className={styles.headerSpacer} aria-hidden="true" />
+        </header>
 
         {loadState.status === "loading" ? (
           <p role="status">読み込み中です…</p>

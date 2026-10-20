@@ -8,17 +8,21 @@ interface MemoListContainerProps {
   /** レンダーごとに参照が変わらないMemoApiを渡す。 */
   api: MemoApi;
   notice?: string | null;
+  onBackHome: () => void;
   onOpenMemo: (memoId: string) => void;
   onStartConsultation: () => void;
+  onApiError?: (error: unknown) => void;
 }
 
 export function MemoListContainer({
   api,
   notice = null,
+  onBackHome,
   onOpenMemo,
   onStartConsultation,
+  onApiError,
 }: MemoListContainerProps) {
-  const { state, reload, loadMore } = useMemoList(api);
+  const { state, reload, loadMore } = useMemoList(api, onApiError);
 
   return (
     <MemoListScreen
@@ -29,6 +33,7 @@ export function MemoListContainer({
       initialError={state.initialError}
       loadMoreError={state.loadMoreError}
       notice={notice}
+      onBackHome={onBackHome}
       onOpenMemo={onOpenMemo}
       onStartConsultation={onStartConsultation}
       onReload={() => void reload()}
