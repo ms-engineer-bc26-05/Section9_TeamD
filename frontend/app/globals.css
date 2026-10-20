@@ -8,6 +8,7 @@ body {
 }
 
 button,
-a {
+a,
+label {
   -webkit-tap-highlight-color: transparent;
 }
