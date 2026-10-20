@@ -1,0 +1,257 @@
+/* プラン画面・決済の確認画面・ホームの利用状況の概要のスタイル(F-04 / #58)
+ * 色・角丸・フォーカス表示は home.module.css と 12-plan.svg(ワイヤーフレーム)に合わせている
+ * 文字サイズは Issue #117 の基準案に合わせる
+ *   本文 0.875rem以上 / ボタン 1rem前後 / 補足 0.75rem以上 / 画面タイトル 20px前後 */
+
+/* ---- ページ ---- */
+.page {
+  min-height: 100svh;
+  padding: 32px 26px 52px;
+  box-sizing: border-box;
+  color: #493e38;
+  background: #f7f3ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif;
+}
+
+.panel {
+  width: min(100%, 390px);
+  margin: 0 auto;
+}
+
+.header {
+  position: relative;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+.back {
+  position: absolute;
+  left: -10px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  color: #493e38;
+  font-size: 1.75rem;
+  line-height: 1;
+  text-decoration: none;
+  place-items: center;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.muted {
+  margin: 24px 0 0;
+  color: #81766f;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* ---- 利用状況(現在のプラン) ---- */
+.usage {
+  margin-top: 24px;
+  padding: 18px 22px 20px;
+  background: #e3e7d8;
+  border-radius: 18px;
+}
+
+.usageLabel {
+  margin: 0;
+  color: #81766f;
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.planName {
+  margin: 6px 0 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.usageLine {
+  margin: 6px 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.usageNote {
+  margin: 6px 0 0;
+  color: #6e625c;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.usageWarn {
+  font-weight: 700;
+}
+
+/* ---- 途中状態のメッセージ ---- */
+.message {
+  margin: 20px 0 0;
+  padding: 14px 18px;
+  background: #f2ddd6;
+  border-radius: 14px;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.messageError {
+  background: #fffdfc;
+  border: 1.5px solid #d98978;
+}
+
+.messageText {
+  margin: 0;
+}
+
+/* ---- 購入の案内 ---- */
+.guide {
+  margin-top: 32px;
+}
+
+.sectionTitle {
+  margin: 0 0 14px;
+  font-size: 1.1875rem;
+  font-weight: 700;
+}
+
+.card {
+  padding: 22px 22px 24px;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 20px;
+}
+
+.cardTitle {
+  margin: 0 0 14px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.checkList {
+  margin: 0;
+  padding: 0;
+  color: #81766f;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  list-style: none;
+}
+
+.checkList li {
+  margin-top: 8px;
+}
+
+.checkList li::before {
+  content: "✓ ";
+}
+
+.note {
+  margin: 14px 0 0;
+  color: #6e625c;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.infoBox {
+  margin: 20px 0 0;
+  padding: 16px 20px;
+  background: #f2ddd6;
+  border-radius: 14px;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.footnote {
+  margin: 14px 0 0;
+  color: #81766f;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* ---- ボタン・リンク ---- */
+.primaryButton {
+  display: grid;
+  width: 100%;
+  min-height: 56px;
+  margin-top: 18px;
+  padding: 12px 24px;
+  box-sizing: border-box;
+  color: #ffffff;
+  background: #d98978;
+  border: 0;
+  border-radius: 15px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  place-items: center;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #c96f60;
+}
+
+.primaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  min-height: 48px;
+  margin-top: 12px;
+  padding: 10px 20px;
+  color: #493e38;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 15px;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.linkButton {
+  margin-left: 4px;
+  padding: 0;
+  color: #493e38;
+  background: none;
+  border: 0;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.outlineLink {
+  display: grid;
+  min-height: 52px;
+  margin-top: 16px;
+  color: #493e38;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 15px;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+  place-items: center;
+}
+
+.back:focus-visible,
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.linkButton:focus-visible,
+.outlineLink:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: 3px;
+}
+
+/* ---- ホームの利用状況の概要 ---- */
+.overview {
+  margin-top: 40px;
+}
