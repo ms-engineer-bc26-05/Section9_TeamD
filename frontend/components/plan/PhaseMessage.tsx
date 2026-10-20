@@ -1,4 +1,5 @@
 import type { PlanErrorKind, PlanPhase } from "@/lib/usePlanStatus";
+import styles from "./plan.module.css";
 
 type Props = {
   phase: PlanPhase;
@@ -29,18 +30,30 @@ export function PhaseMessage({
 }: Props) {
   switch (phase) {
     case "starting":
-      return <p role="status">決済画面へ移動しています。</p>;
+      return (
+        <p className={styles.message} role="status">
+          決済画面へ移動しています。
+        </p>
+      );
 
     case "confirming":
-      return <p role="status">決済状態を確認しています。</p>;
+      return (
+        <p className={styles.message} role="status">
+          決済状態を確認しています。
+        </p>
+      );
 
     case "pending":
       return (
-        <section aria-label="決済の確認">
-          <p role="status">
+        <section className={styles.message} aria-label="決済の確認">
+          <p className={styles.messageText} role="status">
             決済状態をまだ確認できません。少し時間をおいて、もう一度ご確認ください。
           </p>
-          <button type="button" onClick={onConfirm}>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={onConfirm}
+          >
             決済を確認する
           </button>
         </section>
@@ -48,11 +61,15 @@ export function PhaseMessage({
 
     case "expired":
       return (
-        <section aria-label="決済の確認">
-          <p role="status">
+        <section className={styles.message} aria-label="決済の確認">
+          <p className={styles.messageText} role="status">
             決済手続きは完了していません。購入を希望する場合は、もう一度お手続きください。
           </p>
-          <button type="button" onClick={onPurchase}>
+          <button
+            type="button"
+            className={styles.primaryButton}
+            onClick={onPurchase}
+          >
             購入手続きへ進む
           </button>
         </section>
@@ -60,27 +77,44 @@ export function PhaseMessage({
 
     case "in_progress":
       return (
-        <section aria-label="決済の準備">
-          <p role="status">
+        <section className={styles.message} aria-label="決済の準備">
+          <p className={styles.messageText} role="status">
             決済画面を準備しています。少し待ってから、もう一度お試しください。
           </p>
-          <button type="button" onClick={onPurchase}>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={onPurchase}
+          >
             もう一度試す
           </button>
         </section>
       );
 
     case "not_found":
-      return <p role="alert">確認できる決済がありません。</p>;
+      return (
+        <p className={styles.message} role="alert">
+          確認できる決済がありません。
+        </p>
+      );
 
     case "error": {
       const kind = errorKind ?? "server";
       return (
-        <section aria-label="エラー">
-          <p role="alert">{ERROR_MESSAGES[kind]}</p>
+        <section
+          className={`${styles.message} ${styles.messageError}`}
+          aria-label="エラー"
+        >
+          <p className={styles.messageText} role="alert">
+            {ERROR_MESSAGES[kind]}
+          </p>
           {/* 購入できないプランは、再試行しても変わらないので、ボタンを出さない */}
           {kind !== "plan_unavailable" && (
-            <button type="button" onClick={onRetry}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={onRetry}
+            >
               再試行する
             </button>
           )}

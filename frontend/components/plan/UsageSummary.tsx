@@ -1,4 +1,5 @@
 import type { PlanCode, UsageResponse } from "@/lib/billing";
+import styles from "./plan.module.css";
 
 type Props = {
   plan: PlanCode;
@@ -35,35 +36,39 @@ function memoText(usage: UsageResponse): string {
     : `保存したメモ:${usage.memo_count}件(上限 ${usage.memo_limit}件)`;
 }
 
-// 現在の利用状況(UI-002)。表示できるのは、サーバーで確認できたプランだけ
+// 現在の利用状況(UI-002・UI-012)。表示できるのは、サーバーで確認できたプランだけ
 export function UsageSummary({ plan, usage }: Props) {
   const resetDate = formatDate(usage?.consultation_resets_at ?? null);
 
   return (
-    <section aria-label="利用状況">
-      <h2>利用状況</h2>
-      <p>{`現在のプラン:${plan === "premium" ? "有料プラン" : "無料プラン"}`}</p>
+    <section className={styles.usage} aria-label="利用状況">
+      <h2 className={styles.usageLabel}>利用状況</h2>
+      <p className={styles.planName}>
+        {`現在のプラン:${plan === "premium" ? "有料プラン" : "無料プラン"}`}
+      </p>
 
       {usage === null ? (
-        <p>利用状況を取得できませんでした。</p>
+        <p className={styles.usageNote}>利用状況を取得できませんでした。</p>
       ) : (
         <>
-          <p>{consultationText(usage)}</p>
+          <p className={styles.usageLine}>{consultationText(usage)}</p>
           {usage.can_start_consultation ? (
             <>
-              <p>相談を始められます。</p>
+              <p className={styles.usageLine}>相談を始められます。</p>
               {resetDate && (
-                <p>{`この期間の回数は、${resetDate}にリセットされます。`}</p>
+                <p className={styles.usageNote}>
+                  {`この期間の回数は、${resetDate}にリセットされます。`}
+                </p>
               )}
             </>
           ) : (
-            <p>
+            <p className={`${styles.usageLine} ${styles.usageWarn}`}>
               {`この期間の相談回数の上限に達しました。${
                 resetDate ? `${resetDate}以降に、また相談できます。` : ""
               }`}
             </p>
           )}
-          <p>{memoText(usage)}</p>
+          <p className={styles.usageLine}>{memoText(usage)}</p>
         </>
       )}
     </section>
