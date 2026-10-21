@@ -38,7 +38,7 @@ def test_invalid_limit_is_rejected_without_value(value):
 
 
 def test_usage_settings_use_plan_limits():
-    # 利用回数側（GET /usage・相談開始・保存件数の上限）は、plans/ と同じ上限値を使う
+    # 利用回数側（GET /usage・相談開始）は、メモ保存（memos/limits.py の get_plan_settings）と同じ上限値を使う
     env = {"USAGE_FREE_CONSULTATION_LIMIT": "7", "USAGE_PREMIUM_MEMO_LIMIT": "unlimited"}
 
     assert load_usage_settings(env).plan_limits == load_plan_settings(env).plan_limits

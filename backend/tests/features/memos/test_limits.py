@@ -5,8 +5,8 @@ from uuid import uuid4
 import pytest
 
 from app.features.memos import limits
+from app.features.plans.public import PlanCode
 from app.features.usage.exceptions import PlanUnavailable
-from app.features.usage.settings import PlanCode
 
 from tests.features.usage.fakes import FakePlanResolver, make_settings, plan_unavailable
 
