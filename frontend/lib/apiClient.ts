@@ -45,6 +45,7 @@ export class ApiError extends Error {
   readonly status?: number;
   readonly code?: string; // error.code。例: "ACCOUNT_DELETING" / "AI_OUTPUT_INVALID"
   readonly details?: ApiErrorDetail[]; // 422のときのみ
+  readonly sessionId?: string; // 409 PAYMENT_CONFIRMATION_REQUIRED のときのみ(error.session_id)
 
   constructor(
     kind: ApiErrorKind,
@@ -53,6 +54,7 @@ export class ApiError extends Error {
       code?: string;
       message?: string;
       details?: ApiErrorDetail[];
+      sessionId?: string;
     } = {},
   ) {
     // 相談内容・トークン・AI出力・生の本文は入れない
@@ -62,6 +64,7 @@ export class ApiError extends Error {
     this.status = options.status;
     this.code = options.code;
     this.details = options.details;
+    this.sessionId = options.sessionId;
   }
 }
 
@@ -86,7 +89,7 @@ function isAbortError(error: unknown): boolean {
 // 旧形式 {"detail": ...} や想定外の本文は読まず、固定メッセージに任せる
 async function readErrorBody(
   response: Response,
-): Promise<{ code?: string; details?: ApiErrorDetail[] }> {
+): Promise<{ code?: string; details?: ApiErrorDetail[]; sessionId?: string }> {
   try {
     const body: unknown = await response.json();
     if (typeof body !== "object" || body === null || !("error" in body)) {
@@ -95,9 +98,11 @@ async function readErrorBody(
     const error = (body as { error: unknown }).error;
     if (typeof error !== "object" || error === null) return {};
 
-    const { code, details } = error as { code?: unknown; details?: unknown };
+    const { code, details, session_id } = error as { code?: unknown; details?: unknown; session_id?: unknown; };
     return {
       code: typeof code === "string" ? code : undefined,
+      // session_id は文字列のときだけ取り込む(ログ・ストレージ・画面には出さない)
+      sessionId: typeof session_id === "string" ? session_id : undefined,
       details: Array.isArray(details)
         ? details.filter(
             (d): d is ApiErrorDetail =>
@@ -181,11 +186,12 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    const { code, details } = await readErrorBody(response);
+    const { code, details, sessionId } = await readErrorBody(response);
     throw new ApiError(kindFromStatus(response.status), {
       status: response.status,
       code,
       details,
+      sessionId,
     });
   }
 
