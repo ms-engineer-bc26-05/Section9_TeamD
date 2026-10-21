@@ -47,7 +47,7 @@
 
 .muted {
   margin: 24px 0 0;
-  color: #81766f;
+  color: #6e625c;
   font-size: 0.875rem;
   line-height: 1.7;
   text-align: center;
@@ -63,7 +63,7 @@
 
 .usageLabel {
   margin: 0;
-  color: #81766f;
+  color: #6e625c;
   font-size: 0.8125rem;
   font-weight: 400;
 }
@@ -137,7 +137,7 @@
 .checkList {
   margin: 0;
   padding: 0;
-  color: #81766f;
+  color: #6e625c;
   font-size: 0.875rem;
   line-height: 1.7;
   list-style: none;
@@ -169,7 +169,7 @@
 
 .footnote {
   margin: 14px 0 0;
-  color: #81766f;
+  color: #6e625c;
   font-size: 0.8125rem;
   line-height: 1.7;
   text-align: center;
