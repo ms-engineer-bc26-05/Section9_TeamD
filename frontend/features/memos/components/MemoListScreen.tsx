@@ -14,6 +14,7 @@ export interface MemoListScreenProps {
   initialError: MemoErrorCode | null;
   loadMoreError: MemoErrorCode | null;
   notice?: string | null;
+  onBackHome: () => void;
   onOpenMemo: (memoId: string) => void;
   onStartConsultation: () => void;
   onReload: () => void;
@@ -36,6 +37,7 @@ export function MemoListScreen({
   initialError,
   loadMoreError,
   notice = null,
+  onBackHome,
   onOpenMemo,
   onStartConsultation,
   onReload,
@@ -44,7 +46,18 @@ export function MemoListScreen({
   return (
     <main className={styles.page}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>保存メモ</h1>
+        <header className={styles.header}>
+          <button
+            type="button"
+            className={styles.backButton}
+            aria-label="ホームへ戻る"
+            onClick={onBackHome}
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1 className={styles.heading}>保存メモ</h1>
+          <span className={styles.headerSpacer} aria-hidden="true" />
+        </header>
 
         {notice !== null ? (
           <p className={styles.successNotice} role="status">

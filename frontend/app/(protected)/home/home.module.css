@@ -64,6 +64,32 @@
   outline-offset: 3px;
 }
 
+.memoButton {
+  display: grid;
+  width: min(100%, 320px);
+  min-height: 52px;
+  margin-top: 14px;
+  padding: 10px 24px;
+  box-sizing: border-box;
+  color: #493e38;
+  background: #ffffff;
+  border: 1px solid #c9b8ae;
+  border-radius: 18px;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+  place-items: center;
+}
+
+.memoButton:hover {
+  border-color: #d98978;
+}
+
+.memoButton:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: 3px;
+}
+
 .reassurance {
   margin: 20px 0 0;
   color: #81766f;

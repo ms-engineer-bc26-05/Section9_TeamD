@@ -17,6 +17,67 @@ const DETAIL = {
 };
 
 describe("useMemoDetail", () => {
+  it("onApiErrorの参照が変わっても再取得せず、最新の関数へ通知する", async () => {
+    const error = { kind: "network" };
+    const api: MemoApi = {
+      list: vi.fn(),
+      detail: vi.fn().mockResolvedValue(DETAIL),
+      delete: vi.fn().mockRejectedValue(error),
+    };
+    const onDeleted = vi.fn();
+    const firstHandler = vi.fn();
+    const latestHandler = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ onApiError }) =>
+        useMemoDetail({
+          memoId: "memo-1",
+          api,
+          onDeleted,
+          onApiError,
+        }),
+      { initialProps: { onApiError: firstHandler } },
+    );
+
+    await waitFor(() => expect(result.current.loadState.status).toBe("ready"));
+    rerender({ onApiError: latestHandler });
+
+    expect(api.detail).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      await result.current.confirmDelete();
+    });
+
+    expect(api.detail).toHaveBeenCalledOnce();
+    expect(firstHandler).not.toHaveBeenCalled();
+    expect(latestHandler).toHaveBeenCalledOnce();
+    expect(latestHandler).toHaveBeenCalledWith(error);
+  });
+
+  it("abortedを認証エラー処理へ通知しない", async () => {
+    const api: MemoApi = {
+      list: vi.fn(),
+      detail: vi.fn().mockResolvedValue(DETAIL),
+      delete: vi.fn().mockRejectedValue({ kind: "aborted" }),
+    };
+    const onApiError = vi.fn();
+    const { result } = renderHook(() =>
+      useMemoDetail({
+        memoId: "memo-1",
+        api,
+        onDeleted: vi.fn(),
+        onApiError,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.loadState.status).toBe("ready"));
+    await act(async () => {
+      await result.current.confirmDelete();
+    });
+
+    expect(onApiError).not.toHaveBeenCalled();
+    expect(result.current.deleteState).toEqual({ status: "idle", error: null });
+  });
+
   it("状態更新前に削除確認が重なってもAPIを一度だけ呼ぶ", async () => {
     let resolveDelete: (() => void) | undefined;
     const api: MemoApi = {
