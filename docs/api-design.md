@@ -1514,7 +1514,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
    決済作成（6.8）・保存（6.5.2）も同じユーザー行をロックしてから状態を確認するため、確認と`deleting`への変更の間に決済作成・保存が割り込むことはない（ロック取得順序を統一する）。
 3. **保存済みメモの削除**：ユーザー行をロックし、`deleting`であることを確認して、`approved_memos`を削除・確定する。個人性の高いメモを、外部サービスの処理より先に削除する。
 4. **一時相談の破棄**：`discard_user_consultations(user_id)`（6.5.4。#96）で、そのユーザーの一時相談と開始処理中の予約をすべて破棄する。
-5. **決済の照合**：F-05の`payments/public.py`の`settle_unfinished_payments(user_id)`（#60で合意）で、未完了の決済をStripeと照合して確定する。`pending`の行は、`open`のSessionを期限切れにして`expired`、`expired`は`expired`、支払い済みは`paid`の記録だけ残す（利用権限は付与しない）。確認できない場合（Sessionが見つからない場合を含む。行は`failed`にしない）・`creating`が残っている場合は`409`（`ACCOUNT_DELETION_BLOCKED`）、Stripeに接続できない場合は`503`（`PAYMENT_UNAVAILABLE`）で止め、`deleting`のまま再実行で再開する（照会はDBロックの外で行い、未確認のまま`expired`にしない）。
+5. **決済の照合**：F-05の`payments/public.py`の`settle_unfinished_payments(user_id)`（#60で合意）で、未完了の決済をStripeと照合して確定する。`pending`の行は、`open`のSessionを期限切れにして`expired`、`expired`は`expired`、支払い済みは`paid`の記録だけ残す（利用権限は付与しない）。確認できない場合（Sessionが見つからない場合を含む。行は`failed`にしない）・`creating`が残っている場合は`409`（`ACCOUNT_DELETION_BLOCKED`）、Stripeに接続できない場合は`503`（`PAYMENT_UNAVAILABLE`）で止め、`deleting`のまま再実行で再開する（照会はDBロックの外で行い、未確認のまま`expired`にしない）。ここでの`409`は、Sessionが見つからない・支払いが確定していない・期限切れにできず`open`のまま、など**時間をおくか確認すれば進められる**場合に限る。Sessionの本人（`client_reference_id`）・決済ID（metadataの`payment_id`）・金額・通貨が行と一致しない場合や、想定外のSessionの状態（`pending`の行にSession IDがない場合を含む）は、データの不整合として`500`（`INTERNAL_SERVER_ERROR`）で止める（`deleting`のまま。再実行しても同じ結果になるため、担当者がStripeとDBを確認する）。
 6. **Redisの利用回数キーの削除**（`usage_limit:{user_id}`。6.7.5）。Redisを利用できない場合は`503`（`USAGE_UNAVAILABLE`）で止める（利用回数の判定のフェイルオープンは、退会時の削除には適用しない）。
 7. **Firebase側のユーザーの削除**（Admin SDK）。「すでに存在しない」場合だけ処理済みとして続行する。通信障害・権限不足を「存在しない」とは扱わない（`503`（`AUTH_UNAVAILABLE`））。
 8. **Redisの利用回数キーの再削除**：手順6の後に並行した相談開始が作り直したキーを消すため、`users`を削除する前にもう一度削除する（#57・#60で合意）。失敗した場合は`deleting`を残して止める。
@@ -1530,7 +1530,7 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 - 各手順は、同じ処理を再実行しても安全に続行できる（削除対象がすでに存在しない場合も成功扱い）。そのため、`deleting`状態であれば最初の手順からやり直せばよく、処理段階の記録は持たない（再実行時も手順2で`creating`の確認を行う。`deleting`の後に`creating`は作られないため、通常は該当しない）。
 - 削除済みのメモは、以降の処理が失敗しても復元・再作成しない。
 - Firebase削除（手順7）より前に失敗した場合は、本人が再度`DELETE /users/me`を呼び出せば再開できる。画面は、ほかのAPIで`403`（`ACCOUNT_DELETING`）を受けた場合に共通の入口から退会の再開へつなぐ（#61）。
-- Firebase削除後に失敗した場合は、本人のトークンが手順1で`401`になるため、本人によるAPIの再実行では再開できない（`401`を退会完了とは扱わない）。この場合は、手動復旧コマンド（`backend/manual_checks/recover_account.py`。手順は`backend/manual_checks/account_deletion.md`）で、1アカウントずつ再実行する。コマンドは、APIを停止したうえで、DBで`deleting`であることとFirebaseでユーザーが存在しないことを明示的に確認してから、手順2以降（決済の照合・Redisの再削除を含む）を実行する。検出用の列（`users.deletion_requested_at`等）は追加しない。
+- Firebase削除後に失敗した場合は、本人のトークンが手順1で`401`になるため、本人によるAPIの再実行では再開できない（`401`を退会完了とは扱わない）。この場合は、手動復旧コマンド（`backend/manual_checks/recover_account.py`。手順は`backend/manual_checks/account_deletion.md`）で、1アカウントずつ再実行する。コマンドは、すべてのAPIプロセスと、アカウントを書き換える関連ジョブを停止したうえで（停止の確認フラグ`--api-stopped`は実施者の確認の表明で、実際に停止しているかをコマンドが自動で検証するものではない）、DBで`deleting`であることとFirebaseでユーザーが存在しないことを明示的に確認してから、手順2以降（決済の照合・Redisの再削除を含む）を実行する。検出用の列（`users.deletion_requested_at`等）は追加しない。
 
 排他の前提と制約：
 
@@ -1544,12 +1544,12 @@ response（204）：本文なし。次の処理を**同期的に**この順序�
 | --- | --- | --- | --- |
 | 401 | `UNAUTHORIZED` | トークンがない・無効・失効、Firebase側で削除済み、ロック後の再検証でUIDが違う、内部ユーザーがいない（3.6） | 変わらない |
 | 409 | `ACCOUNT_DELETION_IN_PROGRESS` | 同じUIDの別の`DELETE`が実行中 | 変わらない |
-| 409 | `ACCOUNT_DELETION_BLOCKED` | `creating`の決済がある（手順2）、決済を確認できない（手順5）、最後の再確認で未完了の決済が残っている（手順9） | 手順2では状態を変えない（初回は`active`のまま）、手順5・9では`deleting`のまま |
+| 409 | `ACCOUNT_DELETION_BLOCKED` | `creating`の決済がある（手順2）、決済を確認できない（手順5。Sessionが見つからない・支払いが未確定など。不一致は500）、最後の再確認で未完了の決済が残っている（手順9） | 手順2では状態を変えない（初回は`active`のまま）、手順5・9では`deleting`のまま |
 | 503 | `AUTH_UNAVAILABLE` | Firebaseに接続できない（検証・削除） | 手順3以降なら`deleting`のまま |
 | 503 | `DB_UNAVAILABLE` | DBに接続できない | 同上 |
 | 503 | `PAYMENT_UNAVAILABLE` | Stripeに接続できない | `deleting`のまま |
 | 503 | `USAGE_UNAVAILABLE` | Redisを利用できない | `deleting`のまま |
-| 500 | `INTERNAL_SERVER_ERROR` | 上記以外の想定外の失敗。ログには例外の種類だけを残す（例外の本文・ID・トークンは残さない） | 手順3以降なら`deleting`のまま |
+| 500 | `INTERNAL_SERVER_ERROR` | 上記以外の想定外の失敗。決済の照合（手順5）で、Sessionの本人・決済ID・金額・通貨が一致しない場合、想定外のSessionの状態の場合も含む。ログには例外の種類だけを残す（例外の本文・ID・トークンは残さない） | 手順3以降なら`deleting`のまま |
 
 - `409`（`ACCOUNT_DELETION_BLOCKED`）は、`active`と`deleting`のどちらの場合もあるため、画面は409だけで通常利用できるとは判断しない（#60）。
 - 通常のAPIと違い、`deleting`でも`403`（`ACCOUNT_DELETING`）は返さず、退会を再実行する。
