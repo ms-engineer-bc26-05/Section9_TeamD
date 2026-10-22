@@ -13,15 +13,14 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, exists, insert, or_, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import and_, insert, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.database_errors import is_database_connection_error
 from app.core.exceptions import DatabaseUnavailableError
 from app.features.payments.exceptions import PaymentDatabaseError
-from app.features.payments.models import PaymentRow, PlanRow, UserEntitlementRow
+from app.features.payments.models import PaymentRow, PlanRow
 from app.features.payments.repository import (
     UNFINISHED_STATUSES,
     CheckoutRequest,
@@ -32,10 +31,10 @@ from app.features.payments.repository import (
     UserNotActive,
     UserNotFound,
 )
+from app.features.plans.public import PlanCode, get_current_plan, grant_paid_entitlement
 from app.features.users.models import User
 
 _UNFINISHED_INDEX = "uq_payments_user_id_unfinished"
-FREE_PLAN_CODE = "free"
 
 
 def _request_to_json(request: CheckoutRequest) -> dict[str, Any]:
@@ -112,19 +111,9 @@ class _SqlAlchemyPaymentTransaction:
             raise UserNotActive
         return status
 
-    async def has_paid_entitlement(self, user_id: UUID, now: datetime) -> bool:
-        # plans/public.py の get_current_plan ができたら差し替える（#59）
-        statement = select(
-            exists().where(
-                UserEntitlementRow.user_id == user_id,
-                UserEntitlementRow.status == "active",
-                UserEntitlementRow.valid_from <= now,
-                or_(UserEntitlementRow.valid_until.is_(None), UserEntitlementRow.valid_until > now),
-                PlanRow.id == UserEntitlementRow.plan_id,
-                PlanRow.code != FREE_PLAN_CODE,
-            )
-        )
-        return bool((await self._session.execute(statement)).scalar_one())
+    async def current_plan(self, user_id: UUID, now: datetime) -> PlanCode:
+        # GET /usage と同じ判定を、ユーザー行のロックと同じトランザクションで行う（#95）
+        return await get_current_plan(self._session, user_id, now)
 
     async def find_plan(self, code: str) -> Plan | None:
         row = (
@@ -187,20 +176,7 @@ class _SqlAlchemyPaymentTransaction:
         await self._update(payment_id, "pending", status="paid", verified_at=verified_at)
 
     async def grant_entitlement(self, user_id: UUID, plan_id: UUID, now: datetime) -> None:
-        # 1ユーザー1行。買い切りのため valid_until は NULL（#59）
-        values = {
-            "plan_id": plan_id,
-            "status": "active",
-            "valid_from": now,
-            "valid_until": None,
-            "updated_at": now,
-        }
-        statement = (
-            pg_insert(UserEntitlementRow)
-            .values(user_id=user_id, **values)
-            .on_conflict_do_update(index_elements=[UserEntitlementRow.user_id], set_=values)
-        )
-        await self._session.execute(statement)
+        await grant_paid_entitlement(self._session, user_id, plan_id, now)
 
     async def mark_entitlement_applied(self, payment_id: UUID, applied_at: datetime) -> None:
         await self._update(payment_id, "paid", entitlement_applied_at=applied_at)
