@@ -166,4 +166,25 @@ describe("apiClient", () => {
     expect((error as ApiError).kind).toBe("server");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+    it("409のerror.session_idは、文字列のときだけ保持し、messageには入れない", async () => {
+    fetchMock.mockResolvedValueOnce(
+      json(
+        { error: { code: "PAYMENT_CONFIRMATION_REQUIRED", message: "x", session_id: "cs_test_1" } },
+        409,
+      ),
+    );
+    const error = (await catchError(apiClient.post("/payments/checkout-session"))) as ApiError;
+
+    expect(error.kind).toBe("conflict");
+    expect(error.code).toBe("PAYMENT_CONFIRMATION_REQUIRED");
+    expect(error.sessionId).toBe("cs_test_1");
+    expect(error.message).not.toContain("cs_test_1");
+
+    fetchMock.mockResolvedValueOnce(
+      json({ error: { code: "PAYMENT_CONFIRMATION_REQUIRED", message: "x", session_id: 123 } }, 409),
+    );
+    const other = (await catchError(apiClient.post("/payments/checkout-session"))) as ApiError;
+    expect(other.sessionId).toBeUndefined();
+  });
 });

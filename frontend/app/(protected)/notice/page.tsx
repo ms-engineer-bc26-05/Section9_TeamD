@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import type { User } from "@/lib/types";
+import styles from "./notice.module.css";
 
 // 相談窓口の案内先(厚生労働省「まもろうよ こころ」。#48で確定)
 const SUPPORT_URL = "https://www.mhlw.go.jp/mamorouyokokoro/soudan/";
-// 遷移先(UI-004)は I-04 の範囲。実装されるまでは仮置き
-const NEXT_PATH = "/home";
+const NEXT_PATH = "/consultation";
 
 export default function NoticePage() {
   const router = useRouter();
@@ -47,47 +47,77 @@ export default function NoticePage() {
   };
 
   return (
-    <main>
-      <h1>はじめる前に</h1>
+    <main className={styles.page}>
+      <div className={styles.panel}>
+        <header className={styles.header}>
+          <Link className={styles.backLink} href="/home" aria-label="ホームへ戻る">
+            ‹
+          </Link>
+          <h1 className={styles.title}>はじめる前に</h1>
+          <span className={styles.headerSpacer} aria-hidden="true" />
+        </header>
 
-      <ul>
-        <li>入力した内容は、外部のAIに送信されます。</li>
-        <li>学習には利用されない設定で利用しています。</li>
-        <li>提供元で、一定期間保持される可能性があります。</li>
-        <li>相談中のやり取りは、このアプリには残しません。</li>
-        <li>個人情報は入力しないでください。</li>
-        <li>医療・心理相談の代わりにはなりません。</li>
-      </ul>
+        <section className={styles.noticeCard} aria-label="利用前の注意事項">
+          <ul className={styles.noticeList}>
+            <li>入力した内容は、外部のAIに送信されます。</li>
+            <li>学習には利用されない設定で利用しています。</li>
+            <li>提供元で、一定期間保持される可能性があります。</li>
+            <li>相談中のやり取りは、このアプリには残しません。</li>
+            <li>個人情報は入力しないでください。</li>
+            <li>医療・心理相談の代わりにはなりません。</li>
+          </ul>
 
-      {detailVisible ? (
-        <section aria-label="詳しい注意">
-          <h2>詳しい注意</h2>
-          <p>
-            AIが整理した内容は、あなたが確認して承認したものだけを、
-            整理メモとして保存できます。保存するかどうかは、あなたが選べます。
-          </p>
-          <p>
-            つらさが強いときは、無理に続けず、下の相談窓口を利用してください。
-          </p>
+          {detailVisible ? (
+            <section className={styles.detail} aria-label="詳しい注意">
+              <h2 className={styles.detailTitle}>詳しい注意</h2>
+              <p>
+                AIが整理した内容は、あなたが確認して承認したものだけを、
+                整理メモとして保存できます。保存するかどうかは、あなたが選べます。
+              </p>
+              <p>
+                つらさが強いときは、無理に続けず、下の相談窓口を利用してください。
+              </p>
+            </section>
+          ) : (
+            <button
+              className={styles.detailButton}
+              type="button"
+              onClick={() => setShowDetail(true)}
+            >
+              詳しい注意を見る
+            </button>
+          )}
+
+          <a
+            className={styles.supportLink}
+            href={SUPPORT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            つらさが強いときの相談窓口
+          </a>
         </section>
-      ) : (
-        <button type="button" onClick={() => setShowDetail(true)}>
-          詳しい注意を見る
-        </button>
-      )}
 
-      <p>
-        <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
-          つらさが強いときの相談窓口
-        </a>
-      </p>
+        {errorMessage && (
+          <p className={styles.error} role="alert">
+            {errorMessage}
+          </p>
+        )}
 
-      {errorMessage && <p role="alert">{errorMessage}</p>}
-
-      <button type="button" onClick={agree} disabled={submitting}>
-        {isFirstTime ? "同意して進む" : "確認して進む"}
-      </button>
-      <Link href="/home">戻る</Link>
+        <div className={styles.actions}>
+          <button
+            className={styles.primaryButton}
+            type="button"
+            onClick={agree}
+            disabled={submitting}
+          >
+            {isFirstTime ? "同意して進む" : "確認して進む"}
+          </button>
+          <Link className={styles.secondaryButton} href="/home">
+            ホームへ戻る
+          </Link>
+        </div>
+      </div>
     </main>
   );
 }

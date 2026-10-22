@@ -1,14 +1,16 @@
-"""プランごとの上限値（#57で決定・#59の決定により usage/ から移動。#92）。
+"""プランごとの上限値（#57で決定・#59の決定により usage/ から移動。#92）と、Stripe PriceのID（#95）。
 
 - 上限値はコードへ固定せず環境変数から読み込む。DBの plans 表には上限値の列を作らない（#59）
 - 環境変数の名前は #57 のときのまま（USAGE_...）。.env.example・compose.yaml を変えずに済むようにする
 - 上限値に "unlimited" を指定した場合だけ「無制限」（APIでは null）として扱う。
   値の読み込みに失敗した場合を無制限とみなさないよう、不正な値は起動時にエラーにする
+- Stripe PriceのIDは、上限値とは別の項目として持つ（#59の決定。F-05の payments/settings.py から移動）。
+  環境変数の名前は F-05 のとき（STRIPE_PRICE_ID_PREMIUM）のまま。未設定のプランは購入できない
 """
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import lru_cache
 
@@ -39,6 +41,8 @@ class PlanLimits:
 @dataclass(frozen=True)
 class PlanSettings:
     plan_limits: Mapping[PlanCode, PlanLimits]
+    # プラン → Stripe PriceのID。設定されているプランだけを持つ（無料・未設定のプランは入れない）
+    stripe_price_ids: Mapping[PlanCode, str] = field(default_factory=dict, repr=False)
 
     def limits_for(self, plan_code: PlanCode) -> PlanLimits:
         return self.plan_limits[plan_code]
@@ -58,7 +62,7 @@ def _parse_limit(name: str, value: str) -> int | None:
 
 
 def load_plan_settings(env: Mapping[str, str] | None = None) -> PlanSettings:
-    """環境変数から上限値を読み込む。
+    """環境変数から上限値と Stripe PriceのIDを読み込む。
 
     不正な値は ValueError（エラーメッセージに値そのものは含めない）。
     """
@@ -67,7 +71,13 @@ def load_plan_settings(env: Mapping[str, str] | None = None) -> PlanSettings:
     def limit(name: str, default: str) -> int | None:
         return _parse_limit(name, env.get(name, default))
 
+    stripe_price_ids = {}
+    premium_price_id = env.get("STRIPE_PRICE_ID_PREMIUM", "").strip()
+    if premium_price_id:
+        stripe_price_ids[PlanCode.PREMIUM] = premium_price_id
+
     return PlanSettings(
+        stripe_price_ids=stripe_price_ids,
         plan_limits={
             PlanCode.FREE: PlanLimits(
                 consultation_limit=limit(

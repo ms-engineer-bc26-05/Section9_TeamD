@@ -47,7 +47,7 @@ type RecoveryReadResult<T> =
   | { type: "failed"; error: unknown };
 
 const RECOVERY_POLL_INTERVAL_MS = 1_000;
-const RECOVERY_POLL_TIMEOUT_MS = 35_000;
+const RECOVERY_POLL_TIMEOUT_MS = 60_000;
 
 function waitForRecoveryRetry(
   delayMs: number,
@@ -139,6 +139,7 @@ export interface ConsultationSessionController {
  */
 export function useConsultationSessionController(
   api: ConsultationApi,
+  onApiError?: (error: unknown) => void,
 ): ConsultationSessionController {
   const [state, dispatch] = useReducer(
     consultationReducer,
@@ -205,6 +206,7 @@ export function useConsultationSessionController(
 
   const handleFailure = useCallback(
     (error: unknown, treatNotFoundAsStateLoss: boolean) => {
+      onApiError?.(error);
       const failure = toConsultationApiFailure(error);
 
       if (failure.type === "aborted") {
@@ -222,7 +224,7 @@ export function useConsultationSessionController(
 
       safeDispatch({ type: "request_failed", code: failure.code });
     },
-    [safeDispatch],
+    [onApiError, safeDispatch],
   );
 
   const handleRecoveryReadProblem = useCallback(
@@ -240,6 +242,7 @@ export function useConsultationSessionController(
         return;
       }
 
+      onApiError?.(outcome.error);
       const failure = toConsultationApiFailure(outcome.error);
       if (
         failure.type === "failed" &&
@@ -254,7 +257,7 @@ export function useConsultationSessionController(
         code: failure.type === "failed" ? failure.code : "NETWORK_ERROR",
       });
     },
-    [safeDispatch],
+    [onApiError, safeDispatch],
   );
 
   const startConsultation = useCallback(
