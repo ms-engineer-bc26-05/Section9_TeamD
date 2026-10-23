@@ -45,7 +45,7 @@
 .cancelButton {
   margin: -8px -8px -8px 0;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 
 .headerButton:hover:not(:disabled),
@@ -93,7 +93,7 @@
   min-height: 34px;
   padding: 6px 18px;
   margin: 31px 0 0;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   background: #f2ddd6;
   border-radius: 999px;
 }
@@ -128,7 +128,7 @@
   padding: 26px 18px 46px;
   color: #493e38;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.75;
   resize: vertical;
   background: #fffdfc;
@@ -161,7 +161,7 @@
   right: 18px;
   bottom: 14px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .errorMessage {
@@ -202,7 +202,7 @@
 .privacyText {
   margin-top: 6px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
