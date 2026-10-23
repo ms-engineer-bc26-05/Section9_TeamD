@@ -117,6 +117,7 @@
 }
 
 .aiBubble {
+  box-sizing: border-box;
   width: min(100%, 302px);
   padding: 22px 18px;
   margin-top: 12px;

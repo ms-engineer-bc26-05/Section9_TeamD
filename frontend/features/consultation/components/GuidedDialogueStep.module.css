@@ -135,12 +135,14 @@
 }
 
 .aiBubble {
+  box-sizing: border-box;
   width: min(88%, 300px);
   background: #fffdfc;
   border: 1.5px solid #d8d0c8;
 }
 
 .userBubble {
+  box-sizing: border-box;
   width: min(72%, 250px);
   margin-left: auto;
   background: #f2ddd6;
