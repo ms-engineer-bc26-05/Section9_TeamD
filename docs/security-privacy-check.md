@@ -84,7 +84,7 @@ NGは、No.14の1件だけ。No.1〜13で不具合は見つからなかった。
 **No.4 未承認の内容が残らない**
 - A：相談の全体の流れで、本文がログに出ない（`consultations/test_privacy.py`）。AIの失敗で本文を返さない（`consultations/test_router.py::test_ai_failure_returns_502_without_content`）
 - C：DBの書き出し・Redis・ログで、目印文字列は0件。ただし、方法Cで行った相談は2件とも保存した（NP-19の「保存あり」（SC-02）に当たる）
-- **未確認（NP-19の保存なし）**：保存しないで終える流れ（SC-03）は、方法Cでは行っていない。自動テストでは、保存しないで終える流れで本文がログに出ないこと（`consultations/test_privacy.py::test_full_flow_does_not_log_consultation_content`）だけを確認している。引き継ぎ先：#62（MVP縦断・異常系のSC-03）。次の確認時期：#62の実施時
+- **未確認（NP-19の保存なし）**：保存しないで終える流れ（SC-03）は、方法Cでは行っていない。自動テストでは、保存確認待ち（`save_confirmation`）までの相談の流れで本文がログに出ないこと（`consultations/test_privacy.py::test_full_flow_does_not_log_consultation_content`）を確認している。「保存しない」を選んで終える操作と、そのあとのDB・Redis・ログの確認は未確認。引き継ぎ先：#62（MVP縦断・異常系のSC-03）。次の確認時期：#62の実施時
 
 **No.5 Redis**
 - A：利用回数のキーは、ユーザーIDごとの`count`・`period`だけ（`usage/test_limiter_redis.py`）。相談の一時状態はメモリに置き、Redisを使わない
