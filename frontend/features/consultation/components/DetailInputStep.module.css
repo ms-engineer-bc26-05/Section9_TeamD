@@ -45,7 +45,7 @@
 .cancelButton {
   margin: -8px -8px -8px 0;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 
 .headerButton:hover:not(:disabled),
@@ -93,7 +93,7 @@
   min-height: 34px;
   padding: 6px 18px;
   margin: 31px 0 0;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   background: #f2ddd6;
   border-radius: 999px;
 }
@@ -108,7 +108,7 @@
 .helpText {
   margin: 16px 0 26px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -128,7 +128,7 @@
   padding: 26px 18px 46px;
   color: #493e38;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.75;
   resize: vertical;
   background: #fffdfc;
@@ -161,13 +161,13 @@
   right: 18px;
   bottom: 14px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .errorMessage {
   margin: 10px 0 0;
   color: #9a4135;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -175,7 +175,7 @@
   padding: 12px 14px;
   margin: 16px 0 0;
   color: #7c382f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.6;
   background: #f7e4df;
   border: 1px solid #d98978;
@@ -195,14 +195,14 @@
 }
 
 .privacyTitle {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .privacyText {
   margin-top: 6px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -240,7 +240,7 @@
 .loadingMessage {
   margin: 18px 0 0;
   color: #6f625b;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.7;
   text-align: center;
 }

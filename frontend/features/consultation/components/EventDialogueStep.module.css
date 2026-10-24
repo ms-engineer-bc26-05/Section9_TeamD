@@ -43,7 +43,7 @@
 .cancelButton {
   margin-right: -4px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 
 .cancelButton:hover:not(:disabled) {
@@ -72,7 +72,7 @@
   padding: 0;
   margin: 25px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   list-style: none;
 }
 
@@ -112,11 +112,12 @@
 .questionCount {
   margin: 17px 0 8px;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   text-align: right;
 }
 
 .aiBubble {
+  box-sizing: border-box;
   width: min(100%, 302px);
   padding: 22px 18px;
   margin-top: 12px;
@@ -127,7 +128,7 @@
 
 .aiBubble p {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.75;
   white-space: pre-wrap;
 }
@@ -139,7 +140,7 @@
 .aiBubble .bubbleHelp {
   margin-top: 10px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -160,7 +161,7 @@
   padding: 8px 12px;
   color: #493e38;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   cursor: pointer;
   background: #fffdfc;
   border: 1.5px solid #d8d0c8;
@@ -180,7 +181,7 @@
 .correctionPrompt,
 .limitNotice {
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   line-height: 1.8;
 }
 
@@ -204,7 +205,7 @@
 .inputLabel {
   display: block;
   margin-bottom: 9px;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
   font-weight: 700;
 }
 
@@ -222,7 +223,7 @@
   overflow-y: auto;
   color: #493e38;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.6;
   resize: vertical;
   background: #ffffff;
@@ -276,7 +277,7 @@
 .errorMessage,
 .loadingMessage {
   margin: 10px 0 0;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -291,7 +292,7 @@
 .supportText {
   margin: 34px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.8125rem;
   text-align: center;
 }
 

@@ -49,7 +49,7 @@
 .sectionLabel {
   margin: 28px 4px 10px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .handlingCard {
@@ -84,7 +84,7 @@
 .helpText {
   margin: 9px 0 18px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .textareaWrapper {
@@ -98,7 +98,7 @@
   padding: 18px 18px 38px;
   color: #493e38;
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 1rem;
   line-height: 1.65;
   resize: vertical;
   background: #fffdfc;
@@ -125,7 +125,7 @@
   right: 16px;
   bottom: 12px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -133,7 +133,7 @@
   padding: 19px 20px;
   margin-bottom: 24px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.6;
   background: #e3e7d8;
   border-radius: 16px;
@@ -150,7 +150,7 @@
 .savedContentNotice .noticeTitle {
   margin-bottom: 10px;
   color: #493e38;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 700;
 }
 
@@ -205,14 +205,14 @@
 .loadingMessage {
   margin: 0;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
 }
 
 .supportText {
   margin: 40px 0 0;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   text-align: center;
 }
 
@@ -240,7 +240,7 @@
 .dialogText {
   margin: 16px 0 24px;
   color: #81766f;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.7;
 }
 
@@ -255,7 +255,7 @@
   min-height: 48px;
   padding: 10px;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   border-radius: 12px;
   cursor: pointer;

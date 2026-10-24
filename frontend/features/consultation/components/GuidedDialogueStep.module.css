@@ -36,7 +36,7 @@
   margin-right: -4px;
   color: #81766f;
   font: inherit;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
   cursor: pointer;
   background: transparent;
   border: 0;
@@ -67,7 +67,7 @@
   padding: 0;
   margin: 25px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   list-style: none;
 }
 
@@ -116,7 +116,7 @@
   min-height: 34px;
   padding: 6px 16px;
   margin: 30px 6px 0;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.45;
   background: #f2ddd6;
   border-radius: 999px;
@@ -135,12 +135,14 @@
 }
 
 .aiBubble {
+  box-sizing: border-box;
   width: min(88%, 300px);
   background: #fffdfc;
   border: 1.5px solid #d8d0c8;
 }
 
 .userBubble {
+  box-sizing: border-box;
   width: min(72%, 250px);
   margin-left: auto;
   background: #f2ddd6;
@@ -154,7 +156,7 @@
 
 .aiBubble p,
 .userBubble p {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -168,13 +170,13 @@
 .historyTopic {
   margin-right: 8px;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   text-align: right;
 }
 
 .topicLabel {
   color: #9a5d51;
-  font-size: 0.6875rem !important;
+  font-size: 0.75rem !important;
   font-weight: 700;
 }
 
@@ -185,7 +187,7 @@
 .questionHint {
   margin-top: 14px !important;
   color: #81766f;
-  font-size: 0.6875rem !important;
+  font-size: 0.8125rem !important;
 }
 
 .skipButton {
@@ -195,7 +197,7 @@
   margin: 28px auto 0;
   color: #81766f;
   font: inherit;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
   cursor: pointer;
   background: #fffdfc;
   border: 1.5px solid #d8d0c8;
@@ -214,7 +216,7 @@
 .answerLabel {
   display: block;
   margin: 0 16px 8px;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
   font-weight: 700;
 }
 
@@ -230,7 +232,7 @@
   padding: 15px 64px 15px 18px;
   color: #493e38;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.6;
   resize: vertical;
   background: #ffffff;
@@ -291,7 +293,7 @@
   justify-content: space-between;
   margin: 8px 14px 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -307,7 +309,7 @@
 .errorMessage,
 .loadingMessage {
   margin: 10px 14px 0;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -323,7 +325,7 @@
 .supportText {
   margin: 34px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.8125rem;
   text-align: center;
 }
 
@@ -334,7 +336,7 @@
   }
 
   .steps {
-    font-size: 0.5625rem;
+    font-size: 0.75rem;
   }
 
   .aiBubble {
