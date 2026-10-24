@@ -14,8 +14,8 @@
 | 対象ブランチ・コミット（frontend / backend） | develop `edcf33b`（frontend / backend 共通）。他者の環境・動画で確認した分は、その環境のコミットを各行に書く |
 | 環境 | ローカル（Docker Compose：frontend / backend / db / redis）。テスト専用のDB・Redis |
 | 外部サービス | Firebase Authentication、Stripeテストモード（テストカードのみ）、OpenRouter（実物・課金あり） |
-| OpenRouterの実施回数・費用の上限（7節） | 回 / 円（SC-02 以降の実施前に決めて記入） |
-| ログ設定 | `LOG_LEVEL=DEBUG`、自動リロードはオフ（README「自動リロードなしで起動する」）。`docker compose exec backend printenv LOG_LEVEL` で確認した結果：（要記入） |
+| OpenRouterの実施回数・費用の上限（7節） | 計10回まで / 約100円まで（モデル：openai/gpt-oss-120b、掲示価格の最大単価で見積もり。確認日：2026-10-24） |
+| ログ設定 | `LOG_LEVEL=DEBUG`、自動リロードはオフ（README「自動リロードなしで起動する」）。`docker compose exec backend printenv LOG_LEVEL` で確認した結果：DEBUG（2026-10-24） |
 | テストユーザー | 架空のユーザーA・B |
 | 入力データ | 実在の相談内容は使わない。目印文字列 `PORORI_TEST_MARKER_<ID>_<項目>` を含む架空文 |
 | 表示確認 | PC幅（1280px前後）／スマホ相当幅（375px前後）。ブラウザ：Chrome |
