@@ -63,7 +63,7 @@
 
 .sectionText {
   margin-top: 8px;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.7;
 }
 
@@ -85,7 +85,7 @@
   min-height: 48px;
   padding: 10px 12px;
   color: #493e38;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 700;
   text-align: center;
   text-decoration: none;
@@ -138,7 +138,7 @@
 .contactDescription {
   margin-top: 6px;
   color: #6e635d;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.6;
 }
 
@@ -153,7 +153,7 @@
   padding: 14px 16px;
   margin: 28px 0 0;
   color: #7c382f;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.7;
   background: #f7e4df;
   border: 1px solid #d98978;
@@ -209,7 +209,7 @@
 .loadingMessage {
   margin-top: 12px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
 }
 

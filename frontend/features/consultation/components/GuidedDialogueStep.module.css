@@ -156,7 +156,7 @@
 
 .aiBubble p,
 .userBubble p {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -309,7 +309,7 @@
 .errorMessage,
 .loadingMessage {
   margin: 10px 14px 0;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 

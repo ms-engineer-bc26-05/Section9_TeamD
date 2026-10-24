@@ -108,7 +108,7 @@
 .helpText {
   margin: 16px 0 26px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -167,7 +167,7 @@
 .errorMessage {
   margin: 10px 0 0;
   color: #9a4135;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -175,7 +175,7 @@
   padding: 12px 14px;
   margin: 16px 0 0;
   color: #7c382f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.6;
   background: #f7e4df;
   border: 1px solid #d98978;
@@ -195,7 +195,7 @@
 }
 
 .privacyTitle {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -240,7 +240,7 @@
 .loadingMessage {
   margin: 18px 0 0;
   color: #6f625b;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.7;
   text-align: center;
 }

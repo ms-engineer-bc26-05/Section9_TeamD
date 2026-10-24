@@ -165,7 +165,7 @@
 .helpText {
   margin: 16px 0 26px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -244,7 +244,7 @@
   align-items: center;
   min-height: 54px;
   padding: 10px 16px;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.5;
   background: #fffdfc;
   border: 1.5px solid #d8d0c8;
@@ -284,7 +284,7 @@
 .errorMessage {
   margin: 10px 0 0;
   color: #9a4135;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -317,7 +317,7 @@
 .loadingMessage {
   margin: 14px 0 0;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
 }
 

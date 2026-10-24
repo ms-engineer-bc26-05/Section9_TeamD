@@ -139,7 +139,7 @@
 .summaryLabel {
   display: grid;
   padding: 12px;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.65;
   text-align: center;
@@ -197,7 +197,7 @@
 .errorMessage {
   margin: 8px 0 0;
   color: #9a4135;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .directEditNotice {
@@ -211,7 +211,7 @@
   padding: 12px 14px;
   margin: 24px 0 0;
   color: #6f625b;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.7;
   background: #f3e8dd;
   border-radius: 12px;
@@ -260,7 +260,7 @@
 .loadingMessage {
   margin: 12px 0 0;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
 }
 

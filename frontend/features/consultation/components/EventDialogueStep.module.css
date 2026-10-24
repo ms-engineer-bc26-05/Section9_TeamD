@@ -128,7 +128,7 @@
 
 .aiBubble p {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.75;
   white-space: pre-wrap;
 }
@@ -161,7 +161,7 @@
   padding: 8px 12px;
   color: #493e38;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   cursor: pointer;
   background: #fffdfc;
   border: 1.5px solid #d8d0c8;
@@ -277,7 +277,7 @@
 .errorMessage,
 .loadingMessage {
   margin: 10px 0 0;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 

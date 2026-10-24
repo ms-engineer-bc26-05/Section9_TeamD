@@ -114,7 +114,7 @@
 .helpText {
   margin: 16px 0 26px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .form,
@@ -198,13 +198,13 @@
 
 .cardLabel {
   min-width: 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .option:nth-child(7) .cardLabel {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .reassurance {
