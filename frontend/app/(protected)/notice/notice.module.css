@@ -45,7 +45,7 @@
 
 .title {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   text-align: center;
 }
 
@@ -67,7 +67,7 @@
   gap: 14px;
   padding-left: 1.25rem;
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.65;
 }
 
@@ -80,7 +80,7 @@
   margin-top: 22px;
   border-top: 1px solid #e5ded7;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.7;
 }
 
@@ -103,7 +103,7 @@
   border: 0;
   border-radius: 6px;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-decoration: underline;
   cursor: pointer;
 }
@@ -114,7 +114,7 @@
   margin: 22px auto 0;
   color: #493e38;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   text-decoration: underline;
 }
 
@@ -124,7 +124,7 @@
   color: #493e38;
   background: #f2ddd6;
   border-radius: 10px;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
