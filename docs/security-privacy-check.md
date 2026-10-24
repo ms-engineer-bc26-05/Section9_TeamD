@@ -1,6 +1,7 @@
 # ぽろり。セキュリティ・プライバシー確認の記録（Q-03）
 
 - 作成日：2026年10月23日
+- 最終修正日：2026年10月24日（PR #120のレビューを反映）
 - 対応Issue：#63「認証認可・暗号化・非保存・ログを確認する」
 - 主担当：じま
 - 確認担当：もえ
@@ -50,19 +51,19 @@
 | 1 | 認証（トークンなし・不正・期限切れ・認証基盤の障害時に許可しない） | AU-05〜AU-11、NP-13 | OK | A・B・C |
 | 2 | 他人のデータは404で、存在しないものと区別できない（相談・メモ） | AU-12〜AU-16 | OK | A・B・C |
 | 3 | リクエスト内の`user_id`を信じない | AU-17、AU-18 | OK | A・B |
-| 4 | 未承認の内容・会話全文が残らない（DB・Redis・ログ・エラー応答） | NP-01〜NP-12、NP-19、SV-04 | OK | A・C |
-| 5 | Redisに保存するのは利用回数のキーだけ | 6.3手順4、NP-19 | OK | A・C |
+| 4 | 未承認の内容・会話全文が残らない（DB・Redis・ログ・エラー応答） | NP-01〜NP-12、NP-19、SV-04 | OK（保存あり）／未確認（NP-19の保存なし） | A・C |
+| 5 | Redisに保存するのは利用回数のキーだけ | 6.3手順4、NP-19 | OK（保存あり）／未確認（NP-19の保存なし。No.4参照） | A・C |
 | 6 | DBのメモは暗号文だけ | SV-08、SV-10、SV-11、NP-09 | OK | A・C |
 | 7 | 暗号文とユーザーID・メモIDの結び付け | SV-24、SV-13 | OK | A |
-| 8 | ログ・エラー応答に本文・トークン・例外の詳細を出さない | NP-10、NP-11、NP-13〜NP-18 | OK | A・B・C |
-| 9 | 秘密情報がリポジトリ・ログに出ない | NP-13〜NP-15 | OK | B・C |
+| 8 | ログ・エラー応答に本文・トークン・例外の詳細を出さない | NP-10、NP-11、NP-13〜NP-18 | OK（確認した範囲。NP-15の未確認の1点はNo.13） | A・B・C |
+| 9 | 秘密情報がリポジトリ・ログに出ない | NP-13〜NP-15 | OK（確認した範囲。NP-15の未確認の1点はNo.13） | B・C |
 | 10 | プロンプトインジェクション | AI-05、AI-12、AI-13 | OK（最低限の確認） | A・B |
 | 11 | XSS・SQLインジェクション | なし（Q-03で作成） | OK | B・C |
 | 12 | 退会後・退会処理中の拒否、退会でデータが消える | AU-19、AU-21、AU-22、SV-21〜SV-23 | OK（API）／未確認（画面） | A・B |
 | 13 | 決済の例外で内部情報を出さない | NP-15 | 一部OK／未確認（1点） | A |
 | 14 | 依存パッケージの脆弱性 | なし（もえさんの補足で追加） | NG（#119で相談） | `npm audit` |
 
-NGは、No.14の1件だけ。No.1〜13で不具合は見つからなかった。
+NGは、No.14の1件だけ。No.1〜13で不具合は見つからなかった。未確認は、No.4・5（NP-19の保存なし）、No.12（画面）、No.13（1点）。
 
 ### 根拠
 
@@ -74,7 +75,7 @@ NGは、No.14の1件だけ。No.1〜13で不具合は見つからなかった。
 - C：サービスアカウントに権限がない間は、画面に「現在サービスを利用できません」と表示され、操作は許可されなかった（認証基盤の障害として扱う。作りどおり）
 
 **No.2 他人のデータ**
-- A・B：メモの一覧・詳細・削除のSQLは、すべて`user_id`とメモIDの両方が条件（`read_db_repository.py`）。他人のメモと存在しないメモで同じ404（`memos/test_read_router.py::test_other_owner_and_absent_have_identical_404`、実DBの`test_read_db_repository.py`）。相談の一時状態も`user_id`で照合する（`consultations/test_router.py::test_other_user_and_missing_return_same_404`、`test_store.py`）。決済の確認も他人のSessionは404（`payments/test_router.py::test_confirm_others_session_is_404`）
+- A・B：メモの一覧のSQLは`user_id`で絞り込み、詳細・削除のSQLは`user_id`とメモIDの両方が条件（`read_db_repository.py`）。他人のメモと存在しないメモで同じ404（`memos/test_read_router.py::test_other_owner_and_absent_have_identical_404`、実DBの`test_read_db_repository.py`）。相談の一時状態も`user_id`で照合する（`consultations/test_router.py::test_other_user_and_missing_return_same_404`、`test_store.py`）。決済の確認も他人のSessionは404（`payments/test_router.py::test_confirm_others_session_is_404`）
 - C：BからAのメモ詳細を開くと「このメモは表示できません。」と表示された（`MEMO_NOT_FOUND`＝404のときだけ出る文）。BのトークンでAのメモを`DELETE`すると404（ブラウザのコンソールでステータスを確認）。そのあとも、AのメモはDBに残っていた
 
 **No.3 `user_id`を信じない**
@@ -82,7 +83,8 @@ NGは、No.14の1件だけ。No.1〜13で不具合は見つからなかった。
 
 **No.4 未承認の内容が残らない**
 - A：相談の全体の流れで、本文がログに出ない（`consultations/test_privacy.py`）。AIの失敗で本文を返さない（`consultations/test_router.py::test_ai_failure_returns_502_without_content`）
-- C：DBの書き出し・Redis・ログで、目印文字列は0件
+- C：DBの書き出し・Redis・ログで、目印文字列は0件。ただし、方法Cで行った相談は2件とも保存した（NP-19の「保存あり」（SC-02）に当たる）
+- **未確認（NP-19の保存なし）**：保存しないで終える流れ（SC-03）は、方法Cでは行っていない。自動テストでは、保存しないで終える流れで本文がログに出ないこと（`consultations/test_privacy.py::test_full_flow_does_not_log_consultation_content`）だけを確認している。引き継ぎ先：#62（MVP縦断・異常系のSC-03）。次の確認時期：#62の実施時
 
 **No.5 Redis**
 - A：利用回数のキーは、ユーザーIDごとの`count`・`period`だけ（`usage/test_limiter_redis.py`）。相談の一時状態はメモリに置き、Redisを使わない
@@ -118,6 +120,8 @@ NGは、No.14の1件だけ。No.1〜13で不具合は見つからなかった。
 **No.12 退会**
 
 #60（PR #101）のテストを根拠として参照した。APIはOK、画面からの確認は未確認。
+
+「APIはOK」は、自動テスト（Firebase・Stripeは模擬）とコードの確認による判断で、Firebase・Stripeを含む退会の実接続や、手動復旧のコマンドの実運用を確認したものではない（#60で実施範囲・持ち越し先を整理中）。方法Cでは退会を行っていない。
 - 退会処理中は通常の操作ができない（AU-19）：`auth/test_dependencies.py::test_deleting_user_returns_403_without_details`、`payments/test_router.py::test_deleting_user_is_403`、`usage/test_consultation_start.py::test_deleting_user_is_rejected_and_key_deleted`
 - 退会完了後のトークンで内部ユーザーが再作成されない（AU-21）：B。初回登録の検証は`check_revoked=True`で、Firebaseのユーザーが削除済みなら401になる（`auth/service.py`の`_register_locked`）。退会の検証も同じ（`users/deletion_service.py`、`users/test_deletion_firebase.py::test_deletion_verifier_passes_revocation_flag`）
 - 退会完了後のトークンでは他のAPIを使えない（AU-22）：`payments/test_router.py::test_deleted_user_is_401`
@@ -140,7 +144,7 @@ NGは、No.14の1件だけ。No.1〜13で不具合は見つからなかった。
 | `sharp`（`next`経由） | high | librsvgの脆弱性 | アプリは`next/image`を使っていない | `next`の更新とあわせて確認 |
 
 - 依存パッケージの更新は事前の承認が必要で（`AGENTS.md`）、#63の範囲外のため、この確認では更新していない
-- **NG**：`next`のcriticalは、#119で、最終提出（10/28）の前に更新するかをチームに相談する（10/25までに決める）
+- **NG**：`next`のcriticalは、#119で、コード・資料の締切（10/28）の前に更新するかをチームに相談する（10/25までに決める。最終提出は10/30）
 - PR #84の時点（high 6件）から、`next`のcriticalが増えている
 
 ## 4. MVPで対応しない制約
@@ -166,7 +170,7 @@ NGは、No.14の1件だけ。No.1〜13で不具合は見つからなかった。
 | 完了条件 | 状態 |
 | --- | --- |
 | 確認観点と結果を記録している | この文書 |
-| 会話全文・平文・トークン・鍵が残らない | No.4・6・8・9でOK |
+| 会話全文・平文・トークン・鍵が残らない | No.4・6・8・9でOK。ただし、NP-19の保存なし（No.4）とNP-15の1点（No.13）は未確認で、引き継ぎ先を記録した |
 | 所有者確認をバックエンドで行っている | No.2・3でOK |
 | 問題を不具合Issueへ切り分けている | No.14の`next`を#119へ |
 | MVPで対応しない制約を記録している | 4章 |
