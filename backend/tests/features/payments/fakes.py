@@ -37,6 +37,7 @@ from app.features.payments.repository import (
     UserNotActive,
     UserNotFound,
 )
+from app.features.plans.public import PlanCode
 from app.integrations.stripe.client import (
     CheckoutSession,
     StripeIdempotencyInProgress,
@@ -122,9 +123,9 @@ class _InMemoryTransaction:
             raise UserNotActive
         return status
 
-    async def has_paid_entitlement(self, user_id: UUID, now: datetime) -> bool:
+    async def current_plan(self, user_id: UUID, now: datetime) -> PlanCode:
         await asyncio.sleep(0)
-        return user_id in self._repo.paid_users
+        return PlanCode.PREMIUM if user_id in self._repo.paid_users else PlanCode.FREE
 
     async def find_plan(self, code: str) -> Plan | None:
         await asyncio.sleep(0)

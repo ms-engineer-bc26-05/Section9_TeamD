@@ -1,7 +1,7 @@
-"""利用中のプランの判定（#92。F-05の user_entitlements を読む）。
+"""利用中のプランの判定（#92）と、有料の利用権限の付与（#95。F-05から移動）。
 
-「有料」の条件は、F-05（#59）の payments/db_repository.py の has_paid_entitlement とそろえる
-（#92でじまさんと合意）。#95で F-05 側をこちらへ差し替えるまで、2か所の条件を同じに保つ。
+F-05（決済）・GET /usage・保存件数の上限は、どれもこの get_current_plan でプランを判定する（#95）。
+「有料」の条件は次のとおり（#59・#92で決定）。
 
 - user_entitlements.status が 'active'
 - valid_from が now 以前
@@ -15,6 +15,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import exists, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.payments.models import PlanRow, UserEntitlementRow
@@ -44,3 +45,29 @@ async def get_current_plan(
     )
     paid = bool((await session.execute(statement)).scalar_one())
     return PlanCode.PREMIUM if paid else PlanCode.FREE
+
+
+async def grant_paid_entitlement(
+    session: AsyncSession,
+    user_id: UUID,
+    plan_id: UUID,
+    now: datetime,
+) -> None:
+    """有料の利用権限を付与する（決済の確認から呼ぶ。#59で決めた形を F-05 から移動。#95）。
+
+    1ユーザー1行（あれば上書き）。買い切りのため status は active、valid_until は NULL。
+    呼び出し元のトランザクションの中で実行し、commit・ロックは呼び出し元で行う。
+    """
+    values = {
+        "plan_id": plan_id,
+        "status": "active",
+        "valid_from": now,
+        "valid_until": None,
+        "updated_at": now,
+    }
+    statement = (
+        insert(UserEntitlementRow)
+        .values(user_id=user_id, **values)
+        .on_conflict_do_update(index_elements=[UserEntitlementRow.user_id], set_=values)
+    )
+    await session.execute(statement)

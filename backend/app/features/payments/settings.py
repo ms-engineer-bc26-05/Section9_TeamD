@@ -1,12 +1,14 @@
 """決済の設定値（環境ごとのサーバー設定）。
 
-Stripe PriceのIDは、F-03で作るプランの設定値のモジュールへ、上限値とは別の項目として移す（#59）。
-それまではこの連携の中で読み込む。秘密鍵は integrations/stripe/client.py で読む。
+Stripe PriceのIDは、プランの設定値（plans/public.py の PlanSettings.stripe_price_ids）から読む（#59・#95）。
+秘密鍵は integrations/stripe/client.py で読む。
 """
 
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+
+from app.features.plans.public import load_plan_settings
 
 
 @dataclass(frozen=True)
@@ -19,12 +21,8 @@ class CheckoutSettings:
 
 
 def load_checkout_settings() -> CheckoutSettings:
-    price_ids = {}
-    premium = os.environ.get("STRIPE_PRICE_ID_PREMIUM", "").strip()
-    if premium:
-        price_ids["premium"] = premium
     return CheckoutSettings(
-        price_ids=price_ids,
+        price_ids=dict(load_plan_settings().stripe_price_ids),
         success_url=os.environ.get(
             "CHECKOUT_SUCCESS_URL",
             "http://localhost:3000/plan/success?session_id={CHECKOUT_SESSION_ID}",

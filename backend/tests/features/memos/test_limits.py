@@ -5,8 +5,8 @@ from uuid import uuid4
 import pytest
 
 from app.features.memos import limits
+from app.features.plans.public import PlanCode
 from app.features.usage.exceptions import PlanUnavailable
-from app.features.usage.settings import PlanCode
 
 from tests.features.usage.fakes import FakePlanResolver, make_settings, plan_unavailable
 
@@ -23,14 +23,14 @@ from tests.features.usage.fakes import FakePlanResolver, make_settings, plan_una
 async def test_returns_memo_limit_of_current_plan(monkeypatch, plan, env, expected):
     # GET /usage の memo_limit と同じ設定値・プラン判定を使う
     monkeypatch.setattr(limits, "get_plan_resolver", lambda: FakePlanResolver(plan))
-    monkeypatch.setattr(limits, "get_usage_settings", lambda: make_settings(**env))
+    monkeypatch.setattr(limits, "get_plan_settings", lambda: make_settings(**env))
 
     assert await limits.get_memo_limit(uuid4()) == expected
 
 
 async def test_plan_unavailable_is_not_treated_as_free(monkeypatch):
     monkeypatch.setattr(limits, "get_plan_resolver", plan_unavailable)
-    monkeypatch.setattr(limits, "get_usage_settings", lambda: make_settings())
+    monkeypatch.setattr(limits, "get_plan_settings", lambda: make_settings())
 
     with pytest.raises(PlanUnavailable):
         await limits.get_memo_limit(uuid4())
