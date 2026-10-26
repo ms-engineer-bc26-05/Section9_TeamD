@@ -151,13 +151,14 @@ NGは、No.14の1件だけだった（`next`のcriticalは#119で解消。No.14�
 
 #119で、`next`だけを16.4.3へ更新した（React・ほかの直接依存は変えていない）。`package-lock.json`の`sharp`は0.35.5になった。更新後に`npm audit --omit=dev`を実行した結果は、high 4件・critical 0件。
 
-- **解消**：`next`のcritical（10件）と、`next`経由の`sharp`のhigh
-- **制約（残り）**：`firebase`経由の`@grpc/grpc-js`・`@firebase/firestore`・`@firebase/firestore-compat`と`firebase`のhigh 4件。アプリはFirestoreを使っておらず、npmの修正案は古い版（9.14）へ戻すもののため、採用しない。最終提出より持ち越し
+- **解消**：`next`のcriticalを含む10件と、`next`経由の`sharp`のhigh
+- **制約（残り）**：`firebase`経由の`@grpc/grpc-js`・`@firebase/firestore`・`@firebase/firestore-compat`と`firebase`のhigh 4件。アプリはFirestoreを使っておらず、npmの修正案は古い版（9.14）へ戻すもののため、採用しない。最終提出より持ち越し（4章）
 
 ## 4. MVPで対応しない制約
 
 - バックエンドはリクエストごとのアクセスログを出さない（No.8のため）。そのため、方法Cの404は、画面の文とブラウザのコンソールのステータスで判断した
 - 外部の脆弱性診断・本番環境への攻撃試験は行わない（#63の「やらないこと」）
+- `firebase`経由のhigh 4件（No.14）は、最終提出より持ち越す。持ち越し先のIssue・担当・時期は未定
 
 ## 5. 確認中に気づいたこと（不具合ではない）
 
