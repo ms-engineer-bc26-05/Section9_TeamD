@@ -1,6 +1,6 @@
 ## マイルストーン・スケジュール
 
-更新日：2026年10月2日
+更新日：2026年10月26日
 
 ## 共通前提
 
@@ -19,14 +19,14 @@ Sprint1（2026年9月7日〜9月17日）は、Issue・ソリューションの�
 | 共通環境 | 技術検証Issue [#3](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/3)・[#4](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/4)・[#5](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/5)・[#6](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/6)・[#7](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/7)・[#8](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/8)は完了。開発環境の最小構成はIssue [#32](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/32)、共通エラー・起動設定・README・構成整理はIssue [#35](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/35)がCLOSED。 |
 | 技術選定 | Issue [#14](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/14)はCLOSED。検証結果と確定範囲は技術選定資料を参照する。 |
 | 画面・API設計 | Issue [#9](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/9)・[#10](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/10)はCLOSED。実装に必要な仕様の最終整合は後続Issueで確認する。 |
-| DB設計 | Issue [#11](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/11)はOPEN。設計確認・レビューを持ち越す。 |
-| PRD・要件定義・テスト設計 | Issue [#12](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/12)・[#13](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/13)・[#16](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/16)はOPEN。最新仕様との整合とレビューを継続する。 |
+| DB設計 | Issue [#11](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/11)はSprint2から持ち越し、10月3日にCLOSED。 |
+| PRD・要件定義・テスト設計 | Issue [#12](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/12)・[#13](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/13)・[#16](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/16)はSprint2から持ち越し、#12・#16は10月6日、#13は10月24日にCLOSED。 |
 
 Sprint2の期間は2026年9月18日〜9月26日。技術検証・技術選定と画面/APIの初稿は完了した一方、DB設計、PRD、要件定義、テスト設計および設計レビューは完了扱いにしない。
 
 ## Sprint3〜4
 
-親Issue・子IssueはGitHubに登録済みです。次の表は2026年10月2日時点の状態です。Sprint3〜4の確認Issue [#33](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/33)はOPENで、計画変更PR [#37](https://github.com/ms-engineer-bc26-05/Section9_TeamD/pull/37)もDraft・未Approveです。Issue番号・担当は登録内容を示し、Issue #33とPR #37の確認が終わるまでは、Sprintとの対応・依存関係を最終確定として扱いません。このマイルストーンの日程・ゴールは本Issueの依頼内容を基準にしています。
+親Issue・子IssueはGitHubに登録済みです。Sprint3〜4の確認Issue [#33](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/33)は10月6日にCLOSED、計画PR [#37](https://github.com/ms-engineer-bc26-05/Section9_TeamD/pull/37)は10月6日にマージ済みです。表の状態は2026年10月26日時点です。
 
 ### Sprint3：2026年9月27日〜9月30日
 
@@ -36,10 +36,10 @@ Sprint2の期間は2026年9月18日〜9月26日。技術検証・技術選定と
 | --- | --- | --- | --- |
 | [#32](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/32) | 開発環境と最小アプリ基盤 | みほ | CLOSED |
 | [#35](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/35) | 共通エラーハンドラ・起動設定・README・ディレクトリ構成 | みほ | CLOSED（PR #38を10月1日にマージ） |
-| [#36](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/36) | 10/19アプリレビュー・STAGEに向けたIssue計画 | めぐ | OPEN |
-| [#44](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/44) | 親子Issueと担当・更新ルールをGitHub運用ルールへ追加 | めぐ | OPEN |
+| [#36](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/36) | 10/19アプリレビュー・STAGEに向けたIssue計画 | めぐ | CLOSED（10月6日） |
+| [#44](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/44) | 親子Issueと担当・更新ルールをGitHub運用ルールへ追加 | めぐ | CLOSED（10月11日） |
 
-設計の持ち越しはOPENのIssue [#11 DB設計](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/11)、[#12 PRD](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/12)、[#13 要件定義](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/13)、[#16 テスト設計](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/16)です。コーディング規約のIssue [#45](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/45)は、るなさんの稼働制約を踏まえてSprint5へ移しました。Formatter・Lintの選定・設定・CIはSprint4の[#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46)でまとめて行い、その採用結果を#45で規約へ反映します。
+設計の持ち越しはIssue [#11 DB設計](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/11)、[#12 PRD](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/12)、[#13 要件定義](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/13)、[#16 テスト設計](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/16)でした（いずれもCLOSED）。コーディング規約のIssue [#45](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/45)は、るなさんの稼働制約を踏まえてSprint5へ移しました。Formatter・Lintの選定・設定・CIはSprint4の[#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46)でまとめて行い、その採用結果を#45で規約へ反映します。
 
 ### Sprint4：2026年10月1日〜10月5日
 
@@ -47,13 +47,13 @@ Sprint2の期間は2026年9月18日〜9月26日。技術検証・技術選定と
 
 | Issue | 内容 | 主担当 | 親Issue・状態 |
 | --- | --- | --- | --- |
-| [#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46) | Formatter・Lint選定、共通設定と自動チェック | じま | #39・OPEN |
-| [#47](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/47) | Firebase認証と内部ユーザー基盤 | もえ | #40・OPEN |
+| [#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46) | Formatter・Lint選定、共通設定と自動チェック | じま | #39・OPEN（Phase 1はマージ済み。Phase 2のPR #81は#119のマージ後に更新） |
+| [#47](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/47) | Firebase認証と内部ユーザー基盤 | もえ | #40・CLOSED（10月15日） |
 | [#48](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/48) | ログイン・ホーム・利用前注意 | るな | #40・OPEN |
-| [#49](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/49) | 一時状態管理とAI相談の正常系API | みほ | #40・OPEN |
-| [#50](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/50) | 安全案内・回数上限・中断・一時状態破棄 | みほ | #40・OPEN、Sprint4〜5 |
-| [#51](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/51) | 相談開始から扱い方・保存選択まで | めぐ | #40・OPEN |
-| [#52](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/52) | 承認済み整理メモの暗号化保存 | じま | #40・OPEN |
+| [#49](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/49) | 一時状態管理とAI相談の正常系API | みほ | #40・CLOSED（10月4日） |
+| [#50](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/50) | 安全案内・回数上限・中断・一時状態破棄 | みほ | #40・CLOSED（10月10日） |
+| [#51](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/51) | 相談開始から扱い方・保存選択まで | めぐ | #40・CLOSED（10月15日） |
+| [#52](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/52) | 承認済み整理メモの暗号化保存 | じま | #40・CLOSED（10月13日） |
 
 Epicは [#39 MVP](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/39) と [#40 中心相談フロー](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/40)。#47〜#52は#40配下、#46は#39配下です。#40はIssue #35の共通基盤を起点にし、認証・AI相談・メモ保存は共有済みの契約とモックを用いて並行します。特に#47の認証基盤を#49・#52から利用する関係など、詳細な依存は各Issueを参照してください。
 
@@ -75,7 +75,7 @@ Epicは [#39 MVP](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/3
 
 ## Sprint5以降
 
-Sprint5〜8の子Issue（#45、#53〜#71）は10月1日にGitHubへ登録済みです。計画PR #37が未確定のため、下記のゴールを優先し、個々のIssueの範囲・担当は確認完了時に確定します。
+Sprint5〜8の子Issue（#45、#53〜#71）は10月1日にGitHubへ登録済みで、範囲・担当は計画PR #37（10月6日マージ）で確定しました。下の表は当初の計画です。10月21日の見直しで日程が変わったため、Sprint8以降は「10月21日の見直しと最終提出までの日程」を正とします。
 
 | 区分・期間 | 機能群と完了目標 |
 | --- | --- |
@@ -90,13 +90,38 @@ Sprint5〜8の子Issue（#45、#53〜#71）は10月1日にGitHubへ登録済み�
 
 STAGE準備Epicは [#43](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/43)。日々の進捗と個別Issueの完了状態はGitHub上で確認してください。
 
+## 10月21日の見直しと最終提出までの日程
+
+10月21日に、最終提出までの優先順位と日程をチームで見直しました（めぐさんがDiscordで共有）。10月30日（金）は20時から修了式のため、10月29日までに提出できる状態にし、**10月28日（水）を実質のコード・資料の締切**とします。当初の「10月25日を原則コードフリーズ」は、この日程に置き換えます。
+
+| 日付 | 内容 |
+| --- | --- |
+| 10月22日（木） | スライドレビュー。指摘事項を#65・#70へ整理する |
+| 10月23日（金）〜25日（日） | PR・設計書のレビューとマージ、Stripeテストモードの確認、#62・#63の確認。10月25日に#61・#91の着手可否を判断する |
+| 10月26日（月） | リハーサル。改善点・担当者・期限を[#71](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/71)へ記録し、「STAGE前必須」「最終提出まで」「持ち越し」に分類する |
+| 10月27日（火） | リハーサルで判明した必須事項の修正。README・画面設計・API設計・テスト結果と実装の照合。子Issueの整理、親Issueの記録案、develop → mainのPRの準備 |
+| **10月28日（水）** | **実質の締切**。必要なPRをdevelopへマージし、テスト・Build・起動を確認する。スライド・動画・台本・Q&Aを固定する。develop → mainのPRを作成し、作成者以外のApproveを受けてSquash and mergeする（難しい場合も、PR作成・CI・レビュー依頼までは終える） |
+| 10月29日（木） | 未マージならdevelop → mainをマージし、mainで最終確認する。**STAGE本番**。子Issue・親Issue #39〜#43のClose・持ち越しを整理する |
+| 10月30日（金） | 修了式。新規実装・大規模修正は行わず、提出物の確認と最終提出だけを行う |
+
+STAGE当日以降に修正が必要になった場合も、新機能は追加せず、発表・提出を止める重大な問題だけを、別Issue・作業ブランチ・PRで対応します。
+
+### 最終提出より持ち越し（10月26日時点）
+
+| 内容 | 記録先 |
+| --- | --- |
+| 状態不明で止まった決済（`creating`）の自動照合 | [#91](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/91)（10月25日に持ち越しと決定） |
+| 退会の実接続確認（Stripe・Firebase・復旧CLI） | [#60](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/60)・PR #122で整理中。後続Issueを作成予定 |
+| プランの上限値の読み込み口の整理 | [#118](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/118) |
+| `firebase`経由の依存パッケージのhigh 4件 | `docs/security-privacy-check.md`のNo.14 |
+
+設定・ログアウト・退会画面（[#61](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/61)）を最終提出までに対応するかは、10月26日時点で#61に記録がありません。
+
 ## 未確定事項・更新方法
 
-- Issue #33はOPEN、PR #37はDraft・未Approveです。Sprint3〜4の登録Issue番号・担当・親子関係は現時点のGitHub記録を掲載していますが、PR #37およびIssue #33の確認後に差異を反映します。
-- るなさんは10月1日・2日に作業・確認ができないため、るなさんに関係する調整（#45のSprint5への移動、#46からの引き継ぎ内容、代理確認ルール）は10月3日夜の事後確認を前提とした暫定運用です。
-- Sprint2でOPENの設計Issue（#11〜#13・#16）は完了扱いにせず、レビュー・仕様調整の持ち越しとして扱います。
-- Sprint5〜8の個別Issueが追加されても、本書を都度更新する必要はありません。日程、Sprintゴール、重要な依存関係に変更がある場合は、別Issue・PRで更新します。
-- 進捗は親Issue・子Issue・PRを正とし、本書へ未完成の内容を完了済みとして記載しません。
+- 進捗は親Issue・子Issue・PRを正とし、本書へ未完成の内容を完了済みとして記載しません。表の状態は更新日時点のものです。
+- 個別Issueが追加されても、本書を都度更新する必要はありません。日程、Sprintゴール、重要な依存関係に変更がある場合は、別Issue・PRで更新します。
+- 最終提出後の持ち越しは、各Issueと親Issue #39〜#43の記録を正とします。
 
 ## 参照
 
