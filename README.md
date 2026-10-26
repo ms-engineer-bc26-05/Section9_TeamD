@@ -176,7 +176,9 @@ docker compose up
 
 ## テスト・ビルド
 
-コンテナを起動した状態で、別のターミナルから実行します。
+Pull Requestでは、GitHub Actionsがバックエンドのpytestとフロントエンドのテスト・ビルドを自動実行します。
+
+ローカルでは、コンテナを起動した状態で、別のターミナルから実行します。
 
 **バックエンドのテスト**
 
@@ -185,6 +187,14 @@ docker compose exec backend pytest -v -p no:cacheprovider
 ```
 
 テストはPostgreSQL・Redisへの接続をモックに置き換えているため、DB・Redisの状態に関係なく実行できます。
+
+**フロントエンドのテスト**
+
+```bash
+docker compose run --rm --no-deps frontend npm test
+```
+
+Vitest + Testing Libraryを使っています。ローカルで `frontend` フォルダにいる場合は、`npm test` でも実行できます。依存を追加した後は、`docker compose build frontend` でイメージを作り直してください。
 
 **フロントエンドのビルド**
 

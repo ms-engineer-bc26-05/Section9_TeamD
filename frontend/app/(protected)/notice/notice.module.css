@@ -1,0 +1,184 @@
+.page {
+  min-height: 100svh;
+  padding: 28px 26px 52px;
+  box-sizing: border-box;
+  color: #493e38;
+  background: #f7f3ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif;
+}
+
+.panel {
+  width: min(100%, 390px);
+  margin: 0 auto;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+}
+
+.backLink {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  color: #493e38;
+  border-radius: 50%;
+  font-size: 1.75rem;
+  line-height: 1;
+  text-decoration: none;
+  place-items: center;
+}
+
+.backLink:hover {
+  background: #ede6df;
+}
+
+.backLink:focus-visible,
+.detailButton:focus-visible,
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.supportLink:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: 3px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+.headerSpacer {
+  width: 44px;
+  height: 44px;
+}
+
+.noticeCard {
+  margin-top: 26px;
+  padding: 24px 22px;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 20px;
+}
+
+.noticeList {
+  display: grid;
+  gap: 14px;
+  padding-left: 1.25rem;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+
+.noticeList li::marker {
+  color: #d98978;
+}
+
+.detail {
+  padding-top: 20px;
+  margin-top: 22px;
+  border-top: 1px solid #e5ded7;
+  color: #81766f;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.detailTitle {
+  margin: 0 0 10px;
+  color: #493e38;
+  font-size: 0.875rem;
+}
+
+.detail p {
+  margin: 8px 0 0;
+}
+
+.detailButton {
+  display: block;
+  margin: 24px auto 0;
+  padding: 6px 8px;
+  color: #493e38;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.supportLink {
+  display: block;
+  width: fit-content;
+  margin: 22px auto 0;
+  color: #493e38;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  text-decoration: underline;
+}
+
+.error {
+  padding: 12px 14px;
+  margin: 18px 0 0;
+  color: #493e38;
+  background: #f2ddd6;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.actions {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.primaryButton,
+.secondaryButton {
+  display: grid;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 20px;
+  box-sizing: border-box;
+  border-radius: 16px;
+  font: inherit;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  cursor: pointer;
+  place-items: center;
+}
+
+.primaryButton {
+  color: #ffffff;
+  background: #d98978;
+  border: 2px solid #d98978;
+  font-weight: 700;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #c96f60;
+  border-color: #c96f60;
+}
+
+.primaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  color: #493e38;
+  background: transparent;
+  border: 1.5px solid #c9bfb7;
+}
+
+.secondaryButton:hover {
+  background: #ede6df;
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding-right: 26px;
+    padding-left: 26px;
+  }
+}

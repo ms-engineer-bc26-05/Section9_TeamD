@@ -15,3 +15,8 @@ node_modules/
 next-env.d.ts
 *.tsbuildinfo
 npm-debug.log*
+
+# Firebase service account credentials
+**/*firebase-adminsdk*.json
+**/firebase-service-account*.json
+**/service-account*.json
