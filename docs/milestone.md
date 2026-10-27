@@ -1,6 +1,6 @@
 ## マイルストーン・スケジュール
 
-更新日：2026年10月26日
+更新日：2026年10月27日
 
 ## 共通前提
 
@@ -26,7 +26,7 @@ Sprint2の期間は2026年9月18日〜9月26日。技術検証・技術選定と
 
 ## Sprint3〜4
 
-親Issue・子IssueはGitHubに登録済みです。Sprint3〜4の確認Issue [#33](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/33)は10月6日にCLOSED、計画PR [#37](https://github.com/ms-engineer-bc26-05/Section9_TeamD/pull/37)は10月6日にマージ済みです。表の状態は2026年10月26日時点です。
+親Issue・子IssueはGitHubに登録済みです。Sprint3〜4の確認Issue [#33](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/33)は10月6日にCLOSED、計画PR [#37](https://github.com/ms-engineer-bc26-05/Section9_TeamD/pull/37)は10月6日にマージ済みです。表の状態は2026年10月27日時点です。
 
 ### Sprint3：2026年9月27日〜9月30日
 
@@ -47,7 +47,7 @@ Sprint2の期間は2026年9月18日〜9月26日。技術検証・技術選定と
 
 | Issue | 内容 | 主担当 | 親Issue・状態 |
 | --- | --- | --- | --- |
-| [#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46) | Formatter・Lint選定、共通設定と自動チェック | じま | #39・OPEN（Phase 1はマージ済み。Phase 2のPR #81は#119のマージ後に更新） |
+| [#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46) | Formatter・Lint選定、共通設定と自動チェック | じま | #39・OPEN（Phase 1はマージ済み。Phase 2のPR #81は最終提出より持ち越し。10月27日に決定） |
 | [#47](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/47) | Firebase認証と内部ユーザー基盤 | もえ | #40・CLOSED（10月15日） |
 | [#48](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/48) | ログイン・ホーム・利用前注意 | るな | #40・OPEN |
 | [#49](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/49) | 一時状態管理とAI相談の正常系API | みほ | #40・CLOSED（10月4日） |
@@ -104,18 +104,35 @@ STAGE準備Epicは [#43](https://github.com/ms-engineer-bc26-05/Section9_TeamD/i
 | 10月29日（木） | 未マージならdevelop → mainをマージし、mainで最終確認する。**STAGE本番**。子Issue・親Issue #39〜#43のClose・持ち越しを整理する |
 | 10月30日（金） | 修了式。新規実装・大規模修正は行わず、提出物の確認と最終提出だけを行う |
 
+### 10月28日までの最終作業計画（10月27日）
+
+10月27日に、めぐさんが10月28日のdevelop → mainのマージに向けた計画を共有しました。最終提出の前は新しい実装を増やさず、提出物の正確性・テスト記録・セキュリティ対応・READMEの最新化を優先します。
+
+| 順番 | PR | 内容 |
+| --- | --- | --- |
+| 1 | [PR #121](https://github.com/ms-engineer-bc26-05/Section9_TeamD/pull/121) | MVP縦断・異常系テストの結果（#62） |
+| 2 | [PR #29](https://github.com/ms-engineer-bc26-05/Section9_TeamD/pull/29) | 本書（#15） |
+| 3 | [PR #124](https://github.com/ms-engineer-bc26-05/Section9_TeamD/pull/124) | `next`の脆弱性の修正（#119） |
+| 4 | [PR #113](https://github.com/ms-engineer-bc26-05/Section9_TeamD/pull/113) | README・デモ手順。PR #124の結果を踏まえてNext.jsの版などを確定する |
+| 5 | develop → main | 対象のPRを整理した後、最後に作成する |
+
+- PR #121とPR #29の順番は、作業状況に応じて前後してもよい。
+- PR #124で問題が見つかり、10月27日夜までに原因を特定できない場合は、無理にマージせず、確認済みの範囲・未確認の事項・持ち越しの理由を記録して、10月28日の提出準備を優先する。
+- PR #81（#46のPhase 2）は、変更範囲が大きく、Draftで、LintのCIも失敗しているため、mainへのマージの対象に含めない。
+
 STAGE当日以降に修正が必要になった場合も、新機能は追加せず、発表・提出を止める重大な問題だけを、別Issue・作業ブランチ・PRで対応します。
 
-### 最終提出より持ち越し（10月26日時点）
+### 最終提出より持ち越し（10月27日時点）
 
 | 内容 | 記録先 |
 | --- | --- |
 | 状態不明で止まった決済（`creating`）の自動照合 | [#91](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/91)（10月25日に持ち越しと決定） |
-| 退会の実接続確認（Stripe・Firebase・復旧CLI） | [#60](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/60)・PR #122で整理中。後続Issueを作成予定 |
+| 退会の実接続確認（Stripe・Firebase・復旧CLI） | [#60](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/60)（PR #122はマージ済み）。後続Issueを作成予定 |
 | プランの上限値の読み込み口の整理 | [#118](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/118) |
 | `firebase`経由の依存パッケージのhigh 4件 | `docs/security-privacy-check.md`のNo.14 |
+| Formatter・LintのCI（Phase 2、PR #81） | [#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46)（10月27日に持ち越しと決定） |
 
-設定・ログアウト・退会画面（[#61](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/61)）を最終提出までに対応するかは、10月26日時点で#61に記録がありません。
+設定・ログアウト・退会画面（[#61](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/61)）は、10月28日までに実装しません。未完成であることと後続の対応先を、README・Issueへ記録します（10月27日のめぐさんの計画）。
 
 ## 未確定事項・更新方法
 
