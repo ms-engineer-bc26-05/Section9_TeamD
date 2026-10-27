@@ -127,7 +127,7 @@ STAGE当日以降に修正が必要になった場合も、新機能は追加せ
 | 内容 | 記録先 |
 | --- | --- |
 | 状態不明で止まった決済（`creating`）の自動照合 | [#91](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/91)（10月25日に持ち越しと決定） |
-| 退会の実接続確認（Stripe・Firebase・復旧CLI） | [#60](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/60)（PR #122はマージ済み）。後続Issueを作成予定 |
+| 退会の実接続・実運用確認 | [#125](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/125)（Firebase）、[#126](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/126)（復旧CLI）、[#127](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/127)（Stripe）。いずれも最終提出後へ持ち越し。 |
 | プランの上限値の読み込み口の整理 | [#118](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/118) |
 | `firebase`経由の依存パッケージのhigh 4件 | `docs/security-privacy-check.md`のNo.14 |
 | Formatter・LintのCI（Phase 2、PR #81） | [#46](https://github.com/ms-engineer-bc26-05/Section9_TeamD/issues/46)（10月27日に持ち越しと決定） |
