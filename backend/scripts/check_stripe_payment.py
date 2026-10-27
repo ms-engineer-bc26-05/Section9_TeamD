@@ -38,6 +38,7 @@ from app.features.payments.exceptions import AlreadyPaid
 from app.features.payments.models import PaymentRow, UserEntitlementRow
 from app.features.payments.settings import load_checkout_settings
 from app.features.payments.service import CheckoutService
+from app.features.plans.public import PlanCode
 from app.features.users.models import User
 from app.integrations.stripe.client import (
     CheckoutSession,
@@ -121,7 +122,7 @@ class Checker:
     async def is_paid(self, user_id: UUID) -> bool:
         # GET /payments/me と同じ判定
         async with self._repository.transaction() as tx:
-            return await tx.has_paid_entitlement(user_id, datetime.now(UTC))
+            return await tx.current_plan(user_id, datetime.now(UTC)) is PlanCode.PREMIUM
 
     async def cleanup(self) -> None:
         async with self._session_factory() as session, session.begin():

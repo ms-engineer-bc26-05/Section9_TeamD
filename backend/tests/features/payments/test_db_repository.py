@@ -30,6 +30,7 @@ from app.features.payments.repository import (
 from app.features.payments.service import CheckoutService
 from app.features.payments.settings import CheckoutSettings
 from app.features.payments.settlement import PaymentSettlementService
+from app.features.plans.public import PlanCode
 from app.features.users.models import User
 from tests.features.payments.fakes import FakeStripe
 
@@ -217,7 +218,7 @@ async def test_free_entitlement_is_not_paid(repo, user_id, session_factory):
             )
         )
     async with repo.transaction() as tx:
-        assert await tx.has_paid_entitlement(user_id, now) is False
+        assert await tx.current_plan(user_id, now) is PlanCode.FREE
 
 
 async def test_concurrent_checkouts_create_one_session(repo, user_id, stripe, session_factory):

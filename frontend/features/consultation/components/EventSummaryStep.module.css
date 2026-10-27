@@ -44,7 +44,7 @@
 .cancelButton {
   margin-right: -4px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 
 .cancelButton:hover:not(:disabled) {
@@ -69,7 +69,7 @@
   padding: 0;
   margin: 25px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   list-style: none;
 }
 
@@ -115,7 +115,7 @@
 .helpText {
   margin: 16px 0 26px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 
 .form {
@@ -139,7 +139,7 @@
 .summaryLabel {
   display: grid;
   padding: 12px;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.65;
   text-align: center;
@@ -164,7 +164,7 @@
   padding: 22px 16px 30px;
   color: #493e38;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 1rem;
   line-height: 1.9;
   resize: vertical;
   background: transparent;
@@ -190,20 +190,20 @@
   right: 16px;
   bottom: 10px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   pointer-events: none;
 }
 
 .errorMessage {
   margin: 8px 0 0;
   color: #9a4135;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .directEditNotice {
   margin: 20px 0 0;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   line-height: 1.7;
 }
 
@@ -211,7 +211,7 @@
   padding: 12px 14px;
   margin: 24px 0 0;
   color: #6f625b;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.7;
   background: #f3e8dd;
   border-radius: 12px;
@@ -260,14 +260,14 @@
 .loadingMessage {
   margin: 12px 0 0;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
 }
 
 .supportText {
   margin: 34px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.8125rem;
   text-align: center;
 }
 

@@ -56,7 +56,7 @@
 .cancelButton {
   margin-right: -4px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 
 .headerButton:hover:not(:disabled),
@@ -88,7 +88,7 @@
   padding: 0;
   margin: 25px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   list-style: none;
 }
 
@@ -153,7 +153,7 @@
   min-height: 36px;
   padding: 6px 10px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 
 .title {
@@ -165,7 +165,7 @@
 .helpText {
   margin: 16px 0 26px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -185,7 +185,7 @@
   padding: 26px 18px 46px;
   color: #493e38;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.75;
   resize: vertical;
   background: #fffdfc;
@@ -217,7 +217,7 @@
   right: 18px;
   bottom: 14px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
 }
 
 .cannotVerbalizeOption {
@@ -244,7 +244,7 @@
   align-items: center;
   min-height: 54px;
   padding: 10px 16px;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.5;
   background: #fffdfc;
   border: 1.5px solid #d8d0c8;
@@ -284,7 +284,7 @@
 .errorMessage {
   margin: 10px 0 0;
   color: #9a4135;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -317,14 +317,14 @@
 .loadingMessage {
   margin: 14px 0 0;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
 }
 
 .supportText {
   margin: 42px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.8125rem;
   text-align: center;
 }
 

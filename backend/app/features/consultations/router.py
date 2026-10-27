@@ -1,7 +1,7 @@
 """相談API（docs/api-design.md 6.2〜6.5）。
 
 - Routerの登録（main.py）は結合Issue（I-06）で行う
-- 認証は I-01 の get_current_user に置き換えるまで、仮の依存（常に401）を使う
+- 認証は I-01 の get_current_user を使い、内部ユーザーIDで一時状態を分離する
 - 相談機能の例外は、http_errors.ConsultationRoute で設計書3.5の形式のエラーへ変換する
   （共通の errors.py・main.py を変更しないため、Routerごとの APIRoute で変換する）
 - エラーの本文・ログに、相談内容やAIの出力を含めない
@@ -13,6 +13,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
 
+from app.features.auth.dependencies import get_current_user
+from app.features.auth.schemas import CurrentUser
 from app.features.consultations.api_schemas import (
     ConsultationResultView,
     ConsultationView,
@@ -27,7 +29,6 @@ from app.features.consultations.schemas import (
     EmotionInput,
     HandlingChoice,
 )
-from app.features.consultations.exceptions import NotAuthenticated
 from app.features.consultations.http_errors import ConsultationRoute
 from app.features.consultations.service import (
     ConsultationService,
@@ -45,17 +46,15 @@ from app.integrations.openrouter.client import OpenRouterClient, get_ai_client
 
 
 # ---------------------------------------------------------------------------
-# 認証（I-01完了までの仮の依存）
+# 認証
 # ---------------------------------------------------------------------------
 
 
-async def get_current_user_id() -> UUID:
-    """I-01の Depends(get_current_user) の current_user.user_id へ置き換える。
-
-    置き換えるまでは常に401とし、誤って結合しても認証なしで使えないようにする。
-    テストでは dependency_overrides で固定UUIDを返す。
-    """
-    raise NotAuthenticated
+async def get_current_user_id(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UUID:
+    """認証済み内部ユーザーのIDを返す。"""
+    return current_user.user_id
 
 
 # ---------------------------------------------------------------------------

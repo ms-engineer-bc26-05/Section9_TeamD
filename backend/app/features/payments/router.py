@@ -86,7 +86,7 @@ async def get_my_plan(
     user_id: UUID = Depends(get_current_user_id),
     repository: PaymentRepository = Depends(get_payment_repository),
 ) -> CurrentPlanView:
-    # plans/public.py の get_current_plan ができたら差し替える（#59。GET /usage と同じ判定にする）
+    # GET /usage と同じ判定（plans/public.py の get_current_plan。#95）
     async with repository.transaction() as tx:
-        paid = await tx.has_paid_entitlement(user_id, datetime.now(UTC))
-    return CurrentPlanView(plan_code="premium" if paid else "free")
+        plan = await tx.current_plan(user_id, datetime.now(UTC))
+    return CurrentPlanView(plan_code=plan.value)

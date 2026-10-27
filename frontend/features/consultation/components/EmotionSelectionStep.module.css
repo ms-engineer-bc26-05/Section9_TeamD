@@ -44,7 +44,7 @@
 .cancelButton {
   margin-right: -4px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
 }
 
 .cancelButton:hover {
@@ -63,7 +63,7 @@
   padding: 0;
   margin: 25px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   list-style: none;
 }
 
@@ -114,7 +114,7 @@
 .helpText {
   margin: 16px 0 26px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .form,
@@ -198,19 +198,19 @@
 
 .cardLabel {
   min-width: 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .option:nth-child(7) .cardLabel {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .reassurance {
   margin: 32px 0 22px;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   text-align: center;
 }
 
@@ -242,7 +242,7 @@
 .supportText {
   margin: 42px 0 0;
   color: #81766f;
-  font-size: 0.625rem;
+  font-size: 0.8125rem;
   text-align: center;
 }
 

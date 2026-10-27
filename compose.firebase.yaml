@@ -1,0 +1,13 @@
+services:
+  backend:
+    environment:
+      # コンテナ内の固定パスだけをアプリへ知らせ、PC側の保存場所は公開しない
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-service-account.json
+    volumes:
+      - type: bind
+        source: ${FIREBASE_CREDENTIALS_PATH:?リポジトリ外に置いたFirebase JSON鍵の絶対パスを.envへ設定してください}
+        target: /run/secrets/firebase-service-account.json
+        read_only: true
+        bind:
+          # パス間違い時に空ディレクトリを作らず、安全に失敗させる
+          create_host_path: false

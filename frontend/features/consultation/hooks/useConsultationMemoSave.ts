@@ -24,7 +24,10 @@ const INITIAL_STATE: ConsultationMemoSaveState = {
   errorCode: null,
 };
 
-export function useConsultationMemoSave(api: ConsultationMemoApi) {
+export function useConsultationMemoSave(
+  api: ConsultationMemoApi,
+  onApiError?: (error: unknown) => void,
+) {
   const [state, setState] = useState<ConsultationMemoSaveState>(INITIAL_STATE);
   const activeControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
@@ -58,6 +61,7 @@ export function useConsultationMemoSave(api: ConsultationMemoApi) {
           { signal: controller.signal },
         );
       } catch (error: unknown) {
+        onApiError?.(error);
         const failure = toConsultationApiFailure(error);
 
         if (mountedRef.current) {
@@ -76,7 +80,7 @@ export function useConsultationMemoSave(api: ConsultationMemoApi) {
         }
       }
     },
-    [api],
+    [api, onApiError],
   );
 
   const reset = useCallback(() => {

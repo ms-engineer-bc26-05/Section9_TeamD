@@ -48,6 +48,7 @@ from app.features.payments.repository import (
     UserNotActive,
 )
 from app.features.payments.settings import CheckoutSettings
+from app.features.plans.public import PlanCode
 from app.integrations.stripe.client import (
     CheckoutSession,
     StripeExpiresAtRejected,
@@ -145,7 +146,7 @@ class CheckoutService:
             async with self._repository.transaction() as tx:
                 # ユーザー不在・active でない場合は例外で抜け、行を作らない
                 await tx.lock_user(user_id)
-                if await tx.has_paid_entitlement(user_id, self._now()):
+                if await tx.current_plan(user_id, self._now()) != PlanCode.FREE:
                     raise AlreadyPaid
                 plan = await tx.find_plan(plan_code)
                 if plan is None or not plan.is_active:

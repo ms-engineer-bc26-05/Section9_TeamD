@@ -27,7 +27,7 @@
   padding: 0;
   color: #81766f;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -48,7 +48,7 @@
 .helpText {
   margin: 18px 0 38px;
   color: #81766f;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.6;
   text-align: center;
 }
@@ -149,14 +149,14 @@
 
 .optionDescription {
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.55;
 }
 
 .loadingMessage {
   margin: 18px 0 0;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   text-align: center;
 }
 
@@ -166,7 +166,7 @@
   flex-direction: column;
   gap: 8px;
   color: #81766f;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
   text-align: center;
 }
@@ -178,7 +178,7 @@
 .supportText {
   margin: 42px 0 0;
   color: #81766f;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   text-align: center;
 }
 

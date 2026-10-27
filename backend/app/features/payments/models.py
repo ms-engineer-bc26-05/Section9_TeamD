@@ -1,6 +1,6 @@
 """プラン・利用権限・決済のテーブル定義（DB設計 plans・user_entitlements・payments。#59）。
 
-#59の結論で、3つの表はF-05で作る。plans/（F-03）ができたら、plans・user_entitlements の読み書きはそちらへ移す。
+#59の結論で、3つの表はF-05で作る。user_entitlements の判定・付与は plans/public.py の関数で行う（#95）。
 
 - plans の上限値（相談回数・保存件数・集計期間）は、#57で環境変数の設定値にしたため列を作らない
   （使わない列が NULL のまま残ると、#57で決めた「NULL は無制限」と読み違えるため）

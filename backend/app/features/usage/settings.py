@@ -4,7 +4,8 @@
 - 設定値は共通の config.py ではなく、この機能の中で読み込む（他Issueとの競合を避けるため）
 - プランごとの上限値は、#59の決定により plans/ へ移した（#92）。ここでは plans/public.py から読み込み、
   UsageSettings.limits_for で今までどおり使えるようにしている
-  （PlanCode・PlanLimits もこのモジュールからimportできる。memos/limits.py などの呼び出し元は変えていない）
+  （PlanCode・PlanLimits もこのモジュールからimportできる。memos/limits.py は #95 で plans/public.py の
+  get_plan_settings から読む形に変えた。GET /usage・相談開始は今までどおりこのモジュールから読む）
 """
 
 import os

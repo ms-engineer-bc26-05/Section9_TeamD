@@ -221,7 +221,8 @@ export function EventSummaryStep({
 
           {isSubmitting ? (
             <p className={styles.loadingMessage} role="status">
-              内容を確認しています…
+              内容を確認しています。通常より時間がかかることがあります。
+              そのままお待ちください。
             </p>
           ) : null}
         </form>

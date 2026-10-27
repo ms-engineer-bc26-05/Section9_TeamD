@@ -1,0 +1,14 @@
+html,
+body {
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+}
+
+button,
+a,
+label {
+  -webkit-tap-highlight-color: transparent;
+}

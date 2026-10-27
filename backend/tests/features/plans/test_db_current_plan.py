@@ -68,14 +68,15 @@ async def current_plan(session_factory, user_id):
         return await get_current_plan(session, user_id, NOW)
 
 
-async def has_paid(session_factory, user_id):
+async def payment_plan(session_factory, user_id):
+    # 決済（購入の判定・GET /payments/me）のトランザクションからの判定（#95）
     async with SqlAlchemyPaymentRepository(session_factory).transaction() as tx:
-        return await tx.has_paid_entitlement(user_id, NOW)
+        return await tx.current_plan(user_id, NOW)
 
 
 async def test_no_entitlement_is_free(session_factory, user_id):
     assert await current_plan(session_factory, user_id) is PlanCode.FREE
-    assert await has_paid(session_factory, user_id) is False
+    assert await payment_plan(session_factory, user_id) is PlanCode.FREE
 
 
 @pytest.mark.parametrize(
@@ -91,7 +92,7 @@ async def test_no_entitlement_is_free(session_factory, user_id):
         ("free", "active", NOW - DAY, None, PlanCode.FREE),  # 無料プランの利用権限
     ],
 )
-async def test_matches_has_paid_entitlement(
+async def test_payment_side_gets_same_plan(
     session_factory, user_id, plan_code, status, valid_from, valid_until, expected
 ):
     await add_entitlement(session_factory, user_id, plan_code, status, valid_from, valid_until)
@@ -99,8 +100,8 @@ async def test_matches_has_paid_entitlement(
     plan = await current_plan(session_factory, user_id)
 
     assert plan is expected
-    # F-05 の has_paid_entitlement と同じ結果になる
-    assert (plan is PlanCode.PREMIUM) is await has_paid(session_factory, user_id)
+    # 決済の側（F-05）からも同じ結果になる
+    assert await payment_plan(session_factory, user_id) is plan
 
 
 async def test_other_users_entitlement_is_not_used(session_factory, user_id):

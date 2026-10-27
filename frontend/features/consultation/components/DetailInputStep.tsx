@@ -169,6 +169,13 @@ export function DetailInputStep({
           <button className={styles.primaryButton} type="submit" disabled={isSubmitting}>
             {isSubmitting ? "送信中…" : "対話を始める"}
           </button>
+
+          {isSubmitting ? (
+            <p className={styles.loadingMessage} role="status">
+              AIが内容を整理しています。通常より時間がかかることがあります。
+              そのままお待ちください。
+            </p>
+          ) : null}
         </form>
       </section>
     </main>
