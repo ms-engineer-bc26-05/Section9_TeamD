@@ -126,7 +126,7 @@ compose.firebase.yaml          Firebase Admin用JSON鍵の読み取り専用マ�
 - リポジトリ外に保管したFirebase Admin SDKのサービスアカウントJSON
 - OpenRouterのAPIキー
 - 整理メモ暗号化鍵
-- Stripe機能を確認する場合は、Stripeテストモードの設定
+- Stripe機能を確認する場合は、Stripeテストモードの設定（現在の標準Compose手順では未対応。既知の制約を参照）
 
 Node.jsとPythonはコンテナ内で実行します。秘密情報の取得・共有方法はREADMEには記載せず、チームで承認した安全な経路を使用してください。
 
