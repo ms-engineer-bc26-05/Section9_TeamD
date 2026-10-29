@@ -78,7 +78,7 @@ CI成功、自動テスト、実API、実DB、実画面の確認は同じ意味�
 - Stripeはテストモードの一回払いとして実装しています。
 - アプリはカード情報を保持しません。
 - Checkout成功画面への復帰後に有料状態を反映します。Webhookによる非同期確定、サブスクリプション、返金はMVPの対象外です。
-- 決済完了後、成功画面へ戻る前にタブを閉じた場合は直ちに有料状態へ反映されません。再度「購入手続きに進む」を選ぶと、既存の決済を確認して有料状態へ反映できることを実画面で確認しています。
+- 決済完了後、成功画面へ戻る前にタブを閉じた場合は直ちに有料状態へ反映されません。再度「購入手続きへ進む」を選ぶと、既存の決済を確認して有料状態へ反映できることを実画面で確認しています。
 - 上記の確認では、新しいCheckout画面が開かないことまでを確認しました。Checkout Sessionが重複作成されていないことをDBやStripe管理画面で確認した結果ではありません。
 - Webhookによる自動反映は未実装のため、成功画面へ戻らない場合は利用者による再操作が必要です。
 - 表示価格はテスト用であり、正式な販売価格ではありません。
@@ -153,12 +153,8 @@ Copy-Item .env.example .env
 - `FIREBASE_CREDENTIALS_PATH`
 - `OPENROUTER_API_KEY`
 - `MEMO_ENCRYPTION_KEY`
-- Stripeテストモードで必要な設定
 
 `.env`、Firebase JSON、APIキー、トークン、暗号化鍵はGitへ追加しないでください。
-
-> **Stripe設定について**
-> アプリはStripe用の環境変数を参照しますが、2026年10月27日時点の `.env.example` と `compose.yaml` には、必要な設定項目がすべて整理されていません。結合確認済みの共有環境以外でStripeを動かす場合は、Issue #59・#62の設定と現在のComposeへの受け渡しを確認してください。この点は最終提出前のREADME再確認対象です。
 
 ### 2. Firebase JSONを準備する
 
@@ -217,13 +213,13 @@ docker compose exec backend alembic upgrade head
 4. 同じアカウントで複数の相談を同時に開始しない
 5. 相談を一時状態の有効時間内に完了する
 
-本番Buildのフロントエンドを確認する場合は、開発サーバーとは分けて次を使用します。
+フロントエンドの本番用成果物を生成できることは、次のコマンドで確認します。
 
 ```bash
 docker compose run --rm --no-deps frontend npm run build
 ```
 
-Build成功後の起動方法は、使用する環境とCompose設定を確認してから決めてください。開発用Composeは通常 `npm run dev` で起動します。
+現在のDockerfileとComposeは `npm run dev` で起動する開発用構成です。`npm run build` の成功は確認できますが、本番Buildを起動する標準構成は用意していないため、提出後対応とします。
 
 ## テスト・Build
 
@@ -238,10 +234,7 @@ docker compose run --rm --no-deps frontend npm run build
 ### 実DB・Redisを必須にするバックエンドテスト
 
 ```bash
-docker compose exec \
-  -e RUN_DB_TESTS=1 \
-  -e REQUIRE_REDIS_TESTS=true \
-  backend pytest -p no:cacheprovider -q -rs
+docker compose exec -e RUN_DB_TESTS=1 -e REQUIRE_REDIS_TESTS=true backend pytest -p no:cacheprovider -q -rs
 ```
 
 ### フロントエンド依存関係の脆弱性確認
@@ -272,6 +265,7 @@ docker compose -f compose.yaml -f compose.firebase.yaml down -v
 - 退会APIは実装済みですが、Firebase Authenticationの実削除、Stripe処理、手動復旧CLIを含む実運用確認は提出後対応です。
 - Redisの不調が続く場合、退会後も利用回数のキーが残る可能性があります。
 - 決済完了後に成功画面へ戻らなかった場合は直ちに有料状態へ反映されず、利用者による再操作が必要です。
+- バックエンドはStripe接続に `STRIPE_SECRET_KEY`、`STRIPE_PRICE_ID_PREMIUM`、任意の `STRIPE_TIMEOUT_SECONDS` を参照しますが、現在の `.env.example` と `compose.yaml` では定義・受け渡しを行っていません。Stripeテストモードは共有結合環境で確認済みですが、READMEの標準Compose手順だけでは再現できません。
 - プラン設定値の読み込み口とAPI設計書の整理は提出後対応です。
 - Redisの利用回数データは、現在のComposeでは永続化されません。
 - AIの文章品質と安全案内の判定には、確率的な出力に由来する制約があります。他害や暴力を受けている状況はAI判定のみに依存し、実API確認では読み取りを見逃した例があります。
@@ -295,7 +289,7 @@ docker compose -f compose.yaml -f compose.firebase.yaml down -v
 - AI失敗時のバックエンド側の再試行・状態不変・ログへの入力非出力は自動テストで確認済みですが、画面のエラー表示・入力保持・画面からの再送は未確認です。
 - 設定・ログアウト・退会画面が未実装のため、ログアウトと退会の実画面確認は後続Issue #131へ引き継ぎます。
 
-PR #121に記録されている最新の自動確認結果は、`develop` `ff55b95`でbackend 1,060件成功・36件skip、frontend 156件成功、frontend Build成功です。実DB・実Redisを必須にしたローカル確認では、backend 1,096件成功を記録しています。PR #121の最終HEAD `ef2b08c`でもCI 3件が成功し、`develop` `5d5eb3b`へマージ済みです。
+最新の `develop` `5d5eb3b`のCIは、backend 1,060件成功・36件skip、frontend 156件成功、frontend Build成功です。実DB・実Redisを必須にしたローカル確認では、backend 1,096件成功を記録しています。
 
 ## 開発時の注意
 
