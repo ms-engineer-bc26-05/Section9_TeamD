@@ -1,0 +1,64 @@
+.noticeArea {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 12px 20px 0;
+  background: #f7f3ee;
+}
+
+.notice {
+  width: min(100%, 390px);
+  padding: 12px 14px;
+  margin: 0 auto;
+  color: #7c382f;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  background: #f7e4df;
+  border: 1px solid #d98978;
+  border-radius: 12px;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.actionButton {
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 10px;
+  color: #6f352d;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: #fffaf7;
+  border: 1px solid #b85d4f;
+  border-radius: 8px;
+}
+
+.actionButton:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.secondaryActionButton {
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 8px;
+  color: #6f352d;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.secondaryActionButton:hover {
+  background: rgb(255 250 247 / 65%);
+}
+
+.secondaryActionButton:focus-visible {
+  outline: 2px solid #6f352d;
+  outline-offset: 2px;
+}

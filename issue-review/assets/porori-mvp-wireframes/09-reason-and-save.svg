@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>判断理由と保存確認画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.box{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.btn{fill:#D98978}.tag{fill:#F3E8DD}</style>
+  <text class="t" x="26" y="50" font-size="21">‹</text>
+  <text class="t" x="195" y="51" text-anchor="middle" font-size="17" font-weight="700">判断を記録する</text>
+  <text class="m" x="28" y="100" font-size="12">今の選択</text>
+  <rect class="tag" x="28" y="116" width="334" height="65" rx="16"/>
+  <text class="t" x="50" y="155" font-size="17" font-weight="700">今は保留する</text>
+  <text class="t" x="28" y="232" font-size="16" font-weight="700">そう決めた理由も残しますか？</text>
+  <text class="m" x="28" y="258" font-size="12">書かなくても次へ進めます（任意）</text>
+  <rect class="box" x="28" y="283" width="334" height="152" rx="16"/>
+  <text class="m" x="46" y="318" font-size="12">例：今は気持ちが強いので、</text>
+  <text class="m" x="46" y="340" font-size="12">少し落ち着いてから考えたい</text>
+  <rect x="28" y="469" width="334" height="96" rx="16" fill="#E3E7D8"/>
+  <text class="t" x="48" y="500" font-size="13" font-weight="700">保存されるもの</text>
+  <text class="m" x="48" y="526" font-size="11">承認した整理結果・選択・入力した理由</text>
+  <text class="m" x="48" y="547" font-size="11">相談中の会話全文は保存しません</text>
+  <rect class="btn" x="28" y="606" width="334" height="58" rx="16"/>
+  <text x="195" y="642" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#FFF" font-weight="700">保存する</text>
+  <rect x="28" y="680" width="334" height="58" rx="16" fill="none" stroke="#D98978" stroke-width="1.5"/>
+  <text x="195" y="716" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#C96F60" font-weight="700">保存せず終了</text>
+</svg>

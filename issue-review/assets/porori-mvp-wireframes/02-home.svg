@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>ホーム画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.card{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.btn{fill:#D98978}.soft{fill:#F2DDD6}</style>
+  <text class="t" x="28" y="58" font-size="20" font-weight="700">ぽろり。</text>
+  <text class="t" x="195" y="145" text-anchor="middle" font-size="24" font-weight="700">今の気持ちを、</text>
+  <text class="t" x="195" y="177" text-anchor="middle" font-size="24" font-weight="700">少しずつ整理しよう</text>
+  <text class="m" x="195" y="211" text-anchor="middle" font-size="13">うまく言葉にできなくても大丈夫です</text>
+  <rect class="btn" x="30" y="251" width="330" height="76" rx="20"/>
+  <text x="195" y="297" text-anchor="middle" font-family="sans-serif" font-size="17" fill="#FFFFFF" font-weight="700">気持ちを整理する</text>
+  <text class="m" x="195" y="350" text-anchor="middle" font-size="11">現在、新しい相談を始められます</text>
+  <text class="m" x="195" y="369" text-anchor="middle" font-size="10">詳しい利用状況は「プラン」で確認できます</text>
+  <text class="t" x="30" y="386" font-size="16" font-weight="700">保存したメモ</text>
+  <rect class="card" x="30" y="405" width="330" height="82" rx="16"/>
+  <rect x="48" y="425" width="42" height="42" rx="10" fill="#E3E7D8"/>
+  <text class="t" x="108" y="440" font-size="13">9月19日の整理メモ</text>
+  <text class="m" x="108" y="464" font-size="12">今は保留する　›</text>
+  <rect class="card" x="30" y="502" width="330" height="82" rx="16"/>
+  <rect x="48" y="522" width="42" height="42" rx="10" fill="#F2DDD6"/>
+  <text class="t" x="108" y="537" font-size="13">9月12日の整理メモ</text>
+  <text class="m" x="108" y="561" font-size="12">伝える　›</text>
+  <line x1="0" y1="768" x2="390" y2="768" stroke="#D8D0C8"/>
+  <text class="t" x="72" y="808" text-anchor="middle" font-size="12">ホーム</text>
+  <text class="m" x="195" y="808" text-anchor="middle" font-size="12">メモ</text>
+  <text class="m" x="318" y="808" text-anchor="middle" font-size="12">設定</text>
+</svg>

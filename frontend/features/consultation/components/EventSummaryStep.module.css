@@ -1,0 +1,283 @@
+.page {
+  min-height: 100svh;
+  padding: 28px 26px 38px;
+  color: #493e38;
+  background: #f7f3ee;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", sans-serif;
+}
+
+.panel {
+  width: min(100%, 390px);
+  margin: 0 auto;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+}
+
+.cancelButton {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  color: #493e38;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+}
+
+.headerSpacer {
+  width: 44px;
+  height: 44px;
+}
+
+.headerTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cancelButton {
+  margin-right: -4px;
+  color: #81766f;
+  font-size: 0.875rem;
+}
+
+.cancelButton:hover:not(:disabled) {
+  background: #ede6df;
+}
+
+.cancelButton:focus-visible,
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: 2px;
+}
+
+.cancelButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 0;
+  margin: 25px 0 0;
+  color: #81766f;
+  font-size: 0.75rem;
+  list-style: none;
+}
+
+.steps li {
+  position: relative;
+  padding-top: 25px;
+  text-align: center;
+}
+
+.steps li::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  content: "";
+  background: #e5ded7;
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+.steps li:not(:last-child)::after {
+  position: absolute;
+  top: 7px;
+  left: calc(50% + 8px);
+  width: calc(100% - 16px);
+  height: 3px;
+  content: "";
+  background: #d8d0c8;
+}
+
+.steps .currentStep::before {
+  background: #d98978;
+}
+
+.title {
+  margin: 38px 0 0;
+  font-size: 1.3125rem;
+  line-height: 1.38;
+}
+
+.helpText {
+  margin: 16px 0 26px;
+  color: #81766f;
+  font-size: 0.875rem;
+}
+
+.form {
+  margin: 0;
+}
+
+.summaryCard {
+  display: grid;
+  grid-template-columns: 82px 1fr;
+  min-height: 126px;
+  overflow: hidden;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+  border-radius: 18px;
+}
+
+.botheredCard {
+  margin-top: 16px;
+}
+
+.summaryLabel {
+  display: grid;
+  padding: 12px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.65;
+  text-align: center;
+  background: #f2ddd6;
+  place-content: center;
+}
+
+.botheredCard .summaryLabel {
+  background: #e3e7d8;
+}
+
+.summaryInputArea {
+  position: relative;
+  min-width: 0;
+}
+
+.summaryInput {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 124px;
+  padding: 22px 16px 30px;
+  color: #493e38;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.9;
+  resize: vertical;
+  background: transparent;
+  border: 0;
+}
+
+.summaryInput:focus-visible {
+  outline: 3px solid #493e38;
+  outline-offset: -4px;
+}
+
+.summaryInput[aria-invalid="true"] {
+  background: #fff3ef;
+}
+
+.summaryInput:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.editLabel {
+  position: absolute;
+  right: 16px;
+  bottom: 10px;
+  color: #81766f;
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.errorMessage {
+  margin: 8px 0 0;
+  color: #9a4135;
+  font-size: 0.875rem;
+}
+
+.directEditNotice {
+  margin: 20px 0 0;
+  color: #81766f;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.transitionNotice {
+  padding: 12px 14px;
+  margin: 24px 0 0;
+  color: #6f625b;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  background: #f3e8dd;
+  border-radius: 12px;
+}
+
+.primaryButton,
+.secondaryButton {
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 20px;
+  border-radius: 16px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton {
+  margin-top: 16px;
+  color: #ffffff;
+  background: #d98978;
+  border: 2px solid #d98978;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #c96f60;
+  border-color: #c96f60;
+}
+
+.secondaryButton {
+  margin-top: 16px;
+  color: #493e38;
+  background: #fffdfc;
+  border: 1.5px solid #d8d0c8;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: #b9afa7;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.loadingMessage {
+  margin: 12px 0 0;
+  color: #81766f;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.supportText {
+  margin: 34px 0 0;
+  color: #81766f;
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+@media (max-width: 360px) {
+  .page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .summaryCard {
+    grid-template-columns: 72px 1fr;
+  }
+}

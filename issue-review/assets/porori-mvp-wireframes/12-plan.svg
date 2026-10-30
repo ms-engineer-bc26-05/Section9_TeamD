@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>プラン画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.note{fill:#6E625C;font-style:italic}.card{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.current{fill:#E3E7D8}.btn{fill:#D98978}</style>
+  <text class="t" x="26" y="50" font-size="21">‹</text>
+  <text class="t" x="195" y="51" text-anchor="middle" font-size="17" font-weight="700">プラン</text>
+  <text class="m" x="28" y="101" font-size="12">現在のプラン</text>
+  <rect class="current" x="28" y="116" width="334" height="78" rx="18"/>
+  <text class="t" x="50" y="151" font-size="18" font-weight="700">無料プラン</text>
+  <text class="note" x="50" y="176" font-size="10">※設計メモ：回数・件数は未決定</text>
+  <text class="t" x="28" y="246" font-size="18" font-weight="700">プランの違いを確認</text>
+  <rect class="card" x="28" y="270" width="334" height="250" rx="20"/>
+  <text class="t" x="50" y="311" font-size="19" font-weight="700">追加プラン（仮）</text>
+  <text class="m" x="50" y="346" font-size="12">✓ 相談回数を増やす案</text>
+  <text class="m" x="50" y="376" font-size="12">✓ 保存できるメモを増やす案</text>
+  <text class="note" x="50" y="406" font-size="10">※設計メモ：価格・提供方法は後続Issueで決定</text>
+  <rect class="btn" x="50" y="441" width="290" height="54" rx="15"/>
+  <text x="195" y="475" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#FFF" font-weight="700">Stripeテスト画面へ進む</text>
+  <rect x="28" y="552" width="334" height="78" rx="14" fill="#F2DDD6"/>
+  <text class="t" x="48" y="582" font-size="12" font-weight="700">決済結果を確認してから反映します</text>
+  <text class="m" x="48" y="607" font-size="11">確認できない場合は成功として扱いません</text>
+  <text class="m" x="195" y="687" text-anchor="middle" font-size="11">キャンセル時はプランを更新しません</text>
+</svg>

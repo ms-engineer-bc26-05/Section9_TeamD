@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>モヤモヤのテーマ選択画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.choice{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.sel{fill:#F2DDD6;stroke:#D98978;stroke-width:2}.btn{fill:#D98978}</style>
+  <text class="t" x="26" y="54" font-size="21">‹</text>
+  <text class="m" x="344" y="54" text-anchor="end" font-size="12">1 / 4</text>
+  <rect x="26" y="72" width="338" height="5" rx="3" fill="#E5DED7"/>
+  <rect x="26" y="72" width="84" height="5" rx="3" fill="#D98978"/>
+  <text class="t" x="26" y="128" font-size="22" font-weight="700">今、どんなことが</text>
+  <text class="t" x="26" y="158" font-size="22" font-weight="700">気になっていますか？</text>
+  <text class="m" x="26" y="187" font-size="12">いちばん近いものを1つ選んでください</text>
+  <g font-family="sans-serif" font-size="13" fill="#493E38">
+    <rect class="sel" x="26" y="219" width="338" height="58" rx="14"/><circle cx="48" cy="248" r="8" fill="#D98978"/><text x="67" y="253">会話・連絡・愛情表現</text>
+    <rect class="choice" x="26" y="288" width="338" height="58" rx="14"/><circle cx="48" cy="317" r="8" fill="none" stroke="#B9AFA7"/><text x="67" y="322">暮らし・家事・生活習慣</text>
+    <rect class="choice" x="26" y="357" width="338" height="58" rx="14"/><circle cx="48" cy="386" r="8" fill="none" stroke="#B9AFA7"/><text x="67" y="391">お金の感覚の違い</text>
+    <rect class="choice" x="26" y="426" width="338" height="58" rx="14"/><circle cx="48" cy="455" r="8" fill="none" stroke="#B9AFA7"/><text x="67" y="460">気遣い・思いやりの伝わり方</text>
+    <rect class="choice" x="26" y="495" width="338" height="58" rx="14"/><circle cx="48" cy="524" r="8" fill="none" stroke="#B9AFA7"/><text x="67" y="529">将来・価値観・二人の関係</text>
+    <rect class="choice" x="26" y="564" width="338" height="58" rx="14"/><circle cx="48" cy="593" r="8" fill="none" stroke="#B9AFA7"/><text x="67" y="598">その他</text>
+  </g>
+  <text class="m" x="195" y="659" text-anchor="middle" font-size="11">完全に当てはまらなくても大丈夫です</text>
+  <rect class="btn" x="26" y="698" width="338" height="58" rx="16"/>
+  <text x="195" y="734" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#FFFFFF" font-weight="700">次へ</text>
+</svg>

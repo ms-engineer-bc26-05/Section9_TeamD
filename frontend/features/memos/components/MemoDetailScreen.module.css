@@ -1,0 +1,173 @@
+.page {
+  min-height: 100vh;
+  background: #f7f3ee;
+  color: #3f302c;
+  padding: 24px 16px 48px;
+}
+
+.content {
+  width: min(100%, 680px);
+  margin: 0 auto;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.backButton {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #3f302c;
+  padding: 0;
+  font: inherit;
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+  place-items: center;
+}
+
+.backButton:hover {
+  background: #f0e4df;
+}
+
+.heading {
+  margin: 0;
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+.headerSpacer {
+  width: 44px;
+  height: 44px;
+}
+
+.memo,
+.statePanel {
+  border: 1px solid #eadbd5;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 20px;
+}
+
+.date {
+  color: #6f5c56;
+  font-size: 0.875rem;
+}
+
+.detailItem {
+  border-bottom: 1px solid #f0e4df;
+  padding: 16px 0;
+}
+
+.detailItem h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.detailItem p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.muted {
+  color: #776864;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton,
+.deleteButton {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 0;
+  background: #a85040;
+  color: #ffffff;
+}
+
+.secondaryButton {
+  border: 1px solid #8a6b63;
+  background: #ffffff;
+  color: #4c3a35;
+}
+
+.dangerButton {
+  border: 1px solid #9c3027;
+  background: #9c3027;
+  color: #ffffff;
+}
+
+.deleteButton {
+  display: block;
+  margin: 24px auto 0;
+  border: 1px solid #d98978;
+  background: #d98978;
+  color: #ffffff;
+}
+
+.deleteButton:hover {
+  border-color: #c96f60;
+  background: #c96f60;
+}
+
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.dangerButton:focus-visible,
+.deleteButton:focus-visible,
+.backButton:focus-visible {
+  outline: 3px solid #7d4f45;
+  outline-offset: 3px;
+}
+
+.secondaryButton:disabled,
+.dangerButton:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.dialog {
+  width: min(calc(100% - 32px), 480px);
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 16px 50px rgb(63 48 44 / 25%);
+}
+
+.dialog::backdrop {
+  background: rgb(32 24 22 / 45%);
+}
+
+.dialog h2 {
+  margin-top: 0;
+  font-size: 1.125rem;
+}
+
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.error {
+  border-radius: 10px;
+  background: #fff0ed;
+  color: #7b3027;
+  padding: 12px;
+}

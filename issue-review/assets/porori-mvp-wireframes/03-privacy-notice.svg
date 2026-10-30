@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <title>利用前の注意画面のワイヤーフレーム</title>
+  <rect width="390" height="844" fill="#F7F3EE"/>
+  <style>.t{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#493E38}.m{fill:#81766F}.card{fill:#FFFDFC;stroke:#D8D0C8;stroke-width:1.5}.btn{fill:#D98978}</style>
+  <text class="t" x="26" y="54" font-size="21">‹</text>
+  <text class="t" x="195" y="56" text-anchor="middle" font-size="18" font-weight="700">相談を始める前に</text>
+  <rect class="card" x="26" y="94" width="338" height="432" rx="20"/>
+  <circle cx="58" cy="140" r="15" fill="#F2DDD6"/>
+  <text class="t" x="84" y="145" font-size="12" font-weight="700">OpenRouter経由でAI提供元へ送信</text>
+  <text class="m" x="84" y="166" font-size="11">学習には利用されない設定です</text>
+  <text class="m" x="84" y="185" font-size="11">提供元で一定期間保持される場合があります</text>
+  <line x1="48" y1="198" x2="342" y2="198" stroke="#E5DED7"/>
+  <circle cx="58" cy="239" r="15" fill="#E3E7D8"/>
+  <text class="t" x="84" y="244" font-size="13" font-weight="700">相談中のやりとりはアプリ内に残しません</text>
+  <text class="m" x="84" y="268" font-size="12">残したい整理メモだけ確認後に保存できます</text>
+  <line x1="48" y1="297" x2="342" y2="297" stroke="#E5DED7"/>
+  <circle cx="58" cy="338" r="15" fill="#F2DDD6"/>
+  <text class="t" x="84" y="343" font-size="14" font-weight="700">個人を特定する情報は書かない</text>
+  <text class="m" x="84" y="367" font-size="12">実名・住所・連絡先などは避けてください</text>
+  <line x1="48" y1="396" x2="342" y2="396" stroke="#E5DED7"/>
+  <text class="t" x="48" y="437" font-size="13" font-weight="700">このアプリは医療・心理相談の代替ではありません</text>
+  <text class="m" x="48" y="469" font-size="12">つらさが強いときの相談窓口を見る ›</text>
+  <text class="m" x="195" y="551" text-anchor="middle" font-size="11" text-decoration="underline">詳しい注意を見る</text>
+  <rect class="btn" x="26" y="570" width="338" height="58" rx="16"/>
+  <text x="195" y="606" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#FFFFFF" font-weight="700">確認して進む</text>
+  <rect x="26" y="646" width="338" height="58" rx="16" fill="none" stroke="#C9BFB7" stroke-width="1.5"/>
+  <text class="t" x="195" y="682" text-anchor="middle" font-size="15">ホームへ戻る</text>
+</svg>
